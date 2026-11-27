@@ -4,6 +4,8 @@ use finance_shared::money::Money;
 
 pub mod compiler;
 
+pub mod simulator;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Outcome {
     Pass,
