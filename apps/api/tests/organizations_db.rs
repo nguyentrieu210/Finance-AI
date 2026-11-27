@@ -203,21 +203,54 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(left.1["revision"], 0);
     assert_eq!(left.1["version"], 0);
     let dossier_uri = format!("/v1/dossiers/{}", left.1["id"].as_str().unwrap());
-    assert_eq!(request(&app, &dossier_uri, Some(&requester)).await.0, StatusCode::OK);
-    assert_eq!(request(&app, &dossier_uri, Some(&other_requester)).await.0, StatusCode::NOT_FOUND);
-    assert_eq!(create_dossier(&app, &requester, "pay-one", "ADVANCE").await.0, StatusCode::CONFLICT);
-    assert_eq!(create_dossier(&app, &auditor, "denied", "PAYMENT").await.0, StatusCode::FORBIDDEN);
-    assert_eq!(create_dossier(&app, &requester, "advance-one", "ADVANCE").await.0, StatusCode::CREATED);
-    assert_eq!(create_dossier(&app, &requester, "settlement-one", "SETTLEMENT").await.0, StatusCode::CREATED);
+    assert_eq!(
+        request(&app, &dossier_uri, Some(&requester)).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        request(&app, &dossier_uri, Some(&other_requester)).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        create_dossier(&app, &requester, "pay-one", "ADVANCE")
+            .await
+            .0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        create_dossier(&app, &auditor, "denied", "PAYMENT").await.0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        create_dossier(&app, &requester, "advance-one", "ADVANCE")
+            .await
+            .0,
+        StatusCode::CREATED
+    );
+    assert_eq!(
+        create_dossier(&app, &requester, "settlement-one", "SETTLEMENT")
+            .await
+            .0,
+        StatusCode::CREATED
+    );
     let (status, page) = request(&app, "/v1/dossiers", Some(&requester)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(page["items"].as_array().unwrap().len(), 3);
     let (_, page) = request(&app, "/v1/dossiers", Some(&other_requester)).await;
     assert_eq!(page["items"].as_array().unwrap().len(), 0);
-    let response = app.clone().oneshot(Request::builder().method("PATCH").uri(&dossier_uri)
-        .header(header::AUTHORIZATION, format!("Bearer {requester}"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(r#"{"status":"ACCEPTED"}"#)).unwrap()).await.unwrap();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(&dossier_uri)
+                .header(header::AUTHORIZATION, format!("Bearer {requester}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"status":"ACCEPTED"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
 
     if let Ok(python) = std::env::var("FINANCE_BROWSER_PYTHON") {
@@ -255,17 +288,29 @@ async fn scoped_organization_http_real_database() {
 
 async fn create_dossier(app: &Router, token: &str, key: &str, kind: &str) -> (StatusCode, Value) {
     let body = json!({"company_id":id(10),"kind":kind});
-    let response = app.clone().oneshot(Request::builder().method("POST").uri("/v1/dossiers")
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .header("idempotency-key", key)
-        .body(Body::from(body.to_string())).unwrap()).await.unwrap();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/dossiers")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("idempotency-key", key)
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     let status = response.status();
     let version = response.headers().get("finance-version").cloned();
     let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     let value: Value = serde_json::from_slice(&bytes).unwrap();
     if status == StatusCode::CREATED {
-        assert_eq!(version.unwrap().to_str().unwrap(), format!("\"v1:dossier:{}:0\"", value["id"].as_str().unwrap()));
+        assert_eq!(
+            version.unwrap().to_str().unwrap(),
+            format!("\"v1:dossier:{}:0\"", value["id"].as_str().unwrap())
+        );
     }
     (status, value)
 }

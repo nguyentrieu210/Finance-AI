@@ -2,7 +2,10 @@
 use super::{OrganizationState, decode_cursor, encode_cursor, error, now, random_id};
 use axum::{
     Json,
-    extract::{Path, Query, State, rejection::{JsonRejection, QueryRejection}},
+    extract::{
+        Path, Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -48,18 +51,33 @@ struct Page {
     next_cursor: Option<String>,
 }
 
-async fn authenticate(state: &OrganizationState, headers: &HeaderMap, correlation: Uuid) -> Result<AuthenticatedCommand, StatusCode> {
-    let token = headers.get(header::AUTHORIZATION).and_then(|h| h.to_str().ok())
-        .and_then(|h| h.strip_prefix("Bearer ")).filter(|v| !v.is_empty() && v.len() <= 16384)
+async fn authenticate(
+    state: &OrganizationState,
+    headers: &HeaderMap,
+    correlation: Uuid,
+) -> Result<AuthenticatedCommand, StatusCode> {
+    let token = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .filter(|v| !v.is_empty() && v.len() <= 16384)
         .ok_or(StatusCode::UNAUTHORIZED)?;
-    state.verifier.authenticate_command(
-        &state.lookup, token, state.scope, CommandId::try_from(random_id()).expect("random command"),
-        CorrelationId::try_from(correlation).expect("random correlation"), None,
-    ).await.map_err(|e| match e {
-        IdentityError::InvalidToken => StatusCode::UNAUTHORIZED,
-        IdentityError::Forbidden => StatusCode::FORBIDDEN,
-        _ => StatusCode::SERVICE_UNAVAILABLE,
-    })
+    state
+        .verifier
+        .authenticate_command(
+            &state.lookup,
+            token,
+            state.scope,
+            CommandId::try_from(random_id()).expect("random command"),
+            CorrelationId::try_from(correlation).expect("random correlation"),
+            None,
+        )
+        .await
+        .map_err(|e| match e {
+            IdentityError::InvalidToken => StatusCode::UNAUTHORIZED,
+            IdentityError::Forbidden => StatusCode::FORBIDDEN,
+            _ => StatusCode::SERVICE_UNAVAILABLE,
+        })
 }
 
 fn status(e: Error) -> StatusCode {
@@ -78,21 +96,37 @@ fn receipt(draft: Draft, status: StatusCode) -> Response {
         version: Version::try_from(draft.version).expect("stored version"),
     };
     let mut response = (status, Json(draft)).into_response();
-    response.headers_mut().insert("finance-version", HeaderValue::from_str(&token.to_string()).expect("canonical header"));
-    response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response.headers_mut().insert(
+        "finance-version",
+        HeaderValue::from_str(&token.to_string()).expect("canonical header"),
+    );
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
 }
 
-pub async fn create(State(state): State<Arc<OrganizationState>>, headers: HeaderMap, body: Result<Json<Create>, JsonRejection>) -> Response {
+pub async fn create(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    body: Result<Json<Create>, JsonRejection>,
+) -> Response {
     let correlation = random_id();
     let proof = match authenticate(&state, &headers, correlation).await {
-        Ok(p) => p, Err(s) => return error(s, correlation),
+        Ok(p) => p,
+        Err(s) => return error(s, correlation),
     };
-    let Ok(Json(body)) = body else { return error(StatusCode::BAD_REQUEST, correlation); };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
     if body.company_id != Uuid::from(state.scope.company) {
         return error(StatusCode::FORBIDDEN, correlation);
     }
-    let Some(key) = headers.get("idempotency-key").and_then(|h| h.to_str().ok()).and_then(|s| IdempotencyKey::parse(s).ok()) else {
+    let Some(key) = headers
+        .get("idempotency-key")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| IdempotencyKey::parse(s).ok())
+    else {
         return error(StatusCode::BAD_REQUEST, correlation);
     };
     let kind = match body.kind {
@@ -106,10 +140,15 @@ pub async fn create(State(state): State<Arc<OrganizationState>>, headers: Header
     }
 }
 
-pub async fn get(State(state): State<Arc<OrganizationState>>, headers: HeaderMap, Path(id): Path<Uuid>) -> Response {
+pub async fn get(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
     let correlation = random_id();
     let proof = match authenticate(&state, &headers, correlation).await {
-        Ok(p) => p, Err(s) => return error(s, correlation),
+        Ok(p) => p,
+        Err(s) => return error(s, correlation),
     };
     match draft::get(&state.runtime, &proof, id).await {
         Ok(Some(d)) => receipt(d, StatusCode::OK),
@@ -118,34 +157,52 @@ pub async fn get(State(state): State<Arc<OrganizationState>>, headers: HeaderMap
     }
 }
 
-pub async fn list(State(state): State<Arc<OrganizationState>>, headers: HeaderMap, query: Result<Query<List>, QueryRejection>) -> Response {
+pub async fn list(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    query: Result<Query<List>, QueryRejection>,
+) -> Response {
     let correlation = random_id();
     let proof = match authenticate(&state, &headers, correlation).await {
-        Ok(p) => p, Err(s) => return error(s, correlation),
+        Ok(p) => p,
+        Err(s) => return error(s, correlation),
     };
     let Principal::User(actor) = proof.context().actor else {
         return error(StatusCode::FORBIDDEN, correlation);
     };
-    let Ok(Query(query)) = query else { return error(StatusCode::BAD_REQUEST, correlation); };
+    let Ok(Query(query)) = query else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
     let limit = query.limit.unwrap_or(50);
     if !(1..=100).contains(&limit) {
         return error(StatusCode::BAD_REQUEST, correlation);
     }
-    let Some(time) = now() else { return error(StatusCode::SERVICE_UNAVAILABLE, correlation); };
-    let key: [u8; 32] = Sha256::digest([b"finance.dossier.cursor/v1".as_slice(), &state.cursor_key].concat()).into();
+    let Some(time) = now() else {
+        return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+    };
+    let key: [u8; 32] =
+        Sha256::digest([b"finance.dossier.cursor/v1".as_slice(), &state.cursor_key].concat())
+            .into();
     let after = match query.cursor {
         None => Uuid::nil(),
         Some(value) => match decode_cursor(&key, state.scope, actor, &value, time) {
-            Some(id) => id, None => return error(StatusCode::BAD_REQUEST, correlation),
-        }
+            Some(id) => id,
+            None => return error(StatusCode::BAD_REQUEST, correlation),
+        },
     };
     match draft::list(&state.runtime, &proof, after, limit).await {
         Ok(items) => {
             let next_cursor = if items.len() == limit as usize {
-                items.last().map(|d| encode_cursor(&key, state.scope, actor, d.id, time + 300))
-            } else { None };
+                items
+                    .last()
+                    .map(|d| encode_cursor(&key, state.scope, actor, d.id, time + 300))
+            } else {
+                None
+            };
             let mut response = Json(Page { items, next_cursor }).into_response();
-            response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
             response
         }
         Err(e) => error(status(e), correlation),

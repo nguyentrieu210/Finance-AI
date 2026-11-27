@@ -6,7 +6,7 @@ use finance_permissions::{GrantError, Role, require_role};
 use finance_shared::{
     contracts::Principal,
     http_contract::IdempotencyKey,
-    ids::{ResourceScope, CompanyScope},
+    ids::{CompanyScope, ResourceScope},
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -62,8 +62,19 @@ fn grant_error(error: GrantError) -> Error {
     }
 }
 
-pub async fn create(pool: &PgPool, proof: &AuthenticatedCommand, key: &IdempotencyKey, kind: Kind, id: Uuid, revision_id: Uuid) -> Result<Draft, Error> {
-    if id.is_nil() || revision_id.is_nil() || id == revision_id || proof.context().expected_version.is_some() {
+pub async fn create(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    kind: Kind,
+    id: Uuid,
+    revision_id: Uuid,
+) -> Result<Draft, Error> {
+    if id.is_nil()
+        || revision_id.is_nil()
+        || id == revision_id
+        || proof.context().expected_version.is_some()
+    {
         return Err(Error::InvalidInput);
     }
     let (t, c, a) = binding(proof)?;
@@ -72,10 +83,16 @@ pub async fn create(pool: &PgPool, proof: &AuthenticatedCommand, key: &Idempoten
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     let lock = format!("{t}/{c}/{a}/prototype.createDossier/{}", key.as_str());
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
-        .bind(lock).execute(&mut *tx).await?;
-    require_role(&mut tx, proof.context(), Role::Requester).await.map_err(grant_error)?;
+        .bind(lock)
+        .execute(&mut *tx)
+        .await?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(grant_error)?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let hash = Sha256::digest(format!("finance.createDossier/v1/{t}/{c}/{}", kind.as_str()).as_bytes()).to_vec();
+    let hash =
+        Sha256::digest(format!("finance.createDossier/v1/{t}/{c}/{}", kind.as_str()).as_bytes())
+            .to_vec();
     let prior: Option<(Vec<u8>, Uuid)> = sqlx::query_as("SELECT request_hash,result_id FROM finance.idempotency_record WHERE tenant_id=$1 AND company_id=$2 AND actor_id=$3 AND operation_id='prototype.createDossier' AND key=$4")
         .bind(t).bind(c).bind(a).bind(key.as_str()).fetch_optional(&mut *tx).await?;
     let result_id = if let Some((old_hash, old_id)) = prior {
@@ -97,30 +114,59 @@ pub async fn create(pool: &PgPool, proof: &AuthenticatedCommand, key: &Idempoten
             .bind(t).bind(c).bind(a).bind(key.as_str()).bind(hash).bind(id).execute(&mut *tx).await?;
         id
     };
-    let draft = sqlx::query_as::<_, Draft>(&format!("{SELECT_DRAFT} WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id=$4"))
-        .bind(t).bind(c).bind(a).bind(result_id).fetch_one(&mut *tx).await?;
+    let draft = sqlx::query_as::<_, Draft>(&format!(
+        "{SELECT_DRAFT} WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id=$4"
+    ))
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(result_id)
+    .fetch_one(&mut *tx)
+    .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(draft)
 }
 
-pub async fn get(pool: &PgPool, proof: &AuthenticatedCommand, id: Uuid) -> Result<Option<Draft>, Error> {
+pub async fn get(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    id: Uuid,
+) -> Result<Option<Draft>, Error> {
     let (t, c, a) = binding(proof)?;
     let mut tx = scoped_transaction(pool, proof.context()).await?;
-    require_role(&mut tx, proof.context(), Role::Requester).await.map_err(grant_error)?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(grant_error)?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let draft = sqlx::query_as::<_, Draft>(&format!("{SELECT_DRAFT} WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id=$4"))
-        .bind(t).bind(c).bind(a).bind(id).fetch_optional(&mut *tx).await?;
+    let draft = sqlx::query_as::<_, Draft>(&format!(
+        "{SELECT_DRAFT} WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id=$4"
+    ))
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(draft)
 }
 
-pub async fn list(pool: &PgPool, proof: &AuthenticatedCommand, after: Uuid, limit: i64) -> Result<Vec<Draft>, Error> {
-    if !(1..=100).contains(&limit) { return Err(Error::InvalidInput); }
+pub async fn list(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    after: Uuid,
+    limit: i64,
+) -> Result<Vec<Draft>, Error> {
+    if !(1..=100).contains(&limit) {
+        return Err(Error::InvalidInput);
+    }
     let (t, c, a) = binding(proof)?;
     let mut tx = scoped_transaction(pool, proof.context()).await?;
-    require_role(&mut tx, proof.context(), Role::Requester).await.map_err(grant_error)?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(grant_error)?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     let drafts = sqlx::query_as::<_, Draft>(&format!("{SELECT_DRAFT} WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id>$4 ORDER BY id LIMIT $5"))
         .bind(t).bind(c).bind(a).bind(after).bind(limit).fetch_all(&mut *tx).await?;
