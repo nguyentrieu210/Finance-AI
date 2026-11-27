@@ -50,7 +50,6 @@ impl<'a> VerifiedIssue<'a> {
     }
 }
 
-
 pub struct Advance {
     pub issued: Option<Money>,
     pub settled: Money,

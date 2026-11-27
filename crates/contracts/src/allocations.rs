@@ -76,10 +76,7 @@ pub fn reconcile(
             .0
             .checked_add(row.billed)
             .map_err(|_| Error::Overflow)?;
-        entry.1 = entry
-            .1
-            .checked_add(row.paid)
-            .map_err(|_| Error::Overflow)?;
+        entry.1 = entry.1.checked_add(row.paid).map_err(|_| Error::Overflow)?;
         if entry.0.amount.decimal() > cap.amount.decimal() {
             return Err(Error::ExceedsCap);
         }
