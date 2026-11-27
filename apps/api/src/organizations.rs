@@ -20,7 +20,7 @@ use finance_shared::{
 use hmac::{Hmac, Mac};
 use rand::{RngCore, rngs::OsRng};
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::{
     sync::Arc,
