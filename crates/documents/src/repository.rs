@@ -97,9 +97,6 @@ pub async fn create(
         return Err(Error::InvalidInput);
     }
     let mime = DeclaredMime::parse(input.mime).map_err(|_| Error::InvalidInput)?;
-    if matches!(mime, DeclaredMime::Docx | DeclaredMime::Xlsx) {
-        return Err(Error::InvalidInput);
-    }
     let digest = Sha256Digest::parse(input.sha256).map_err(|_| Error::InvalidInput)?;
     let metadata = UploadMetadata::new(input.bytes, digest, mime, DEFAULT_MAX_FILE_BYTES)
         .map_err(|_| Error::InvalidInput)?;
@@ -201,7 +198,7 @@ pub async fn list(
     if !owned {
         return Err(Error::Forbidden);
     }
-    let rows = sqlx::query_as::<_,Document>("SELECT u.id,u.dossier_id,u.document_kind AS kind,u.filename AS file_name,encode(u.declared_sha256,'hex') AS sha256,CASE u.state WHEN 'FINALIZED' THEN 'QUARANTINED' ELSE u.state END AS state,r.number AS revision FROM finance.upload_intent u JOIN finance.dossier_revision r ON (r.tenant_id,r.company_id,r.id)=(u.tenant_id,u.company_id,u.revision_id) WHERE u.tenant_id=$1 AND u.company_id=$2 AND u.actor_id=$3 AND u.dossier_id=$4 AND u.id>$5 AND u.state<>'CANCELLED' AND u.document_kind IS NOT NULL ORDER BY u.id LIMIT $6")
+    let rows = sqlx::query_as::<_,Document>("SELECT u.id,u.dossier_id,u.document_kind AS kind,u.filename AS file_name,encode(u.declared_sha256,'hex') AS sha256,CASE u.state WHEN 'FINALIZED' THEN COALESCE(b.scan_state,'QUARANTINED') ELSE u.state END AS state,r.number AS revision FROM finance.upload_intent u JOIN finance.dossier_revision r ON (r.tenant_id,r.company_id,r.id)=(u.tenant_id,u.company_id,u.revision_id) LEFT JOIN finance.document_blob b ON (b.tenant_id,b.company_id,b.id)=(u.tenant_id,u.company_id,u.id) WHERE u.tenant_id=$1 AND u.company_id=$2 AND u.actor_id=$3 AND u.dossier_id=$4 AND u.id>$5 AND u.state<>'CANCELLED' AND u.document_kind IS NOT NULL ORDER BY u.id LIMIT $6")
         .bind(t).bind(c).bind(a).bind(dossier).bind(after).bind(limit).fetch_all(&mut *tx).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;

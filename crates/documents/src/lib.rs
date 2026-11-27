@@ -83,6 +83,8 @@ pub struct Intent {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Availability {
     Quarantined,
+    Clean,
+    Rejected,
 }
 /// Metadata only: intentionally no path, read API or clean verdict.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -114,13 +116,13 @@ fn check_name(name: &str) -> Result<(), Error> {
     Ok(())
 }
 /// A signature check, not format validation or malware scanning.
-/// ZIP-based office formats intentionally remain blocked pending bounded archive parsing.
+/// ZIP Office containers remain quarantined until the scanner/registry gates.
 fn check_signature(mime: DeclaredMime, bytes: &[u8]) -> Result<(), Error> {
     let ok = match mime {
         DeclaredMime::Pdf => bytes.starts_with(b"%PDF-"),
         DeclaredMime::Jpeg => bytes.starts_with(&[0xff, 0xd8, 0xff]),
         DeclaredMime::Png => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
-        DeclaredMime::Docx | DeclaredMime::Xlsx => return Err(Error::UnsupportedContainer),
+        DeclaredMime::Docx | DeclaredMime::Xlsx => bytes.starts_with(b"PK\x03\x04"),
     };
     if !ok {
         return Err(Error::MimeMismatch);
@@ -153,9 +155,6 @@ impl Intent {
             grant: None,
         };
         intent.check_revision(revision)?;
-        if matches!(mime, DeclaredMime::Docx | DeclaredMime::Xlsx) {
-            return Err(Error::UnsupportedContainer);
-        }
         Ok(intent)
     }
     pub fn state(&self) -> IntentState {
