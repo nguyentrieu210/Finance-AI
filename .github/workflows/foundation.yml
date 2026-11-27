@@ -68,3 +68,14 @@ jobs:
           python3 -m venv .venv
           .venv/bin/pip install -r scripts/s3-probe-requirements.txt
           bash scripts/test_s3_provider.sh
+  ocr-vietnamese-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install synthetic OCR test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-vie python3-pil fonts-dejavu-core
+      - name: Real Vietnamese OCR and Rust TSV parser
+        run: bash scripts/test_ocr_vietnamese.sh
