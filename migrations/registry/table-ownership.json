@@ -157,7 +157,8 @@
       "tables": [
         "policy_version",
         "policy_clause",
-        "checklist_item"
+        "checklist_item",
+        "policy_critical_field"
       ],
       "invariants": "Immutable published versions, maker-checker, effective range."
     },
@@ -180,7 +181,8 @@
         "workflow_version",
         "review_decision",
         "review_assignment",
-        "critical_confirmation"
+        "critical_confirmation",
+        "accounting_review"
       ],
       "invariants": "Scoped aggregate lock, immutable seal, state guards, SoD."
     },
