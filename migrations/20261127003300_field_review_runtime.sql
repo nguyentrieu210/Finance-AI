@@ -276,7 +276,8 @@ BEGIN
  FROM finance.evidence e WHERE e.tenant_id=t AND e.company_id=c AND e.ocr_run_id=o.id
   AND e.page=f.source_page AND e.block_index=ANY(f.block_indexes);
  IF f.state='CANDIDATE' AND f.normalized_value=new_value
-  AND decision_evidence=source_evidence
+  AND cardinality(decision_evidence)=cardinality(source_evidence)
+  AND decision_evidence @> source_evidence AND decision_evidence <@ source_evidence
  THEN disposition:='CONFIRMED_CANDIDATE';
  ELSE
   disposition:='CORRECTED';
