@@ -31,6 +31,7 @@ mod dashboard;
 mod documents;
 mod dossiers;
 mod exports;
+mod fields;
 mod forms;
 mod integration;
 mod knowledge;
@@ -282,6 +283,11 @@ pub fn router(state: OrganizationState) -> Router {
             get(documents::list).post(documents::create),
         )
         .route("/v1/dossiers/{dossier_id}/checks", get(checks::list))
+        .route("/v1/dossiers/{dossier_id}/fields", get(fields::list))
+        .route(
+            "/v1/dossiers/{dossier_id}/fields/decisions",
+            axum::routing::post(fields::decide),
+        )
         .route(
             "/v1/dossiers/{dossier_id}/ready",
             axum::routing::post(lifecycle::ready),

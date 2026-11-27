@@ -1,0 +1,4 @@
+import{useRef,useState}from'react';import{Fields}from'./Fields';
+export function ExtractionWorkbench(){const[token,setToken]=useState('');const[dossier,setDossier]=useState('00000000-0000-0000-0000-000000001f41');const[connected,setConnected]=useState(false);const credential=useRef('');
+ return <section><h2>Extraction diagnostics</h2><p>Chỉ đọc candidates/evidence của revision hiện tại; không tự xác minh.</p><label>Token sandbox<input type="password" value={token} disabled={connected} onChange={e=>setToken(e.target.value)}/></label><label>Dossier UUID<input value={dossier} onChange={e=>setDossier(e.target.value)}/></label><div className="actions"><button disabled={connected||!token.trim()} onClick={()=>{credential.current=token.trim();setToken('');setConnected(true);}}>Kết nối</button><button onClick={()=>{credential.current='';setConnected(false);}}>Ngắt</button></div>{connected&&<Fields dossierId={dossier} token={credential.current}/>}</section>
+}
