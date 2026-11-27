@@ -684,11 +684,18 @@ version = "0.1.0"
 name = "finance-workflow"
 version = "0.1.0"
 dependencies = [
+ "finance-core",
  "finance-financial",
+ "finance-identity",
  "finance-integration",
+ "finance-permissions",
  "finance-rule-engine",
  "finance-shared",
  "finance-validation",
+ "serde",
+ "sha2",
+ "sqlx",
+ "uuid",
 ]
 
 [[package]]
