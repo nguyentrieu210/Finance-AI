@@ -300,15 +300,13 @@ pub async fn persist_verdict(
         ScanVerdict::Indeterminate => unreachable!(),
     };
     let changed = sqlx::query(
-        "UPDATE finance.document_blob SET scan_state=$6,scan_engine='CLAMAV',scan_engine_digest=decode($7,'hex'),scanned_at=clock_timestamp()
+        "UPDATE finance.document_blob SET scan_state=$4,scan_engine='CLAMAV',scan_engine_digest=decode($5,'hex'),scanned_at=clock_timestamp()
          WHERE tenant_id=$1 AND company_id=$2 AND id=$3 AND scan_state='QUARANTINED'
          AND EXISTS(SELECT 1 FROM finance.document_ref r WHERE r.tenant_id=$1 AND r.company_id=$2 AND r.id=$3)",
     )
     .bind(t)
     .bind(c)
     .bind(document)
-    .bind(job)
-    .bind(fence)
     .bind(state)
     .bind(engine_sha256)
     .execute(&mut *tx)
