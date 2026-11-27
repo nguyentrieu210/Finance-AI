@@ -33,7 +33,7 @@ BEGIN
    declared_bytes,declared_sha256,declared_mime,state,generation,document_kind)
   VALUES(t,c,doc,d,r,a,name,octet_length(payload),sha256(payload),mime,'FINALIZED',1,'TEMPLATE_SOURCE');
   INSERT INTO finance.upload_grant(tenant_id,company_id,intent_id,generation,staging_key,issued_at,expires_at)
-  VALUES(t,c,doc,1,'staging/'||doc::text||'/1',clock_timestamp(),clock_timestamp()+interval '5 minutes');
+  VALUES(t,c,doc,1,'staging/'||doc::text||'/1',statement_timestamp(),statement_timestamp()+interval '5 minutes');
   INSERT INTO finance.document_blob(tenant_id,company_id,id,generation,byte_count,sha256_digest,mime,synthetic_bytes,
    scan_state,scan_engine,scan_engine_digest,scanned_at)
   VALUES(t,c,doc,1,octet_length(payload),sha256(payload),mime,payload,'CLEAN','CLAMAV',decode(repeat('ca',32),'hex'),clock_timestamp());
