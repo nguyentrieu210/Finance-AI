@@ -11,6 +11,7 @@ CREATE UNIQUE INDEX match_evidence_pair_current
 
 CREATE ROLE finance_matching_writer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 GRANT USAGE ON SCHEMA finance TO finance_matching_writer;
+GRANT EXECUTE ON FUNCTION finance.field_access_allowed(uuid,uuid,uuid,uuid) TO finance_matching_writer;
 GRANT SELECT ON finance.dossier,finance.dossier_revision,finance.membership,finance.review_assignment,
  finance.document_ref,finance.ocr_run,finance.evidence,finance.match_result,finance.match_decision
  TO finance_matching_writer;
@@ -173,6 +174,7 @@ GRANT EXECUTE ON FUNCTION finance.runtime_match_receipt(uuid,uuid,uuid,uuid,uuid
 -- E11 read projection. Reservation mutations remain internal transaction ports.
 CREATE ROLE finance_reservation_reader NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 GRANT USAGE ON SCHEMA finance TO finance_reservation_reader;
+GRANT EXECUTE ON FUNCTION finance.field_access_allowed(uuid,uuid,uuid,uuid) TO finance_reservation_reader;
 GRANT SELECT ON finance.dossier,finance.dossier_revision,finance.dossier_snapshot,
  finance.reservation,finance.reservation_line,finance.allocation_effect
  TO finance_reservation_reader;

@@ -54,7 +54,7 @@ CREATE POLICY field_writer_extracted_read ON finance.extracted_field FOR SELECT 
 CREATE POLICY field_writer_identity_read ON finance.field_identity FOR SELECT TO finance_field_review_writer
  USING(tenant_id=finance.scope_tenant() AND company_id=finance.scope_company());
 CREATE POLICY field_writer_identity_insert ON finance.field_identity FOR INSERT TO finance_field_review_writer
- WITH CHECK(tenant_id=finance.scope_tenant() AND company_id=finance.scope_company());
+ WITH CHECK(current_user='finance_field_review_writer');
 CREATE POLICY field_writer_decision_read ON finance.field_decision FOR SELECT TO finance_field_review_writer
  USING(tenant_id=finance.scope_tenant() AND company_id=finance.scope_company());
 CREATE POLICY field_writer_decision_insert ON finance.field_decision FOR INSERT TO finance_field_review_writer
