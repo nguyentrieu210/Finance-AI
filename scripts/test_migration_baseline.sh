@@ -40,7 +40,7 @@ BEGIN
   IF has_schema_privilege('finance_probe', 'finance', 'USAGE') OR has_schema_privilege('finance_probe', 'finance', 'CREATE') OR has_table_privilege('finance_probe','public._sqlx_migrations','UPDATE') THEN
     RAISE EXCEPTION 'unprivileged role has schema/ledger write access';
   END IF;
-  IF (SELECT count(*) FROM pg_tables WHERE schemaname = 'finance') <> 70 THEN
+  IF (SELECT count(*) FROM pg_tables WHERE schemaname = 'finance') <> 71 THEN
     RAISE EXCEPTION 'unexpected prototype table inventory';
   END IF;
 END $$;
