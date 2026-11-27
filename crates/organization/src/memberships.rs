@@ -42,6 +42,7 @@ fn canonical_roles(roles: &[String]) -> Result<Vec<String>, Error> {
     if roles.is_empty() || roles.len() > 6 {
         return Err(Error::InvalidInput);
     }
+    let input_len = roles.len();
     let mut roles = roles.to_vec();
     if roles.iter().any(|role| {
         !matches!(
@@ -58,7 +59,7 @@ fn canonical_roles(roles: &[String]) -> Result<Vec<String>, Error> {
     }
     roles.sort();
     roles.dedup();
-    if roles.len() == 0 || roles.len() != roles.iter().collect::<std::collections::BTreeSet<_>>().len() {
+    if roles.len() != input_len {
         return Err(Error::InvalidInput);
     }
     Ok(roles)

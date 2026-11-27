@@ -115,9 +115,11 @@ BEGIN
  THEN RAISE EXCEPTION 'membership revoke forbidden or invalid' USING ERRCODE='42501'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended(
   'finance.membership/v1/'||t::text||'/'||c::text||'/'||target::text,0));
+ PERFORM 1 FROM finance.membership
+ WHERE tenant_id=t AND company_id=c AND actor_id=target
+ ORDER BY role FOR UPDATE;
  SELECT max(version) INTO current_version FROM finance.membership
- WHERE tenant_id=t AND company_id=c AND actor_id=target AND active
- FOR UPDATE;
+ WHERE tenant_id=t AND company_id=c AND actor_id=target AND active;
  IF current_version IS NULL OR current_version<>expected
  THEN RAISE EXCEPTION 'stale or inactive membership' USING ERRCODE='23514'; END IF;
  IF EXISTS(SELECT 1 FROM finance.membership
