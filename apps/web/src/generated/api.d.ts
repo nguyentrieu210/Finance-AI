@@ -171,7 +171,7 @@ export interface paths {
         put?: never;
         /**
          * createDocument
-         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         * @description Reserve quota and create stable PENDING_UPLOAD intent metadata, without a signed URL. Reauthorize before replay.
          */
         post: operations["createDocument"];
         delete?: never;
@@ -191,7 +191,7 @@ export interface paths {
         put?: never;
         /**
          * finalizeDocument
-         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         * @description Verify exact immutable staged object bytes and current grant generation, expiry, parent revision and quota; attach quarantine object and enqueue scan atomically. No client claim is proof.
          */
         post: operations["finalizeDocument"];
         delete?: never;
@@ -1413,6 +1413,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/dossiers/{dossier_id}/documents/{document_id}/upload-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue or refresh a fenced upload grant
+         * @description New key and current parent version rotate staging generation. Replayed expired or superseded grant returns 409 UPLOAD_GRANT_INACTIVE; no replacement URL is issued by replay.
+         */
+        post: operations["issueUploadGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1464,7 +1484,7 @@ export interface components {
             file_name: string;
             sha256: string;
             /** @enum {string} */
-            state: "QUARANTINED" | "CLEAN" | "REJECTED" | "PROCESSING" | "EXTRACTED" | "FAILED";
+            state: "PENDING_UPLOAD" | "QUARANTINED" | "CLEAN" | "REJECTED" | "PROCESSING" | "EXTRACTED" | "FAILED";
             revision: number;
         };
         Field: {
@@ -1795,11 +1815,20 @@ export interface components {
         UploadIntent: {
             /** Format: uuid */
             document_id: string;
+            required_sha256: string;
+            /** @enum {string} */
+            state: "PENDING_UPLOAD";
+        };
+        UploadGrant: {
+            /** Format: uuid */
+            document_id: string;
+            generation: number;
             /** Format: uri */
             upload_url: string;
             /** Format: date-time */
             expires_at: string;
-            required_sha256: string;
+            content_type: string;
+            checksum_sha256_base64: string;
         };
         node: {
             ref: string;
@@ -2910,8 +2939,11 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @description Display metadata only; never a storage path. */
                     file_name: string;
-                    mime: string;
+                    /** @enum {string} */
+                    mime: "application/pdf" | "image/jpeg" | "image/png" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                    /** @description Server applies configured quotas; 25 MiB/file default. */
                     bytes: number;
                     sha256: string;
                     kind: string;
@@ -3023,6 +3055,7 @@ export interface operations {
             content: {
                 "application/json": {
                     sha256: string;
+                    generation: number;
                 };
             };
         };
@@ -3074,7 +3107,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Conflict or stale version */
+            /** @description Conflict: stale parent version, idempotency mismatch, expired/superseded grant or closed intent. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -11080,6 +11113,108 @@ export interface operations {
                 };
             };
             /** @description Conflict or stale version */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Business guard failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    issueUploadGrant: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
+                "Idempotency-Key": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
+            };
+            path: {
+                dossier_id: string;
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadGrant"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found or out of scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict: stale parent version, key mismatch, or UPLOAD_GRANT_INACTIVE on expired/superseded grant replay. */
             409: {
                 headers: {
                     [name: string]: unknown;

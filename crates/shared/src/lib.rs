@@ -20,3 +20,5 @@ pub mod ids;
 pub mod money;
 
 pub mod http_contract;
+
+pub mod upload_contract;

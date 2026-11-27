@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Finance AI Platform
-  version: 2.0.0-draft.1
+  version: 2.0.0-draft.2
   description: Typed technical draft; G01 owner approval required. No transfer API. Tenant derived from verified actor; every
     command checks scoped resource.
 servers:
@@ -1203,13 +1203,25 @@ paths:
               properties:
                 file_name:
                   type: string
+                  minLength: 1
+                  maxLength: 255
+                  description: Display metadata only; never a storage path.
                 mime:
                   type: string
+                  enum:
+                  - application/pdf
+                  - image/jpeg
+                  - image/png
+                  - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+                  - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
                 bytes:
                   type: integer
                   minimum: 1
+                  maximum: 9007199254740991
+                  description: Server applies configured quotas; 25 MiB/file default.
                 sha256:
                   type: string
+                  pattern: ^[a-f0-9]{64}$
                 kind:
                   type: string
               required:
@@ -1218,7 +1230,8 @@ paths:
               - bytes
               - sha256
               - kind
-      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
+      description: Reserve quota and create stable PENDING_UPLOAD intent metadata, without a signed URL. Reauthorize before
+        replay.
   /v1/dossiers/{dossier_id}/documents/{document_id}/finalize:
     post:
       operationId: finalizeDocument
@@ -1301,7 +1314,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Conflict or stale version
+          description: 'Conflict: stale parent version, idempotency mismatch, expired/superseded grant or closed intent.'
           content:
             application/json:
               schema:
@@ -1334,9 +1347,16 @@ paths:
               properties:
                 sha256:
                   type: string
+                  pattern: ^[a-f0-9]{64}$
+                generation: &id010
+                  type: integer
+                  minimum: 1
+                  maximum: 9007199254740991
               required:
               - sha256
-      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
+              - generation
+      description: Verify exact immutable staged object bytes and current grant generation, expiry, parent revision and quota;
+        attach quarantine object and enqueue scan atomically. No client claim is proof.
   /v1/dossiers/{dossier_id}/documents/{document_id}/supersede:
     post:
       operationId: supersedeDocument
@@ -8911,6 +8931,114 @@ paths:
               - result_id
               - reason
       description: Reauthorize before replay; idempotency receipt is immutable and scoped.
+  /v1/dossiers/{dossier_id}/documents/{document_id}/upload-grants:
+    post:
+      operationId: issueUploadGrant
+      tags:
+      - E05
+      summary: Issue or refresh a fenced upload grant
+      x-release-gate: pilot
+      parameters:
+      - name: dossier_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: document_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
+        in: header
+        required: true
+        schema:
+          type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
+      responses:
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found or out of scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 'Conflict: stale parent version, key mismatch, or UPLOAD_GRANT_INACTIVE on expired/superseded grant
+            replay.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Business guard failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadGrant'
+          headers:
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
+      description: New key and current parent version rotate staging generation. Replayed expired or superseded grant returns
+        409 UPLOAD_GRANT_INACTIVE; no replacement URL is issued by replay.
 components:
   securitySchemes:
     oidc:
@@ -9045,6 +9173,7 @@ components:
         state:
           type: string
           enum:
+          - PENDING_UPLOAD
           - QUARANTINED
           - CLEAN
           - REJECTED
@@ -9943,14 +10072,40 @@ components:
         document_id:
           type: string
           format: uuid
+        required_sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        state:
+          type: string
+          enum:
+          - PENDING_UPLOAD
+      required:
+      - document_id
+      - required_sha256
+      - state
+    UploadGrant:
+      type: object
+      additionalProperties: false
+      properties:
+        document_id:
+          type: string
+          format: uuid
+        generation: *id010
         upload_url:
           type: string
           format: uri
-        expires_at: *id004
-        required_sha256:
+        expires_at:
           type: string
+          format: date-time
+        content_type:
+          type: string
+        checksum_sha256_base64:
+          type: string
+          pattern: ^[A-Za-z0-9+/]{43}=$
       required:
       - document_id
+      - generation
       - upload_url
       - expires_at
-      - required_sha256
+      - content_type
+      - checksum_sha256_base64

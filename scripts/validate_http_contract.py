@@ -34,3 +34,15 @@ for path, item in api["paths"].items():
             assert {"company_id", "kind", "status", "updated_from", "updated_to"} <= params.keys()
 assert commands and versioned
 print(f"PASS: {commands} idempotent command contracts, {versioned} aggregate version guards; no HTTP ETag conflation.")
+
+create = api["paths"]["/v1/dossiers/{dossier_id}/documents"]["post"]
+grant = api["paths"]["/v1/dossiers/{dossier_id}/documents/{document_id}/upload-grants"]["post"]
+final = api["paths"]["/v1/dossiers/{dossier_id}/documents/{document_id}/finalize"]["post"]
+schemas = api["components"]["schemas"]
+assert "upload_url" not in schemas["UploadIntent"]["properties"]
+assert set(schemas["UploadGrant"]["required"]) == {"document_id", "generation", "upload_url", "expires_at", "content_type", "checksum_sha256_base64"}
+assert grant["responses"]["201"]["content"]["application/json"]["schema"]["$ref"].endswith("/UploadGrant")
+assert "UPLOAD_GRANT_INACTIVE" in grant["responses"]["409"]["description"]
+assert set(final["requestBody"]["content"]["application/json"]["schema"]["required"]) == {"generation", "sha256"}
+assert "PENDING_UPLOAD" in schemas["Document"]["properties"]["state"]["enum"]
+print("PASS: metadata-only create intent, separate fenced upload grant and generation-bound finalize contract.")

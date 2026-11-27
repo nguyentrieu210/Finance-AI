@@ -1,0 +1,242 @@
+{
+  "status": "TECHNICAL_DRAFT",
+  "migration_baseline": "20261127000100",
+  "notes": "Ownership and planned table inventory only; no DDL or approval. Tenant-scoped infrastructure rows for company data still carry company_id and scoped access. No migration IDs allocated to unapproved changes.",
+  "groups": [
+    {
+      "owner": "A01",
+      "default_scope": "tenant",
+      "tables": [
+        "job",
+        "job_attempt",
+        "outbox",
+        "inbox",
+        "idempotency_record"
+      ],
+      "invariants": "Job fence, bounded retries, dedupe and receipt immutable; same transaction as mutation."
+    },
+    {
+      "owner": "A02",
+      "default_scope": "tenant",
+      "tables": [
+        "identity_subject"
+      ],
+      "invariants": "Issuer+subject unique; verified mapping only."
+    },
+    {
+      "owner": "A03",
+      "default_scope": "company",
+      "tables": [
+        "membership",
+        "permission",
+        "delegation"
+      ],
+      "invariants": "Current scope, validity, no self approval; scoped foreign keys."
+    },
+    {
+      "owner": "A04",
+      "default_scope": "tenant",
+      "tables": [
+        "tenant",
+        "company",
+        "organization_unit"
+      ],
+      "invariants": "Tenant root distinct; company and organizational hierarchy scoped."
+    },
+    {
+      "owner": "A05",
+      "default_scope": "company",
+      "tables": [
+        "document_blob",
+        "document_ref",
+        "upload_intent",
+        "upload_grant",
+        "evidence"
+      ],
+      "invariants": "Immutable original; unique grant generation/staging key; quota, legal hold and scan gates."
+    },
+    {
+      "owner": "A06",
+      "default_scope": "company",
+      "tables": [
+        "ocr_run"
+      ],
+      "invariants": "Document revision and attempt fenced."
+    },
+    {
+      "owner": "A07",
+      "default_scope": "company",
+      "tables": [
+        "document_layout"
+      ],
+      "invariants": "Original page/coordinate provenance; immutable run result."
+    },
+    {
+      "owner": "A08",
+      "default_scope": "company",
+      "tables": [
+        "extraction_run",
+        "extracted_field"
+      ],
+      "invariants": "Immutable candidates, model/schema provenance."
+    },
+    {
+      "owner": "A09",
+      "default_scope": "company",
+      "tables": [
+        "field_decision"
+      ],
+      "invariants": "Append-only decision, actor and evidence."
+    },
+    {
+      "owner": "A10",
+      "default_scope": "company",
+      "tables": [
+        "match_result",
+        "match_decision"
+      ],
+      "invariants": "Revision-pinned operands and evidence; fuzzy not authoritative."
+    },
+    {
+      "owner": "A11",
+      "default_scope": "company",
+      "tables": [
+        "financial_resource",
+        "allocation_effect",
+        "reservation",
+        "reservation_line"
+      ],
+      "invariants": "Sorted resource locks, decimal values, unique external events and immutable reversals."
+    },
+    {
+      "owner": "A12",
+      "default_scope": "company",
+      "tables": [
+        "vendor_ref",
+        "contract_ref",
+        "contract_line",
+        "invoice_ref",
+        "invoice_line"
+      ],
+      "invariants": "Verified source version, currency, partial allocations and normalized identity."
+    },
+    {
+      "owner": "A13",
+      "default_scope": "company",
+      "tables": [
+        "advance_ref",
+        "settlement_link"
+      ],
+      "invariants": "Independent verified issue/refund and disjoint consumption."
+    },
+    {
+      "owner": "A14",
+      "default_scope": "company",
+      "tables": [
+        "budget_ref"
+      ],
+      "invariants": "Period and cost center, source coverage."
+    },
+    {
+      "owner": "A15",
+      "default_scope": "company",
+      "tables": [
+        "rule_version",
+        "check_run",
+        "check_result",
+        "rule_simulation",
+        "check_acknowledgment"
+      ],
+      "invariants": "Pinned policy/input hash; immutable outcomes; no override mutation."
+    },
+    {
+      "owner": "A16",
+      "default_scope": "company",
+      "tables": [
+        "policy_version",
+        "policy_clause",
+        "checklist_item"
+      ],
+      "invariants": "Immutable published versions, maker-checker, effective range."
+    },
+    {
+      "owner": "A17",
+      "default_scope": "company",
+      "tables": [
+        "knowledge_chunk"
+      ],
+      "invariants": "Approved source/version only; embedding provenance."
+    },
+    {
+      "owner": "A18",
+      "default_scope": "company",
+      "tables": [
+        "dossier",
+        "dossier_revision",
+        "dossier_snapshot",
+        "snapshot_member",
+        "workflow_version",
+        "review_decision",
+        "review_assignment",
+        "critical_confirmation"
+      ],
+      "invariants": "Scoped aggregate lock, immutable seal, state guards, SoD."
+    },
+    {
+      "owner": "A19",
+      "default_scope": "company",
+      "tables": [
+        "form_version"
+      ],
+      "invariants": "Typed versioned schema and publish approval."
+    },
+    {
+      "owner": "A20",
+      "default_scope": "company",
+      "tables": [
+        "template_version",
+        "package"
+      ],
+      "invariants": "Immutable template/manifest; successful package idempotent."
+    },
+    {
+      "owner": "A21",
+      "default_scope": "company",
+      "tables": [
+        "waiver",
+        "risk_signal",
+        "risk_decision"
+      ],
+      "invariants": "Exception scoped to result/revision/hash; separate approver and expiry."
+    },
+    {
+      "owner": "A22",
+      "default_scope": "tenant",
+      "tables": [
+        "audit_event",
+        "audit_checkpoint"
+      ],
+      "invariants": "Append-only chain; tenant sequence; company scope for company records; external anchor."
+    },
+    {
+      "owner": "A23",
+      "default_scope": "company",
+      "tables": [
+        "reference_snapshot",
+        "source_coverage",
+        "payment_ref",
+        "handoff",
+        "external_status",
+        "external_attempt",
+        "reconciliation_case"
+      ],
+      "invariants": "Verified source coverage; ordered independent observations; dedupe and unknown reconciliation."
+    },
+    {
+      "owner": "A24",
+      "default_scope": "company",
+      "tables": [],
+      "invariants": "Read-only derived views, no source of truth or independent business writes."
+    }
+  ]
+}
