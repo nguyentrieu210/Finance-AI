@@ -431,6 +431,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "base64",
+ "chrono",
  "finance-core",
  "finance-documents",
  "finance-identity",
@@ -712,6 +713,7 @@ version = "0.1.0"
 name = "finance-workflow"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "finance-core",
  "finance-financial",
  "finance-identity",

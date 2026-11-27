@@ -74,7 +74,13 @@ mod tests {
             Ok(m("70", "VND"))
         );
         assert_eq!(
-            net(gross, Included, Separate(None), NotApplicable, NotApplicable),
+            net(
+                gross,
+                Included,
+                Separate(None),
+                NotApplicable,
+                NotApplicable
+            ),
             Err(Error::Unknown)
         );
         assert_eq!(

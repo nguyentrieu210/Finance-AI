@@ -69,9 +69,7 @@ pub fn plan(
     if applied.amount.decimal() > expenses.amount.decimal() {
         return Err(Error::ExceedsCap);
     }
-    let extra_payment = expenses
-        .checked_sub(applied)
-        .map_err(|_| Error::Overflow)?;
+    let extra_payment = expenses.checked_sub(applied).map_err(|_| Error::Overflow)?;
     if !extra_allowed && extra_payment != zero {
         return Err(Error::ExceedsCap);
     }

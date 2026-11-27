@@ -42,6 +42,11 @@ pub struct Create {
 pub struct List {
     limit: Option<i64>,
     cursor: Option<String>,
+    company_id: Option<Uuid>,
+    kind: Option<String>,
+    status: Option<String>,
+    updated_from: Option<chrono::DateTime<chrono::Utc>>,
+    updated_to: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Serialize)]
@@ -181,9 +186,36 @@ pub async fn list(
     let Some(time) = now() else {
         return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
     };
-    let key: [u8; 32] =
-        Sha256::digest([b"finance.dossier.cursor/v1".as_slice(), &state.cursor_key].concat())
-            .into();
+    let filters = draft::Filters {
+        company_id: query.company_id,
+        kind: query.kind.as_deref(),
+        status: query.status.as_deref(),
+        updated_from: query.updated_from,
+        updated_to: query.updated_to,
+    };
+    if !filters.valid() {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    if filters
+        .company_id
+        .is_some_and(|id| id != Uuid::from(state.scope.company))
+    {
+        return error(StatusCode::FORBIDDEN, correlation);
+    }
+    // Bind cursors to the exact filter selection in addition to actor/scope.
+    let filter_key = format!(
+        "{:?}/{:?}/{:?}/{:?}/{:?}",
+        filters.company_id, filters.kind, filters.status, filters.updated_from, filters.updated_to
+    );
+    let key: [u8; 32] = Sha256::digest(
+        [
+            b"finance.dossier.cursor/v2".as_slice(),
+            &state.cursor_key,
+            filter_key.as_bytes(),
+        ]
+        .concat(),
+    )
+    .into();
     let after = match query.cursor {
         None => Uuid::nil(),
         Some(value) => match decode_cursor(&key, state.scope, actor, &value, time) {
@@ -191,7 +223,7 @@ pub async fn list(
             None => return error(StatusCode::BAD_REQUEST, correlation),
         },
     };
-    match draft::list(&state.runtime, &proof, after, limit).await {
+    match draft::list_filtered(&state.runtime, &proof, after, limit, &filters).await {
         Ok(items) => {
             let next_cursor = if items.len() == limit as usize {
                 items

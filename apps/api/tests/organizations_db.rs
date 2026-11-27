@@ -236,6 +236,50 @@ async fn scoped_organization_http_real_database() {
     let (status, page) = request(&app, "/v1/dossiers", Some(&requester)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(page["items"].as_array().unwrap().len(), 3);
+    let (status, page) = request(
+        &app,
+        "/v1/dossiers?kind=ADVANCE&status=DRAFT",
+        Some(&requester),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(page["items"].as_array().unwrap().len(), 1);
+    assert_eq!(page["items"][0]["kind"], "ADVANCE");
+    let (_, empty) = request(
+        &app,
+        "/v1/dossiers?updated_to=2000-01-01T00%3A00%3A00Z",
+        Some(&requester),
+    )
+    .await;
+    assert_eq!(empty["items"].as_array().unwrap().len(), 0);
+    assert_eq!(
+        request(&app, "/v1/dossiers?kind=INVALID", Some(&requester))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    let (_, first) = request(&app, "/v1/dossiers?limit=1", Some(&requester)).await;
+    let cursor = first["next_cursor"].as_str().unwrap();
+    assert_eq!(
+        request(
+            &app,
+            &format!("/v1/dossiers?limit=1&kind=ADVANCE&cursor={cursor}"),
+            Some(&requester),
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        request(
+            &app,
+            "/v1/dossiers?company_id=00000000-0000-0000-0000-00000000000b",
+            Some(&requester),
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
     let (_, page) = request(&app, "/v1/dossiers", Some(&other_requester)).await;
     assert_eq!(page["items"].as_array().unwrap().len(), 0);
     let response = app

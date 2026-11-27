@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+chrono.workspace = true
 finance-core = { path = "../core" }
 finance-identity = { path = "../identity" }
 finance-permissions = { path = "../permissions" }

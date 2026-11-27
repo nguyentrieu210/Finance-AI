@@ -151,23 +151,84 @@ pub async fn get(
     Ok(draft)
 }
 
+#[derive(Default)]
+pub struct Filters<'a> {
+    pub company_id: Option<Uuid>,
+    pub kind: Option<&'a str>,
+    pub status: Option<&'a str>,
+    pub updated_from: Option<chrono::DateTime<chrono::Utc>>,
+    pub updated_to: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl Filters<'_> {
+    pub fn valid(&self) -> bool {
+        self.kind
+            .is_none_or(|k| matches!(k, "PAYMENT" | "ADVANCE" | "SETTLEMENT"))
+            && self.status.is_none_or(|s| {
+                matches!(
+                    s,
+                    "DRAFT"
+                        | "PROCESSING"
+                        | "NEEDS_INPUT"
+                        | "REVIEWABLE"
+                        | "READY"
+                        | "EXPORTED"
+                        | "HANDED_OFF"
+                        | "ACCOUNTING_REVIEW"
+                        | "ACCEPTED"
+                        | "RETURNED"
+                        | "CANCELLED"
+                )
+            })
+            && self
+                .updated_from
+                .zip(self.updated_to)
+                .is_none_or(|(from, to)| from <= to)
+    }
+}
+
 pub async fn list(
     pool: &PgPool,
     proof: &AuthenticatedCommand,
     after: Uuid,
     limit: i64,
 ) -> Result<Vec<Draft>, Error> {
-    if !(1..=100).contains(&limit) {
+    list_filtered(pool, proof, after, limit, &Filters::default()).await
+}
+
+pub async fn list_filtered(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    after: Uuid,
+    limit: i64,
+    filters: &Filters<'_>,
+) -> Result<Vec<Draft>, Error> {
+    if !(1..=100).contains(&limit) || !filters.valid() {
         return Err(Error::InvalidInput);
     }
     let (t, c, a) = binding(proof)?;
+    if filters.company_id.is_some_and(|id| id != c) {
+        return Err(Error::Forbidden);
+    }
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     require_role(&mut tx, proof.context(), Role::Requester)
         .await
         .map_err(grant_error)?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let drafts = sqlx::query_as::<_, Draft>(&format!("{SELECT_DRAFT} WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id>$4 ORDER BY id LIMIT $5"))
-        .bind(t).bind(c).bind(a).bind(after).bind(limit).fetch_all(&mut *tx).await?;
+    let drafts = sqlx::query_as::<_, Draft>(&format!(
+        "{SELECT_DRAFT} WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id>$4 AND ($6::text IS NULL OR kind=$6) AND ($7::text IS NULL OR status=$7) AND ($8::timestamptz IS NULL OR updated_at >= $8) AND ($9::timestamptz IS NULL OR updated_at <= $9) ORDER BY id LIMIT $5"
+    ))
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(after)
+    .bind(limit)
+    .bind(filters.kind)
+    .bind(filters.status)
+    .bind(filters.updated_from)
+    .bind(filters.updated_to)
+    .fetch_all(&mut *tx)
+    .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(drafts)

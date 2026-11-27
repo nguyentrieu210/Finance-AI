@@ -15,6 +15,7 @@ export function Drafts() {
   const [status, setStatus] = useState('Chưa kết nối.');
   const [company, setCompany] = useState('');
   const [kind, setKind] = useState<Kind>('PAYMENT');
+  const [filterKind, setFilterKind] = useState<Kind | ''>('');
   const [items, setItems] = useState<Dossier[]>([]);
   const [cursor, setCursor] = useState<string>();
   const [detail, setDetail] = useState<Dossier>();
@@ -32,7 +33,7 @@ export function Drafts() {
     active.current = false;
     credential.current = '';
     pending.current = null;
-    setToken(''); setConnected(false); setBusy(false); setItems([]); setCursor(undefined); setDetail(undefined); setUncertain(false);
+    setFilterKind(''); setToken(''); setConnected(false); setBusy(false); setItems([]); setCursor(undefined); setDetail(undefined); setUncertain(false);
     setStatus('Đã ngắt kết nối.');
   }
   function start() {
@@ -52,7 +53,7 @@ export function Drafts() {
     const op=start(); if(!op)return;
     setStatus('Đang tải hồ sơ...');
     try {
-      const params=new URLSearchParams({limit:'10'}); if(next)params.set('cursor',next);
+      const params=new URLSearchParams({limit:'10'}); if(filterKind)params.set('kind',filterKind); if(next)params.set('cursor',next);
       const response=await fetchData('/v1/dossiers?'+params,op.controller);
       if(op.version!==generation.current)return;
       if(!response.ok) {
@@ -125,6 +126,7 @@ export function Drafts() {
       <button className="primary" disabled={!connected||busy||(!uncertain&&!/^[0-9a-f-]{36}$/i.test(company.trim()))} onClick={()=>void create()}>{uncertain?'Thử lại yêu cầu':'Tạo hồ sơ nháp'}</button>
     </div>
     <p role="status" aria-live="polite">{status}</p>
+    <div className="actions"><label htmlFor="filter-kind">Lọc loại hồ sơ</label><select id="filter-kind" value={filterKind} disabled={!connected||busy} onChange={e=>{setFilterKind(e.target.value as Kind | '');setCursor(undefined);setItems([]);setDetail(undefined);}}><option value="">Tất cả</option>{Object.entries(kinds).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select><button disabled={!connected||busy} onClick={()=>void list()}>Áp dụng bộ lọc</button></div>
     <div className="table-wrap"><table><thead><tr><th>Mã hồ sơ</th><th>Loại</th><th>Trạng thái</th><th>Phiên bản</th><th>Chi tiết</th></tr></thead>
       <tbody>{items.map(row=><tr key={row.id}><td>{row.code}</td><td>{kinds[row.kind]}</td><td>{row.status}</td><td>{row.version}</td><td><button disabled={busy} onClick={()=>void view(row.id)}>Xem</button></td></tr>)}</tbody></table></div>
     <div className="actions"><button disabled={!connected||busy} onClick={()=>void list()}>Trang đầu</button><button disabled={!cursor||busy} onClick={()=>void list(cursor)}>Trang tiếp</button></div>
