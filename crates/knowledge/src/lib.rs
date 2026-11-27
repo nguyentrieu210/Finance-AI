@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+pub mod repository;
 //! Synthetic-only domain prototype. No authorization, durable mutation or production claim.
 use finance_shared::ids::{CompanyScope, ResourceId};
 
