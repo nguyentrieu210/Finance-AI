@@ -4,12 +4,16 @@ use super::{
 };
 use axum::{
     Json,
-    extract::{Query, State, rejection::QueryRejection},
+    extract::{Path, Query, State, rejection::QueryRejection},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use finance_financial::references::Reference;
-use finance_shared::contracts::Principal;
+use finance_shared::{
+    contracts::{Principal, Version},
+    http_contract::{VersionTarget, VersionToken},
+    ids::ResourceId,
+};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -139,4 +143,36 @@ pub(super) async fn all(
     query: Result<Query<PageQuery>, QueryRejection>,
 ) -> Response {
     list_kind(state, headers, query, Kind::All).await
+}
+
+pub(super) async fn get(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match dossiers::authenticate_version(&state, &headers, correlation, None).await {
+        Ok(proof) => proof,
+        Err(status) => return error(status, correlation),
+    };
+    match finance_financial::references::get(&state.runtime, &proof, id).await {
+        Ok(Some(reference)) => {
+            let token = VersionToken {
+                target: VersionTarget::Reference,
+                resource_id: ResourceId::try_from(reference.id).expect("stored reference"),
+                version: Version::try_from(0).expect("immutable reference version"),
+            };
+            let mut response = Json(reference).into_response();
+            response.headers_mut().insert(
+                "finance-version",
+                HeaderValue::from_str(&token.to_string()).expect("canonical"),
+            );
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Ok(None) => error(StatusCode::NOT_FOUND, correlation),
+        Err(value) => error(dossiers::status(value), correlation),
+    }
 }

@@ -121,3 +121,39 @@ pub async fn list_budgets(
 ) -> Result<Vec<Reference>, Error> {
     list(pool, proof, ReferenceKind::Budget, after, limit).await
 }
+
+pub async fn get(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    id: Uuid,
+) -> Result<Option<Reference>, Error> {
+    if id.is_nil() {
+        return Err(Error::InvalidInput);
+    }
+    let ResourceScope::Company(CompanyScope { tenant, company }) = proof.context().scope else {
+        return Err(Error::Forbidden);
+    };
+    let Principal::User(_) = proof.context().actor else {
+        return Err(Error::Forbidden);
+    };
+    let (t, c): (Uuid, Uuid) = (tenant.into(), company.into());
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(|e| match e {
+            GrantError::Forbidden => Error::Forbidden,
+            GrantError::Database(e) => Error::Database(e),
+        })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let row = sqlx::query_as::<_, Reference>(
+        "SELECT f.id,f.resource_kind AS kind,f.source_key,to_char(r.as_of AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS as_of,'COMPLETE'::text AS coverage,'VERIFIED'::text AS state,ARRAY[]::uuid[] AS evidence_ids FROM finance.financial_resource f JOIN finance.reference_snapshot r ON (r.tenant_id,r.company_id,r.id)=(f.tenant_id,f.company_id,f.snapshot_id) WHERE f.tenant_id=$1 AND f.company_id=$2 AND f.id=$3 AND f.resource_kind IN ('CONTRACT','ADVANCE','BUDGET','INVOICE') AND f.coverage_complete AND f.fresh_until>statement_timestamp() AND r.state='APPROVED' AND r.fresh_until>statement_timestamp()",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(row)
+}
