@@ -75,5 +75,6 @@ docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERR
 FINANCE_PROTOTYPE_TEST_DATABASE_URL="$runtime_url" FINANCE_IDENTITY_TEST_DATABASE_URL="$identity_url" cargo test --locked -p finance-api --test organizations_db -- --ignored --exact scoped_organization_http_real_database
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/dossier_assert.sql
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/policy_version_assert.sql
+docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/reference_import_assert.sql
 unset url runtime_url worker_url identity_url
 echo 'PASS: real PostgreSQL synthetic prototype atomic command, replay, RLS and scoped FK'
