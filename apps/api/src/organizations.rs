@@ -37,8 +37,10 @@ mod integration;
 mod knowledge;
 mod matching;
 mod lifecycle;
+mod matches;
 mod policies;
 mod references;
+mod reservations;
 mod reservations;
 mod risks;
 mod rules;
@@ -286,6 +288,14 @@ pub fn router(state: OrganizationState) -> Router {
         )
         .route("/v1/dossiers/{dossier_id}/checks", get(checks::list))
         .route("/v1/dossiers/{dossier_id}/fields", get(fields::list))
+        .route(
+            "/v1/dossiers/{dossier_id}/matches",
+            get(matches::list).post(matches::confirm),
+        )
+        .route(
+            "/v1/dossiers/{dossier_id}/reservations",
+            get(reservations::list),
+        )
         .route(
             "/v1/dossiers/{dossier_id}/fields/decisions",
             axum::routing::post(fields::decide),
