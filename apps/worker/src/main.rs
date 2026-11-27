@@ -60,8 +60,7 @@ impl Config {
         };
         let lease_seconds = parse_i32("FINANCE_WORKER_LEASE_SECONDS", 60, 3, 300)?;
         let poll_ms = parse_u64("FINANCE_WORKER_POLL_MS", 1000, 100, 60_000)?;
-        let timeout_seconds =
-            parse_u64("FINANCE_EXPORT_ADAPTER_TIMEOUT_SECONDS", 120, 1, 300)?;
+        let timeout_seconds = parse_u64("FINANCE_EXPORT_ADAPTER_TIMEOUT_SECONDS", 120, 1, 300)?;
         let adapter = PathBuf::from(
             env::var("FINANCE_EXPORT_ADAPTER").map_err(|_| "export adapter missing")?,
         );
@@ -69,11 +68,17 @@ impl Config {
             return Err("export adapter path must be absolute");
         }
         let adapter_config = env::var_os("FINANCE_EXPORT_ADAPTER_CONFIG").map(PathBuf::from);
-        if adapter_config.as_ref().is_some_and(|path| !path.is_absolute()) {
+        if adapter_config
+            .as_ref()
+            .is_some_and(|path| !path.is_absolute())
+        {
             return Err("export adapter config path must be absolute");
         }
         let adapter_endpoint = env::var("FINANCE_EXPORT_STORAGE_ENDPOINT").ok();
-        if adapter_endpoint.as_ref().is_some_and(|value| value.len() > 2048) {
+        if adapter_endpoint
+            .as_ref()
+            .is_some_and(|value| value.len() > 2048)
+        {
             return Err("export adapter endpoint invalid");
         }
         Ok((
@@ -102,12 +107,7 @@ fn parse_uuid(name: &'static str) -> Result<Uuid, &'static str> {
     Ok(id)
 }
 
-fn parse_i32(
-    name: &'static str,
-    default: i32,
-    min: i32,
-    max: i32,
-) -> Result<i32, &'static str> {
+fn parse_i32(name: &'static str, default: i32, min: i32, max: i32) -> Result<i32, &'static str> {
     let value = match env::var(name) {
         Ok(value) => value
             .parse::<i32>()
@@ -120,12 +120,7 @@ fn parse_i32(
     Ok(value)
 }
 
-fn parse_u64(
-    name: &'static str,
-    default: u64,
-    min: u64,
-    max: u64,
-) -> Result<u64, &'static str> {
+fn parse_u64(name: &'static str, default: u64, min: u64, max: u64) -> Result<u64, &'static str> {
     let value = match env::var(name) {
         Ok(value) => value
             .parse::<u64>()
@@ -283,8 +278,8 @@ async fn render_with_heartbeat(
     lease: Lease,
 ) -> Result<Receipt, RunFailure> {
     let mut adapter = Box::pin(invoke_adapter(config, lease));
-    let interval_seconds = u64::try_from((config.lease_seconds / 3).max(1))
-        .map_err(|_| RunFailure::Permanent)?;
+    let interval_seconds =
+        u64::try_from((config.lease_seconds / 3).max(1)).map_err(|_| RunFailure::Permanent)?;
     let mut heartbeat = time::interval(Duration::from_secs(interval_seconds));
     heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
     heartbeat.tick().await;
@@ -300,11 +295,7 @@ async fn render_with_heartbeat(
     }
 }
 
-async fn process_export(
-    pool: &PgPool,
-    config: &Config,
-    lease: Lease,
-) -> Result<(), RunFailure> {
+async fn process_export(pool: &PgPool, config: &Config, lease: Lease) -> Result<(), RunFailure> {
     let receipt = render_with_heartbeat(pool, config, lease).await?;
     let owned = validate_receipt(receipt, lease.job_id, lease.fence)?;
     let artifacts: Vec<_> = owned
