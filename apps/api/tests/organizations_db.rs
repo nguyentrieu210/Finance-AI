@@ -818,7 +818,11 @@ async fn scoped_organization_http_real_database() {
         advance["id"].as_str().unwrap(),
         settlement["id"].as_str().unwrap(),
     ] {
-        assert!(dossier_items.iter().any(|item| item["id"].as_str() == Some(id)));
+        assert!(
+            dossier_items
+                .iter()
+                .any(|item| item["id"].as_str() == Some(id))
+        );
     }
     let (dashboard_status, dashboard) = request(&app, "/v1/dashboard", Some(&requester)).await;
     assert_eq!(dashboard_status, StatusCode::OK);
