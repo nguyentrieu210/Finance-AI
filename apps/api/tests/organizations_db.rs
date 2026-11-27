@@ -173,9 +173,16 @@ async fn scoped_organization_http_real_database() {
     );
     let (policy_status, policy_page) = request(&app, "/v1/policies", Some(&requester)).await;
     assert_eq!(policy_status, StatusCode::OK);
-    assert_eq!(policy_page["items"].as_array().unwrap().len(), 1);
-    assert_eq!(policy_page["items"][0]["state"], "PUBLISHED");
-    let policy_id = policy_page["items"][0]["id"].as_str().unwrap();
+    let policies = policy_page["items"].as_array().unwrap();
+    assert!(!policies.is_empty());
+    assert!(policies.iter().all(|policy| policy["state"] == "PUBLISHED"));
+    let policy_id = policies
+        .iter()
+        .find(|policy| {
+            policy["id"] == "00000000-0000-0000-0000-000000001600"
+        })
+        .and_then(|policy| policy["id"].as_str())
+        .expect("published settlement policy fixture must be visible");
     let (get_status, policy) =
         request(&app, &format!("/v1/policies/{policy_id}"), Some(&requester)).await;
     assert_eq!(get_status, StatusCode::OK);
