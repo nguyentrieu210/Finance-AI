@@ -356,9 +356,11 @@ async fn scoped_organization_http_real_database() {
     for kind in ["CONTRACT", "ADVANCE", "BUDGET"] {
         assert!(reference_items.iter().any(|item| item["kind"] == kind));
     }
-    assert!(reference_items.iter().all(|item| {
-        item["state"] == "VERIFIED" && item["coverage"] == "COMPLETE"
-    }));
+    assert!(
+        reference_items
+            .iter()
+            .all(|item| { item["state"] == "VERIFIED" && item["coverage"] == "COMPLETE" })
+    );
     let (_, first_reference) = request(&app, "/v1/references?limit=1", Some(&requester)).await;
     let reference_cursor = first_reference["next_cursor"].as_str().unwrap();
     let (next_reference_status, next_reference) = request(
