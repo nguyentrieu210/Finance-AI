@@ -96,7 +96,7 @@ BEGIN
  SELECT * INTO prior FROM finance.field_decision WHERE tenant_id=t AND company_id=c AND id=i;
  IF FOUND THEN
   IF (prior.dossier_id,prior.run_id,prior.field_path,prior.actor_id,prior.disposition,prior.reason,prior.dossier_version)
-   IS DISTINCT FROM (d,r,path,a,decision, v+1) OR prior.revision_id<>rev
+   IS DISTINCT FROM (d,r,path,a,decision,why,v+1) OR prior.revision_id<>rev
   THEN RAISE EXCEPTION 'review replay conflict' USING ERRCODE='23505'; END IF;
   RETURN i;
  END IF;

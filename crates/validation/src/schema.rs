@@ -56,8 +56,7 @@ pub fn validate(kind: FieldType<'_>, value: Option<&str>, verified: bool, fresh:
             }
             let input_scale = value.split_once('.').map_or(0, |(_, f)| f.len());
             input_scale <= scale as usize
-                && Amount::parse(value)
-                    .is_ok_and(|a| signed || !a.decimal().is_sign_negative())
+                && Amount::parse(value).is_ok_and(|a| signed || !a.decimal().is_sign_negative())
         }
         FieldType::Enum(choices) => {
             if choices.is_empty() || choices.len() > 5000 {
@@ -74,11 +73,7 @@ pub fn validate(kind: FieldType<'_>, value: Option<&str>, verified: bool, fresh:
                 && !value.chars().any(char::is_control)
         }
     };
-    if valid {
-        Outcome::Pass
-    } else {
-        Outcome::Fail
-    }
+    if valid { Outcome::Pass } else { Outcome::Fail }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -91,10 +86,7 @@ fn valid_path(path: &str) -> bool {
     !path.is_empty()
         && path.len() <= 128
         && path.split('.').all(|part| {
-            !part.is_empty()
-                && part
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            !part.is_empty() && part.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
         })
 }
 
