@@ -1,6 +1,9 @@
 //! Synthetic immutable external observation reducer. No DO/ERP network or credentials.
 use crate::{External, Observation, observe};
-use finance_shared::{ids::{CompanyScope, ResourceId, RevisionId}, upload_contract::Sha256Digest};
+use finance_shared::{
+    ids::{CompanyScope, ResourceId, RevisionId},
+    upload_contract::Sha256Digest,
+};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -42,21 +45,32 @@ pub struct Reconciler {
 impl Reconciler {
     pub fn new(scope: CompanyScope, handoff: ResourceId, revision: RevisionId) -> Self {
         Self {
-            scope, handoff, revision,
+            scope,
+            handoff,
+            revision,
             state: External::DispatchPending,
             high_watermark: 0,
             events: BTreeMap::new(),
         }
     }
 
-    pub fn state(&self) -> External { self.state }
+    pub fn state(&self) -> External {
+        self.state
+    }
 
     pub fn apply(&mut self, event: Event) -> Result<Apply, Error> {
-        if event.scope != self.scope || event.handoff != self.handoff || event.revision != self.revision {
+        if event.scope != self.scope
+            || event.handoff != self.handoff
+            || event.revision != self.revision
+        {
             return Err(Error::WrongBinding);
         }
         if let Some(prior) = self.events.get(&event.external_id) {
-            return if *prior == event { Ok(Apply::Replayed) } else { Err(Error::ReplayConflict) };
+            return if *prior == event {
+                Ok(Apply::Replayed)
+            } else {
+                Err(Error::ReplayConflict)
+            };
         }
         if event.sequence <= self.high_watermark {
             return Err(Error::StaleSequence);
@@ -68,7 +82,8 @@ impl Reconciler {
         if event.observation != Observation::Timeout && !event.independently_verified {
             return Err(Error::InvalidTransition);
         }
-        let next = observe(self.state, event.observation, event.independently_verified).ok_or(Error::InvalidTransition)?;
+        let next = observe(self.state, event.observation, event.independently_verified)
+            .ok_or(Error::InvalidTransition)?;
         self.state = next;
         self.high_watermark = event.sequence;
         self.events.insert(event.external_id, event);

@@ -19,7 +19,10 @@ use rand::{RngCore, rngs::OsRng};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use sqlx::PgPool;
-use std::{sync::Arc, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use uuid::Uuid;
 
 type Hmac256 = Hmac<Sha256>;
@@ -34,8 +37,20 @@ pub struct OrganizationState {
 
 impl OrganizationState {
     /// Scope is trusted server configuration, never selected by a client header.
-    pub fn synthetic(runtime: PgPool, lookup: PgPool, verifier: VerifierStore, scope: CompanyScope, cursor_key: [u8; 32]) -> Self {
-        Self { runtime, lookup, verifier, scope, cursor_key }
+    pub fn synthetic(
+        runtime: PgPool,
+        lookup: PgPool,
+        verifier: VerifierStore,
+        scope: CompanyScope,
+        cursor_key: [u8; 32],
+    ) -> Self {
+        Self {
+            runtime,
+            lookup,
+            verifier,
+            scope,
+            cursor_key,
+        }
     }
 }
 
@@ -78,7 +93,15 @@ fn error(status: StatusCode, correlation_id: Uuid) -> Response {
         StatusCode::BAD_REQUEST => ("INVALID_INPUT", "Invalid pagination"),
         _ => ("UNAVAILABLE", "Dependency unavailable"),
     };
-    (status, Json(Failure { code, message, correlation_id })).into_response()
+    (
+        status,
+        Json(Failure {
+            code,
+            message,
+            correlation_id,
+        }),
+    )
+        .into_response()
 }
 
 fn random_id() -> Uuid {
@@ -90,20 +113,33 @@ fn random_id() -> Uuid {
 }
 
 fn now() -> Option<u64> {
-    SystemTime::now().duration_since(UNIX_EPOCH).ok().map(|d| d.as_secs())
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_secs())
 }
 
 fn sign(key: &[u8; 32], scope: CompanyScope, actor: ActorId, payload: &[u8]) -> Hmac256 {
     let mut mac = Hmac256::new_from_slice(key).expect("fixed HMAC key");
     mac.update(b"finance.org.cursor/v1");
-    for id in [Uuid::from(scope.tenant), Uuid::from(scope.company), Uuid::from(actor)] {
+    for id in [
+        Uuid::from(scope.tenant),
+        Uuid::from(scope.company),
+        Uuid::from(actor),
+    ] {
         mac.update(id.as_bytes());
     }
     mac.update(payload);
     mac
 }
 
-fn encode_cursor(key: &[u8; 32], scope: CompanyScope, actor: ActorId, after: Uuid, expires: u64) -> String {
+fn encode_cursor(
+    key: &[u8; 32],
+    scope: CompanyScope,
+    actor: ActorId,
+    after: Uuid,
+    expires: u64,
+) -> String {
     let mut bytes = Vec::with_capacity(56);
     bytes.extend_from_slice(after.as_bytes());
     bytes.extend_from_slice(&expires.to_be_bytes());
@@ -111,13 +147,27 @@ fn encode_cursor(key: &[u8; 32], scope: CompanyScope, actor: ActorId, after: Uui
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-fn decode_cursor(key: &[u8; 32], scope: CompanyScope, actor: ActorId, value: &str, now: u64) -> Option<Uuid> {
-    if value.len() > 100 { return None; }
+fn decode_cursor(
+    key: &[u8; 32],
+    scope: CompanyScope,
+    actor: ActorId,
+    value: &str,
+    now: u64,
+) -> Option<Uuid> {
+    if value.len() > 100 {
+        return None;
+    }
     let bytes = URL_SAFE_NO_PAD.decode(value).ok()?;
-    if bytes.len() != 56 { return None; }
-    sign(key, scope, actor, &bytes[..24]).verify_slice(&bytes[24..]).ok()?;
+    if bytes.len() != 56 {
+        return None;
+    }
+    sign(key, scope, actor, &bytes[..24])
+        .verify_slice(&bytes[24..])
+        .ok()?;
     let expires = u64::from_be_bytes(bytes[16..24].try_into().ok()?);
-    if expires <= now || expires > now.checked_add(300)? { return None; }
+    if expires <= now || expires > now.checked_add(300)? {
+        return None;
+    }
     Some(Uuid::from_bytes(bytes[..16].try_into().ok()?))
 }
 
@@ -127,16 +177,26 @@ async fn list(
     query: Result<Query<PageQuery>, axum::extract::rejection::QueryRejection>,
 ) -> Response {
     let correlation = random_id();
-    let token = match headers.get(axum::http::header::AUTHORIZATION).and_then(|h| h.to_str().ok()).and_then(|h| h.strip_prefix("Bearer ")) {
+    let token = match headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+    {
         Some(t) if !t.is_empty() && t.len() <= 16_384 => t,
         _ => return error(StatusCode::UNAUTHORIZED, correlation),
     };
-    let proof = match state.verifier.authenticate_command(
-        &state.lookup, token, state.scope,
-        CommandId::try_from(random_id()).expect("random command"),
-        CorrelationId::try_from(correlation).expect("random correlation"),
-        None,
-    ).await {
+    let proof = match state
+        .verifier
+        .authenticate_command(
+            &state.lookup,
+            token,
+            state.scope,
+            CommandId::try_from(random_id()).expect("random command"),
+            CorrelationId::try_from(correlation).expect("random correlation"),
+            None,
+        )
+        .await
+    {
         Ok(p) => p,
         Err(IdentityError::InvalidToken) => return error(StatusCode::UNAUTHORIZED, correlation),
         Err(IdentityError::Forbidden) => return error(StatusCode::FORBIDDEN, correlation),
@@ -145,10 +205,16 @@ async fn list(
     let Principal::User(actor) = proof.context().actor else {
         return error(StatusCode::FORBIDDEN, correlation);
     };
-    let Ok(Query(query)) = query else { return error(StatusCode::BAD_REQUEST, correlation); };
+    let Ok(Query(query)) = query else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
     let limit = query.limit.unwrap_or(50);
-    if !(1..=100).contains(&limit) { return error(StatusCode::BAD_REQUEST, correlation); }
-    let Some(time) = now() else { return error(StatusCode::SERVICE_UNAVAILABLE, correlation); };
+    if !(1..=100).contains(&limit) {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let Some(time) = now() else {
+        return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+    };
     let after = match query.cursor {
         None => Uuid::nil(),
         Some(value) => match decode_cursor(&state.cursor_key, state.scope, actor, &value, time) {
@@ -164,16 +230,32 @@ async fn list(
     };
     // A full final page may yield one extra empty page. No unscoped count query.
     let next_cursor = if rows.len() == limit as usize {
-        rows.last().map(|u| encode_cursor(&state.cursor_key, state.scope, actor, u.id, time + 300))
-    } else { None };
-    let items = rows.into_iter().map(|u| Organization {
-        id: u.id, parent_id: u.parent, kind: u.kind, code: u.code, name: u.name, active: u.active,
-    }).collect();
+        rows.last()
+            .map(|u| encode_cursor(&state.cursor_key, state.scope, actor, u.id, time + 300))
+    } else {
+        None
+    };
+    let items = rows
+        .into_iter()
+        .map(|u| Organization {
+            id: u.id,
+            parent_id: u.parent,
+            kind: u.kind,
+            code: u.code,
+            name: u.name,
+            active: u.active,
+        })
+        .collect();
     let mut response = Json(Page { items, next_cursor }).into_response();
-    response.headers_mut().insert(axum::http::header::CACHE_CONTROL, axum::http::HeaderValue::from_static("no-store"));
+    response.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-store"),
+    );
     response
 }
 
 pub fn router(state: OrganizationState) -> Router {
-    Router::new().route("/v1/organizations", get(list)).with_state(Arc::new(state))
+    Router::new()
+        .route("/v1/organizations", get(list))
+        .with_state(Arc::new(state))
 }

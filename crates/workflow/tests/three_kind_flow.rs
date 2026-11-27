@@ -16,7 +16,13 @@ fn m(n: &str) -> Money {
 #[test]
 fn payment_ready_requires_verified_total_cap_and_current_snapshot() {
     let check = invoice_total(Some(m("100")), Some(m("10")), Some(m("110")));
-    let cap = payable(m("90"), &[Constraint::Applicable(Some(m("100"))), Constraint::Applicable(Some(m("110")))]);
+    let cap = payable(
+        m("90"),
+        &[
+            Constraint::Applicable(Some(m("100"))),
+            Constraint::Applicable(Some(m("110"))),
+        ],
+    );
     let rule = evaluate(&Expr::AtMost(Some(m("90")), Some(m("100"))));
     let mut guards = Guards {
         authorized: true,
@@ -28,7 +34,10 @@ fn payment_ready_requires_verified_total_cap_and_current_snapshot() {
         snapshot_current: true,
         ..Default::default()
     };
-    assert_eq!(transition(State::Reviewable, Command::Ready, &guards), Some(State::Ready));
+    assert_eq!(
+        transition(State::Reviewable, Command::Ready, &guards),
+        Some(State::Ready)
+    );
     guards.snapshot_current = false;
     assert_eq!(transition(State::Reviewable, Command::Ready, &guards), None);
     assert_eq!(transition(State::Draft, Command::Accept, &guards), None);
@@ -55,5 +64,8 @@ fn advance_missing_coverage_and_settlement_timeout_block() {
     let state = observe(External::DispatchPending, Observation::Timeout, false).unwrap();
     assert_eq!(state, External::Unknown);
     assert!(!may_release(state, true));
-    assert_eq!(transition(State::AccountingReview, Command::Accept, &guards), None);
+    assert_eq!(
+        transition(State::AccountingReview, Command::Accept, &guards),
+        None
+    );
 }

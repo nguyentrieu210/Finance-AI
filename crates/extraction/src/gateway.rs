@@ -55,7 +55,9 @@ pub fn authorize(approval: Option<&Approval<'_>>, request: &Request<'_>) -> Resu
         || approval.region != request.region
         || approval.model != request.model
         || approval.prompt != request.prompt
-        || [request.provider, request.region, request.model].iter().any(|v| v.is_empty() || v.len() > 128 || v.chars().any(char::is_control))
+        || [request.provider, request.region, request.model]
+            .iter()
+            .any(|v| v.is_empty() || v.len() > 128 || v.chars().any(char::is_control))
     {
         return Err(Error::UnapprovedProvider);
     }

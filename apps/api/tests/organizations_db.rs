@@ -26,7 +26,10 @@ fn id(n: u128) -> Uuid {
 }
 
 fn now() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }
 
 async fn request(app: &Router, uri: &str, token: Option<&str>) -> (StatusCode, Value) {
@@ -34,7 +37,11 @@ async fn request(app: &Router, uri: &str, token: Option<&str>) -> (StatusCode, V
     if let Some(token) = token {
         builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }
-    let response = app.clone().oneshot(builder.body(Body::empty()).unwrap()).await.unwrap();
+    let response = app
+        .clone()
+        .oneshot(builder.body(Body::empty()).unwrap())
+        .await
+        .unwrap();
     let status = response.status();
     let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     let value = serde_json::from_slice(&bytes).unwrap();
@@ -50,10 +57,21 @@ async fn index(State(root): State<PathBuf>) -> Response {
 }
 
 async fn asset(State(root): State<PathBuf>, Path(name): Path<String>) -> Response {
-    if name.len() > 128 || name.starts_with('.') || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b)) {
+    if name.len() > 128
+        || name.starts_with('.')
+        || !name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+    {
         return StatusCode::NOT_FOUND.into_response();
     }
-    let mime = if name.ends_with(".js") { "text/javascript" } else if name.ends_with(".css") { "text/css" } else { return StatusCode::NOT_FOUND.into_response(); };
+    let mime = if name.ends_with(".js") {
+        "text/javascript"
+    } else if name.ends_with(".css") {
+        "text/css"
+    } else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
     match std::fs::read(root.join("assets").join(name)) {
         Ok(data) => ([(header::CONTENT_TYPE, mime)], data).into_response(),
         Err(_) => StatusCode::NOT_FOUND.into_response(),
@@ -63,21 +81,44 @@ async fn asset(State(root): State<PathBuf>, Path(name): Path<String>) -> Respons
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires disposable PostgreSQL and synthetic test credentials"]
 async fn scoped_organization_http_real_database() {
-    let runtime = PgPoolOptions::new().max_connections(3).after_connect(|conn, _| {
-        Box::pin(async move {
-            sqlx::query("SET ROLE finance_runtime").execute(conn).await?;
-            Ok(())
+    let runtime = PgPoolOptions::new()
+        .max_connections(3)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE finance_runtime")
+                    .execute(conn)
+                    .await?;
+                Ok(())
+            })
         })
-    }).connect(&std::env::var("FINANCE_PROTOTYPE_TEST_DATABASE_URL").unwrap()).await.unwrap();
-    let lookup = PgPoolOptions::new().max_connections(2).after_connect(|conn, _| {
-        Box::pin(async move {
-            sqlx::query("SET ROLE finance_identity_lookup").execute(conn).await?;
-            Ok(())
+        .connect(&std::env::var("FINANCE_PROTOTYPE_TEST_DATABASE_URL").unwrap())
+        .await
+        .unwrap();
+    let lookup = PgPoolOptions::new()
+        .max_connections(2)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE finance_identity_lookup")
+                    .execute(conn)
+                    .await?;
+                Ok(())
+            })
         })
-    }).connect(&std::env::var("FINANCE_IDENTITY_TEST_DATABASE_URL").unwrap()).await.unwrap();
+        .connect(&std::env::var("FINANCE_IDENTITY_TEST_DATABASE_URL").unwrap())
+        .await
+        .unwrap();
     let key = RsaPrivateKey::new(&mut rand::rngs::OsRng, 2048).unwrap();
     let jwks = json!({"keys":[{"kty":"RSA","kid":"http-test","alg":"RS256","n":URL_SAFE_NO_PAD.encode(key.n().to_bytes_be()),"e":URL_SAFE_NO_PAD.encode(key.e().to_bytes_be())}]}).to_string();
-    let verifier = VerifierStore::new(Verifier::from_trusted_snapshot("https://synthetic.invalid", "finance-api", &jwks, now(), 600).unwrap());
+    let verifier = VerifierStore::new(
+        Verifier::from_trusted_snapshot(
+            "https://synthetic.invalid",
+            "finance-api",
+            &jwks,
+            now(),
+            600,
+        )
+        .unwrap(),
+    );
     let signer = EncodingKey::from_rsa_der(key.to_pkcs1_der().unwrap().as_bytes());
     let mint = |sub: &str| {
         let mut header = Header::new(Algorithm::RS256);
@@ -92,11 +133,23 @@ async fn scoped_organization_http_real_database() {
         tenant: TenantId::try_from(id(1)).unwrap(),
         company: CompanyId::try_from(id(10)).unwrap(),
     };
-    let app = router(OrganizationState::synthetic(runtime.clone(), lookup.clone(), verifier, scope, [71; 32]));
+    let app = router(OrganizationState::synthetic(
+        runtime.clone(),
+        lookup.clone(),
+        verifier,
+        scope,
+        [71; 32],
+    ));
     let uri = "/v1/organizations?limit=1";
     assert_eq!(request(&app, uri, None).await.0, StatusCode::UNAUTHORIZED);
-    assert_eq!(request(&app, uri, Some("invalid")).await.0, StatusCode::UNAUTHORIZED);
-    assert_eq!(request(&app, uri, Some(&auditor)).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(
+        request(&app, uri, Some("invalid")).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        request(&app, uri, Some(&auditor)).await.0,
+        StatusCode::FORBIDDEN
+    );
     let (status, first) = request(&app, uri, Some(&token)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(first["items"].as_array().unwrap().len(), 1);
@@ -104,23 +157,50 @@ async fn scoped_organization_http_real_database() {
     let (status, second) = request(&app, &format!("{uri}&cursor={cursor}"), Some(&token)).await;
     assert_eq!(status, StatusCode::OK);
     assert_ne!(first["items"][0]["id"], second["items"][0]["id"]);
-    assert_eq!(request(&app, &format!("{uri}&cursor={cursor}x"), Some(&token)).await.0, StatusCode::BAD_REQUEST);
-    assert_eq!(request(&app, "/v1/organizations?limit=101", Some(&token)).await.0, StatusCode::BAD_REQUEST);
-    assert_eq!(request(&app, "/v1/organizations?company_id=00000000-0000-0000-0000-00000000000b", Some(&token)).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        request(&app, &format!("{uri}&cursor={cursor}x"), Some(&token))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        request(&app, "/v1/organizations?limit=101", Some(&token))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        request(
+            &app,
+            "/v1/organizations?company_id=00000000-0000-0000-0000-00000000000b",
+            Some(&token)
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
     // Exercise independent requests without privileged DB access.
     for _ in 0..8 {
-        let (a, b) = tokio::join!(request(&app, uri, Some(&token)), request(&app, uri, Some(&auditor)));
+        let (a, b) = tokio::join!(
+            request(&app, uri, Some(&token)),
+            request(&app, uri, Some(&auditor))
+        );
         assert_eq!(a.0, StatusCode::OK);
         assert_eq!(b.0, StatusCode::FORBIDDEN);
     }
 
     if let Ok(python) = std::env::var("FINANCE_BROWSER_PYTHON") {
         let root = PathBuf::from(std::env::var("FINANCE_BROWSER_DIST").unwrap());
-        let static_router = Router::new().route("/", get(index)).route("/assets/{name}", get(asset)).with_state(root);
+        let static_router = Router::new()
+            .route("/", get(index))
+            .route("/assets/{name}", get(asset))
+            .with_state(root);
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
-            axum::serve(listener, app.merge(static_router)).await.unwrap();
+            axum::serve(listener, app.merge(static_router))
+                .await
+                .unwrap();
         });
         let script = std::env::var("FINANCE_BROWSER_SCRIPT").unwrap();
         let result = tokio::task::spawn_blocking(move || {
@@ -131,7 +211,9 @@ async fn scoped_organization_http_real_database() {
                 .env("FINANCE_TEST_AUDITOR", auditor)
                 .status()
                 .unwrap()
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
         server.abort();
         assert!(result.success(), "synthetic browser integration failed");
     }

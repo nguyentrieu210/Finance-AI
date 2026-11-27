@@ -1,5 +1,11 @@
-use finance_integration::{External, Observation, may_release, reconcile::{Apply, Error, Event, Reconciler}};
-use finance_shared::{ids::{CompanyId, CompanyScope, ResourceId, RevisionId, TenantId}, upload_contract::Sha256Digest};
+use finance_integration::{
+    External, Observation, may_release,
+    reconcile::{Apply, Error, Event, Reconciler},
+};
+use finance_shared::{
+    ids::{CompanyId, CompanyScope, ResourceId, RevisionId, TenantId},
+    upload_contract::Sha256Digest,
+};
 use uuid::Uuid;
 
 #[test]
@@ -12,7 +18,9 @@ fn timeout_replay_and_independent_reconciliation() {
     let revision = RevisionId::try_from(Uuid::from_u128(4)).unwrap();
     let mut state = Reconciler::new(scope, handoff, revision);
     let event = Event {
-        scope, handoff, revision,
+        scope,
+        handoff,
+        revision,
         external_id: ResourceId::try_from(Uuid::from_u128(5)).unwrap(),
         sequence: 1,
         source_digest: Sha256Digest::parse(&"a".repeat(64)).unwrap(),
@@ -34,5 +42,11 @@ fn timeout_replay_and_independent_reconciliation() {
     assert_eq!(state.apply(next), Ok(Apply::Applied));
     assert_eq!(state.state(), External::Approved);
     assert!(!may_release(state.state(), true));
-    assert_eq!(state.apply(Event { sequence: 3, ..next }), Err(Error::ReplayConflict));
+    assert_eq!(
+        state.apply(Event {
+            sequence: 3,
+            ..next
+        }),
+        Err(Error::ReplayConflict)
+    );
 }

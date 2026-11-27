@@ -40,14 +40,26 @@ fn disabled_unapproved_and_tool_requests_fail_closed() {
     assert_eq!(authorize(None, &request).err(), Some(Error::Disabled));
     assert!(authorize(Some(&approval), &request).is_ok());
     request.region = "outside";
-    assert_eq!(authorize(Some(&approval), &request).err(), Some(Error::UnapprovedProvider));
+    assert_eq!(
+        authorize(Some(&approval), &request).err(),
+        Some(Error::UnapprovedProvider)
+    );
     request.region = "local";
     request.tools_enabled = true;
-    assert_eq!(authorize(Some(&approval), &request).err(), Some(Error::UnsafeRequest));
+    assert_eq!(
+        authorize(Some(&approval), &request).err(),
+        Some(Error::UnsafeRequest)
+    );
     request.tools_enabled = false;
     request.synthetic = false;
-    assert_eq!(authorize(Some(&approval), &request).err(), Some(Error::UnsafeRequest));
+    assert_eq!(
+        authorize(Some(&approval), &request).err(),
+        Some(Error::UnsafeRequest)
+    );
     request.synthetic = true;
     request.output_tokens = 513;
-    assert_eq!(authorize(Some(&approval), &request).err(), Some(Error::InvalidLimits));
+    assert_eq!(
+        authorize(Some(&approval), &request).err(),
+        Some(Error::InvalidLimits)
+    );
 }
