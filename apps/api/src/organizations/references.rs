@@ -1,5 +1,7 @@
 //! Approved reference list endpoints for contracts, advances and budgets.
-use super::{OrganizationState, PageQuery, decode_cursor, dossiers, encode_cursor, error, now, random_id};
+use super::{
+    OrganizationState, PageQuery, decode_cursor, dossiers, encode_cursor, error, now, random_id,
+};
 use axum::{
     Json,
     extract::{Query, State, rejection::QueryRejection},
@@ -77,19 +79,27 @@ async fn list_kind(
         },
     };
     let result = match kind {
-        Kind::Contract => finance_contracts::list_verified(&state.runtime, &proof, after, limit).await,
-        Kind::Advance => finance_advances::list_verified(&state.runtime, &proof, after, limit).await,
+        Kind::Contract => {
+            finance_contracts::list_verified(&state.runtime, &proof, after, limit).await
+        }
+        Kind::Advance => {
+            finance_advances::list_verified(&state.runtime, &proof, after, limit).await
+        }
         Kind::Budget => finance_budget::list_verified(&state.runtime, &proof, after, limit).await,
     };
     match result {
         Ok(items) => {
             let next_cursor = if items.len() == limit as usize {
-                items.last().map(|row| encode_cursor(&key, state.scope, actor, row.id, time + 300))
+                items
+                    .last()
+                    .map(|row| encode_cursor(&key, state.scope, actor, row.id, time + 300))
             } else {
                 None
             };
             let mut response = Json(Page { items, next_cursor }).into_response();
-            response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
             response
         }
         Err(e) => error(dossiers::status(e), correlation),
