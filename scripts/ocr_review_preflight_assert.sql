@@ -32,13 +32,23 @@ BEGIN
  PERFORM finance.prototype_preflight(t,c,d,2,owner_id,check_after,'2027-01-01');
  SELECT input_hash INTO hash_before FROM finance.check_run WHERE id=check_before;
  SELECT input_hash INTO hash_after FROM finance.check_run WHERE id=check_after;
- IF hash_before=hash_after
- OR (SELECT count(*) FROM finance.check_run WHERE dossier_id=d AND blocked)<>2
+ IF hash_before IS NULL OR hash_after IS NULL OR hash_before=hash_after
+ OR NOT EXISTS(SELECT 1 FROM finance.check_run
+    WHERE tenant_id=t AND company_id=c AND id=check_before AND dossier_id=d
+      AND dossier_version=0 AND blocked)
+ OR NOT EXISTS(SELECT 1 FROM finance.check_run
+    WHERE tenant_id=t AND company_id=c AND id=check_after AND dossier_id=d
+      AND dossier_version=2 AND blocked)
  OR NOT EXISTS(SELECT 1 FROM finance.check_result WHERE run_id=check_after
     AND rule_key='scan.release' AND outcome='UNKNOWN' AND severity='BLOCK')
  OR (SELECT status FROM finance.dossier WHERE id=d)<>'DRAFT'
  OR has_table_privilege('finance_runtime','finance.field_decision','INSERT')
- OR has_column_privilege('finance_runtime','finance.dossier','version','UPDATE')
+ OR NOT has_function_privilege(
+      'finance_runtime',
+      'finance.runtime_field_decide(uuid,uuid,uuid,bigint,uuid,uuid,uuid,text,text,uuid[],uuid,uuid)',
+      'EXECUTE')
+ OR EXISTS(SELECT 1 FROM pg_roles WHERE rolname='finance_field_review_writer'
+           AND (rolsuper OR rolbypassrls OR rolcanlogin OR rolcreaterole))
  THEN RAISE EXCEPTION 'field review invalidation/preflight invariant failed'; END IF;
  BEGIN
   UPDATE finance.field_decision SET reason='changed' WHERE dossier_id=d;
