@@ -594,6 +594,7 @@ name = "finance-matching"
 version = "0.1.0"
 dependencies = [
  "finance-shared",
+ "uuid",
 ]
 
 [[package]]

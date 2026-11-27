@@ -118,15 +118,15 @@ pub fn reconcile(
 mod tests{
     use super::*;
     use finance_shared::{ids::{CompanyId,TenantId}, money::Currency};
-    use std::str::FromStr;
+    use uuid::Uuid;
 
     fn id(n:u128)->ResourceId{
-        ResourceId::from_str(&format!("00000000-0000-0000-0000-{n:012x}")).unwrap()
+        ResourceId::try_from(Uuid::from_u128(n)).unwrap()
     }
     fn scope()->CompanyScope{
         CompanyScope{
-            tenant:TenantId::from_str("00000000-0000-0000-0000-000000000001").unwrap(),
-            company:CompanyId::from_str("00000000-0000-0000-0000-000000000002").unwrap(),
+            tenant:TenantId::try_from(Uuid::from_u128(1)).unwrap(),
+            company:CompanyId::try_from(Uuid::from_u128(2)).unwrap(),
         }
     }
     fn qty(n:&str)->Amount{Amount::parse(n).unwrap()}
