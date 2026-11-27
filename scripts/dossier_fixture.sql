@@ -95,7 +95,7 @@ SELECT tenant_id,company_id,'00000000-0000-0000-0000-000000001810',dossier_id,re
 FROM finance.check_run WHERE id='00000000-0000-0000-0000-000000001802';
 INSERT INTO finance.check_result(tenant_id,company_id,run_id,rule_key,outcome,severity,detail_code)
 VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
-'00000000-0000-0000-0000-000000001810','ready.synthetic','PASS','BLOCK','SYNTHETIC_PASS');
+'00000000-0000-0000-0000-000000001810','ready.synthetic','PASS','BLOCK','OLD_SYNTHETIC_PASS');
 
 -- E23 manual bridge fixture. These packages are synthetic READY receipts used only by integration tests.
 INSERT INTO finance.dossier(tenant_id,company_id,id,owner_id,code,kind,status,version,revision)

@@ -23,7 +23,7 @@ pub struct Check {
     pub explanation: String,
 }
 
-/// Current aggregate version only; a diagnostic PASS never authorizes a dossier.
+/// Latest run for the current revision and aggregate version only; a diagnostic PASS never authorizes a dossier.
 /// Missing or inaccessible dossier is None, no run yet is an empty page.
 pub async fn list(
     pool: &PgPool,
@@ -63,7 +63,7 @@ pub async fn list(
         return Ok(None);
     }
     let rows = sqlx::query_as::<_, Check>(
-        "SELECT x.id,x.rule_key AS rule_id,0::bigint AS rule_version,x.outcome,x.severity,x.detail_code AS reason_code,ARRAY[]::uuid[] AS evidence_ids,encode(r.input_hash,'hex') AS input_hash,'Synthetic preflight diagnostic; not an approved financial rule or readiness decision.'::text AS explanation FROM finance.check_result x JOIN finance.check_run r ON (r.tenant_id,r.company_id,r.id)=(x.tenant_id,x.company_id,x.run_id) WHERE r.tenant_id=$1 AND r.company_id=$2 AND r.actor_id=$3 AND r.dossier_id=$4 AND x.id>$5 ORDER BY x.id LIMIT $6",
+        "SELECT x.id,x.rule_key AS rule_id,0::bigint AS rule_version,x.outcome,x.severity,x.detail_code AS reason_code,ARRAY[]::uuid[] AS evidence_ids,encode(r.input_hash,'hex') AS input_hash,'Synthetic preflight diagnostic; not an approved financial rule or readiness decision.'::text AS explanation FROM finance.check_result x JOIN finance.check_run r ON (r.tenant_id,r.company_id,r.id)=(x.tenant_id,x.company_id,x.run_id) WHERE r.tenant_id=$1 AND r.company_id=$2 AND r.actor_id=$3 AND r.dossier_id=$4 AND r.id=(SELECT latest.id FROM finance.check_run latest JOIN finance.dossier d ON (d.tenant_id,d.company_id,d.id)=(latest.tenant_id,latest.company_id,latest.dossier_id) JOIN finance.dossier_revision dr ON (dr.tenant_id,dr.company_id,dr.dossier_id,dr.number,dr.id)=(d.tenant_id,d.company_id,d.id,d.revision,latest.revision_id) WHERE latest.tenant_id=$1 AND latest.company_id=$2 AND latest.actor_id=$3 AND latest.dossier_id=$4 AND latest.dossier_version=d.version ORDER BY latest.created_at DESC,latest.id DESC LIMIT 1) AND x.id>$5 ORDER BY x.id LIMIT $6",
     )
     .bind(t)
     .bind(c)

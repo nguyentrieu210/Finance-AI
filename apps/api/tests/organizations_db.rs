@@ -1278,6 +1278,16 @@ async fn scoped_organization_http_real_database() {
     let ready_id = "00000000-0000-0000-0000-000000001800";
     let check_id = "00000000-0000-0000-0000-000000001802";
     let ready_version = format!("\"v1:dossier:{ready_id}:0\"");
+    let (check_status, check_page) = request(
+        &app,
+        &format!("/v1/dossiers/{ready_id}/checks?limit=100"),
+        Some(&requester),
+    )
+    .await;
+    assert_eq!(check_status, StatusCode::OK);
+    let current_checks = check_page["items"].as_array().unwrap();
+    assert_eq!(current_checks.len(), 1);
+    assert_eq!(current_checks[0]["reason_code"], "SYNTHETIC_PASS");
     assert_eq!(
         ready_dossier(
             &app,
