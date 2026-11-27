@@ -29,7 +29,14 @@ jobs:
           .venv/bin/python scripts/validate_http_contract.py
           .venv/bin/python scripts/validate_table_registry.py
       - name: Rust toolchain
-        run: rustup show
+        run: |
+          rustup toolchain uninstall 1.85.1-x86_64-unknown-linux-gnu || true
+          rustup toolchain install 1.85.1 --profile minimal --component rustfmt --component clippy
+          rustup override set 1.85.1
+          rustc --version
+          cargo --version
+          cargo fmt --version
+          cargo clippy --version
       - name: Rust checks
         run: |
           cargo fmt --all -- --check
