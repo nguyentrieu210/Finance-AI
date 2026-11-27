@@ -191,3 +191,54 @@ pub(super) async fn list(
         Err(e) => error(dossiers::status(e), correlation),
     }
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Revise {
+    name: String,
+    definition: Value,
+    reason: String,
+}
+
+pub(super) async fn revise(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    body: Result<Json<Revise>, JsonRejection>,
+) -> Response {
+    let correlation = random_id();
+    let Some(token) = headers
+        .get("if-finance-version")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| VersionToken::parse(s).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    if token.target != VersionTarget::Rule || Uuid::from(token.resource_id) != id {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let proof =
+        match dossiers::authenticate_version(&state, &headers, correlation, Some(token.version))
+            .await
+        {
+            Ok(proof) => proof,
+            Err(s) => return error(s, correlation),
+        };
+    let Some(key) = key(&headers) else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let draft = repository::ReviseDraft {
+        rule: id,
+        row: random_id(),
+        name: &body.name,
+        definition: &body.definition,
+        reason: &body.reason,
+    };
+    match repository::revise(&state.runtime, &proof, &key, draft).await {
+        Ok(rule) => receipt(rule, StatusCode::OK),
+        Err(e) => error(dossiers::status(e), correlation),
+    }
+}

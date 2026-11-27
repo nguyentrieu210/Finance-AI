@@ -370,10 +370,7 @@ async fn scoped_organization_http_real_database() {
             request(&app, &uri, Some(&auditor)).await.0,
             StatusCode::FORBIDDEN
         );
-        assert_eq!(
-            request(&app, &uri, None).await.0,
-            StatusCode::UNAUTHORIZED
-        );
+        assert_eq!(request(&app, &uri, None).await.0, StatusCode::UNAUTHORIZED);
     }
     assert_eq!(
         request(
@@ -589,7 +586,11 @@ async fn scoped_organization_http_real_database() {
         workflow_id,
         "workflow-revise-three",
         revised_workflow_token.as_deref().unwrap(),
-        ("Synthetic workflow v3", transitions.clone(), "Revision three"),
+        (
+            "Synthetic workflow v3",
+            transitions.clone(),
+            "Revision three",
+        ),
     )
     .await;
     assert_eq!(third_status, StatusCode::OK);
@@ -879,6 +880,54 @@ async fn scoped_organization_http_real_database() {
         .0,
         StatusCode::FORBIDDEN
     );
+    let mut revised_definition = rule["definition"].clone();
+    revised_definition["version"] = json!(2);
+    let revise_uri = format!("/v1/rules/{created_rule_id}/revise");
+    let send_revision = |key: &str| {
+        Request::builder()
+            .method("POST")
+            .uri(&revise_uri)
+            .header(header::AUTHORIZATION, format!("Bearer {policy_admin}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header("idempotency-key", key)
+            .header("if-finance-version", rule_token.as_deref().unwrap())
+            .body(Body::from(
+                json!({
+                    "name":"invoice_total_positive",
+                    "definition":revised_definition,
+                    "reason":"Synthetic revision"
+                })
+                .to_string(),
+            ))
+            .unwrap()
+    };
+    let response = app
+        .clone()
+        .oneshot(send_revision("rule-revise"))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let revised_rule: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(revised_rule["id"], rule["id"]);
+    assert_eq!(revised_rule["version"], 2);
+    let replay = app
+        .clone()
+        .oneshot(send_revision("rule-revise"))
+        .await
+        .unwrap();
+    assert_eq!(replay.status(), StatusCode::OK);
+    let bytes = to_bytes(replay.into_body(), 1024 * 1024).await.unwrap();
+    assert_eq!(
+        serde_json::from_slice::<Value>(&bytes).unwrap(),
+        revised_rule
+    );
+    let stale = app
+        .clone()
+        .oneshot(send_revision("rule-stale"))
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
     let maker_rules = request(&app, "/v1/rules", Some(&policy_admin)).await.1;
     assert!(
         maker_rules["items"]
