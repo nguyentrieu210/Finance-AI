@@ -412,6 +412,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "finance-audit"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "finance-core",
+ "finance-shared",
+ "sha2",
+ "sqlx",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "finance-core"
 version = "0.1.0"
 dependencies = [

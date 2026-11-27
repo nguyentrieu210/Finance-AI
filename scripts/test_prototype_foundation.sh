@@ -39,5 +39,10 @@ else
  FINANCE_JOB_TEST_DATABASE_URL="$worker_url" cargo test --locked -p finance-core --test jobs_db -- --ignored --exact durable_jobs_real_database
 fi
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/jobs_assert.sql
+if [[ -n "${FINANCE_AUDIT_TEST_BIN:-}" ]]; then
+ FINANCE_PROTOTYPE_TEST_DATABASE_URL="$runtime_url" FINANCE_AUDIT_TEST_ADMIN_URL="$url" "$FINANCE_AUDIT_TEST_BIN" --ignored --exact scoped_audit_real_database
+else
+ FINANCE_PROTOTYPE_TEST_DATABASE_URL="$runtime_url" FINANCE_AUDIT_TEST_ADMIN_URL="$url" cargo test --locked -p finance-audit --test audit_db -- --ignored --exact scoped_audit_real_database
+fi
 unset url runtime_url worker_url
 echo 'PASS: real PostgreSQL synthetic prototype atomic command, replay, RLS and scoped FK'

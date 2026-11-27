@@ -215,7 +215,8 @@
       "default_scope": "tenant",
       "tables": [
         "audit_event",
-        "audit_checkpoint"
+        "audit_checkpoint",
+        "audit_chain_head"
       ],
       "invariants": "Append-only chain; tenant sequence; company scope for company records; external anchor."
     },

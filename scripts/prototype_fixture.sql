@@ -16,3 +16,6 @@ INSERT INTO finance.membership(tenant_id,company_id,actor_id,role,valid_from,val
 INSERT INTO finance.organization_unit(tenant_id,company_id,id,code,name,kind) VALUES
 ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000b','00000000-0000-0000-0000-000000000401','OTHER-COMPANY','Synthetic other company','DEPARTMENT'),
 ('00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000014','00000000-0000-0000-0000-000000000402','OTHER-TENANT','Synthetic other tenant','DEPARTMENT');
+
+INSERT INTO finance.identity_subject(tenant_id,id,issuer,subject) VALUES ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-0000000003eb','https://synthetic.invalid','auditor');
+INSERT INTO finance.membership(tenant_id,company_id,actor_id,role) VALUES ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-0000000003eb','AUDITOR');

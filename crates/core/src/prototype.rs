@@ -84,7 +84,7 @@ fn hash_command(input: &CreateUnit<'_>) -> Vec<u8> {
     hash.finalize().to_vec()
 }
 /// This is an internal prototype operation, not an OpenAPI handler. Trusted context only.
-/// Role revocation races, hierarchy cycle updates, full ABAC, audit hash chain and production roles are later work.
+/// Role revocation races, hierarchy cycle updates, full ABAC and production roles are later work.
 pub async fn create_unit(
     pool: &PgPool,
     context: &CommandContext,
