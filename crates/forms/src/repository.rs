@@ -166,16 +166,27 @@ async fn latest(
     .await?)
 }
 
+pub struct CreateDraft<'a> {
+    pub policy: Uuid,
+    pub form: Uuid,
+    pub row: Uuid,
+    pub name: &'a str,
+    pub fields: &'a [DraftField],
+}
+
 pub async fn create(
     pool: &sqlx::PgPool,
     proof: &AuthenticatedCommand,
     key: &IdempotencyKey,
-    policy: Uuid,
-    form: Uuid,
-    row: Uuid,
-    name: &str,
-    fields: &[DraftField],
+    draft: CreateDraft<'_>,
 ) -> Result<Form, Error> {
+    let CreateDraft {
+        policy,
+        form,
+        row,
+        name,
+        fields,
+    } = draft;
     if policy.is_nil()
         || form.is_nil()
         || row.is_nil()
@@ -242,16 +253,27 @@ pub async fn create(
     Ok(receipt)
 }
 
+pub struct ReviseDraft<'a> {
+    pub form: Uuid,
+    pub row: Uuid,
+    pub name: &'a str,
+    pub fields: &'a [DraftField],
+    pub reason: &'a str,
+}
+
 pub async fn revise(
     pool: &sqlx::PgPool,
     proof: &AuthenticatedCommand,
     key: &IdempotencyKey,
-    form: Uuid,
-    row: Uuid,
-    name: &str,
-    fields: &[DraftField],
-    reason: &str,
+    draft: ReviseDraft<'_>,
 ) -> Result<Form, Error> {
+    let ReviseDraft {
+        form,
+        row,
+        name,
+        fields,
+        reason,
+    } = draft;
     let Some(expected) = proof.context().expected_version else {
         return Err(Error::InvalidInput);
     };

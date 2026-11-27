@@ -34,25 +34,29 @@ fn vector_text(vector: [f32; 3]) -> Option<String> {
     Some(format!("[{},{},{}]", vector[0], vector[1], vector[2]))
 }
 
+pub struct Retrieval<'a> {
+    pub kind: &'a str,
+    pub day: NaiveDate,
+    pub query: &'a str,
+    pub model_sha256: &'a str,
+    pub vector: [f32; 3],
+    pub limit: i64,
+}
+
 pub async fn retrieve(
     pool: &PgPool,
     proof: &AuthenticatedCommand,
-    kind: &str,
-    day: NaiveDate,
-    query: &str,
-    model_sha256: &str,
-    vector: [f32; 3],
-    limit: i64,
+    request: Retrieval<'_>,
 ) -> Result<Vec<Hit>, Error> {
-    if !valid_kind(kind)
-        || query.trim().is_empty()
-        || query.len() > 256
-        || !(1..=20).contains(&limit)
-        || Sha256Digest::parse(model_sha256).is_err()
+    if !valid_kind(request.kind)
+        || request.query.trim().is_empty()
+        || request.query.len() > 256
+        || !(1..=20).contains(&request.limit)
+        || Sha256Digest::parse(request.model_sha256).is_err()
     {
         return Err(Error::InvalidInput);
     }
-    let Some(vector) = vector_text(vector) else {
+    let Some(vector) = vector_text(request.vector) else {
         return Err(Error::InvalidInput);
     };
     let ResourceScope::Company(CompanyScope { tenant, company }) = proof.context().scope else {
@@ -83,12 +87,12 @@ pub async fn retrieve(
     )
     .bind(t)
     .bind(c)
-    .bind(kind)
-    .bind(day.to_string())
-    .bind(model_sha256)
-    .bind(query)
+    .bind(request.kind)
+    .bind(request.day.to_string())
+    .bind(request.model_sha256)
+    .bind(request.query)
     .bind(vector)
-    .bind(limit)
+    .bind(request.limit)
     .fetch_all(&mut *tx)
     .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;

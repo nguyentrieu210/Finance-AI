@@ -80,17 +80,14 @@ pub(super) async fn create(
     let Ok(Json(body)) = body else {
         return error(StatusCode::BAD_REQUEST, correlation);
     };
-    match repository::create(
-        &state.runtime,
-        &proof,
-        &key,
-        body.policy_id,
-        random_id(),
-        random_id(),
-        &body.name,
-        &body.fields,
-    )
-    .await
+    let draft = repository::CreateDraft {
+        policy: body.policy_id,
+        form: random_id(),
+        row: random_id(),
+        name: &body.name,
+        fields: &body.fields,
+    };
+    match repository::create(&state.runtime, &proof, &key, draft).await
     {
         Ok(form) => receipt(form, StatusCode::CREATED),
         Err(e) => error(dossiers::status(e), correlation),
@@ -126,17 +123,14 @@ pub(super) async fn revise(
     let Ok(Json(body)) = body else {
         return error(StatusCode::BAD_REQUEST, correlation);
     };
-    match repository::revise(
-        &state.runtime,
-        &proof,
-        &key,
+    let draft = repository::ReviseDraft {
         form,
-        random_id(),
-        &body.name,
-        &body.fields,
-        &body.reason,
-    )
-    .await
+        row: random_id(),
+        name: &body.name,
+        fields: &body.fields,
+        reason: &body.reason,
+    };
+    match repository::revise(&state.runtime, &proof, &key, draft).await
     {
         Ok(form) => receipt(form, StatusCode::OK),
         Err(e) => error(dossiers::status(e), correlation),

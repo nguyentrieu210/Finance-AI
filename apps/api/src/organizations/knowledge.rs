@@ -36,17 +36,15 @@ pub(super) async fn search(
         return error(StatusCode::BAD_REQUEST, correlation);
     };
     let model = "3333333333333333333333333333333333333333333333333333333333333333";
-    match finance_knowledge::repository::retrieve(
-        &state.runtime,
-        &proof,
-        &query.kind,
+    let request = finance_knowledge::repository::Retrieval {
+        kind: &query.kind,
         day,
-        &query.q,
-        model,
-        [1.0, 0.0, 0.0],
-        query.limit.unwrap_or(10),
-    )
-    .await
+        query: &query.q,
+        model_sha256: model,
+        vector: [1.0, 0.0, 0.0],
+        limit: query.limit.unwrap_or(10),
+    };
+    match finance_knowledge::repository::retrieve(&state.runtime, &proof, request).await
     {
         Ok(items) => {
             let mut response = Json(items).into_response();
