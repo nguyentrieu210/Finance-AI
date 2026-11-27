@@ -400,6 +400,16 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(create_rule(&app,&requester,"rule-denied","invoice_total_positive",rule_definition).await.0,StatusCode::FORBIDDEN);
     assert_eq!(request(&app,"/v1/rules",Some(&policy_admin)).await.1["items"].as_array().unwrap().len(),1);
     assert_eq!(request(&app,"/v1/rules",Some(&requester)).await.1["items"],json!([]));
+    let waiver_dossier="00000000-0000-0000-0000-000000002120";
+    let waiver_version=format!("\"v1:dossier:{waiver_dossier}:0\"");
+    let (waiver_status,waiver,waiver_receipt)=request_waiver(&app,&requester,waiver_dossier,"waiver-one",&waiver_version,"00000000-0000-0000-0000-000000002123").await;
+    assert_eq!(waiver_status,StatusCode::OK);assert_eq!(waiver["state"],"REQUESTED");assert_eq!(waiver_receipt.as_deref(),Some(waiver_version.as_str()));
+    let waiver_id=waiver["id"].as_str().unwrap().to_owned();
+    let approver=mint("form-checker");
+    assert_eq!(decide_waiver(&app,&requester,waiver_dossier,&waiver_id,"waiver-self",&waiver_version,"APPROVED",Some("2035-12-01T00:00:00Z")).await.0,StatusCode::FORBIDDEN);
+    let (decision_status,decision,_)=decide_waiver(&app,&approver,waiver_dossier,&waiver_id,"waiver-approve",&waiver_version,"APPROVED",Some("2035-12-01T00:00:00Z")).await;
+    assert_eq!(decision_status,StatusCode::OK);assert_eq!(decision["state"],"APPROVED");
+    assert_eq!(request(&app,&format!("/v1/dossiers/{waiver_dossier}/waivers"),Some(&requester)).await.1["items"].as_array().unwrap().len(),1);
     let ready_id = "00000000-0000-0000-0000-000000001800";
     let check_id = "00000000-0000-0000-0000-000000001802";
     let ready_version = format!("\"v1:dossier:{ready_id}:0\"");
@@ -1087,4 +1097,13 @@ async fn create_rule(
     let bytes=response.into_body().collect().await.unwrap().to_bytes();
     let body=serde_json::from_slice(&bytes).unwrap_or_else(|_|json!({}));
     (status,body,version)
+}
+
+async fn request_waiver(app:&Router,token:&str,dossier:&str,key:&str,version:&str,result:&str)->(StatusCode,serde_json::Value,Option<String>){
+ let response=app.clone().oneshot(Request::builder().method("POST").uri(format!("/v1/dossiers/{dossier}/waivers")).header(header::AUTHORIZATION,format!("Bearer {token}")).header("idempotency-key",key).header("if-finance-version",version).header(header::CONTENT_TYPE,"application/json").body(Body::from(json!({"result_id":result,"reason":"Synthetic waiver request","evidence_ids":[]}).to_string())).unwrap()).await.unwrap();
+ let status=response.status();let receipt=response.headers().get("finance-version").and_then(|v|v.to_str().ok()).map(str::to_owned);let bytes=response.into_body().collect().await.unwrap().to_bytes();(status,serde_json::from_slice(&bytes).unwrap_or_else(|_|json!({})),receipt)
+}
+async fn decide_waiver(app:&Router,token:&str,dossier:&str,waiver:&str,key:&str,version:&str,decision:&str,expires:Option<&str>)->(StatusCode,serde_json::Value,Option<String>){
+ let response=app.clone().oneshot(Request::builder().method("POST").uri(format!("/v1/dossiers/{dossier}/waivers/{waiver}/decision")).header(header::AUTHORIZATION,format!("Bearer {token}")).header("idempotency-key",key).header("if-finance-version",version).header(header::CONTENT_TYPE,"application/json").body(Body::from(json!({"decision":decision,"expires_at":expires,"reason":"Synthetic independent decision","evidence_ids":[]}).to_string())).unwrap()).await.unwrap();
+ let status=response.status();let receipt=response.headers().get("finance-version").and_then(|v|v.to_str().ok()).map(str::to_owned);let bytes=response.into_body().collect().await.unwrap().to_bytes();(status,serde_json::from_slice(&bytes).unwrap_or_else(|_|json!({})),receipt)
 }

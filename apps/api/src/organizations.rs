@@ -36,6 +36,7 @@ mod lifecycle;
 mod policies;
 mod references;
 mod rules;
+mod risks;
 mod templates;
 
 type Hmac256 = Hmac<Sha256>;
@@ -312,6 +313,10 @@ pub fn router(state: OrganizationState) -> Router {
         .route("/v1/budgets", get(references::budgets))
         .route("/v1/rules", get(rules::list).post(rules::create))
         .route("/v1/rules/{item_id}", get(rules::get))
+        .route("/v1/risks", get(risks::list_risks))
+        .route("/v1/risks/{item_id}", get(risks::get_risk))
+        .route("/v1/dossiers/{dossier_id}/waivers", get(risks::list_waivers).post(risks::request_waiver))
+        .route("/v1/dossiers/{dossier_id}/waivers/{waiver_id}/decision", axum::routing::post(risks::decide_waiver))
         .layer(axum::extract::DefaultBodyLimit::max(8192))
         .with_state(Arc::new(state))
 }

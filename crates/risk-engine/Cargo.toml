@@ -10,3 +10,11 @@ finance-shared = { path = "../shared" }
 
 [dev-dependencies]
 uuid.workspace = true
+
+chrono.workspace = true
+finance-core = { path = "../core" }
+finance-identity = { path = "../identity" }
+finance-permissions = { path = "../permissions" }
+serde.workspace = true
+sha2 = "=0.10.9"
+sqlx.workspace = true

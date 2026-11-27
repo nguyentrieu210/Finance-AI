@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! Synthetic-only domain prototype. No authorization, durable mutation or production claim.
+//! Risk/waiver domain rules plus authenticated persistence adapter.
 use finance_shared::{
     ids::{ActorId, ResourceId, RevisionId},
     upload_contract::Sha256Digest,
@@ -42,3 +42,6 @@ pub fn blocks(finding: &Finding, waiver: Option<&Waiver>, now: i64) -> bool {
             && w.inputs == finding.inputs
     })
 }
+
+
+pub mod repository;
