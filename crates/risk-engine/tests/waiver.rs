@@ -38,6 +38,19 @@ fn waiver_is_fenced_to_inputs_revision_and_independent_approver() {
     finding.inputs = Sha256Digest::parse(&"b".repeat(64)).unwrap();
     assert!(blocks(&finding, Some(&waiver), 99));
     finding.inputs = inputs;
+    finding.revision = RevisionId::try_from(Uuid::from_u128(5)).unwrap();
+    assert!(blocks(&finding, Some(&waiver), 99));
+    finding.revision = revision;
+    waiver.revoked = true;
+    assert!(blocks(&finding, Some(&waiver), 99));
+    waiver.revoked = false;
+    waiver.authorized = false;
+    assert!(blocks(&finding, Some(&waiver), 99));
+    waiver.authorized = true;
+    assert!(blocks(&finding, None, 99));
+    finding.waivable = false;
+    assert!(blocks(&finding, Some(&waiver), 99));
+    finding.waivable = true;
     finding.critical_unknown_or_error = true;
     assert!(blocks(&finding, Some(&waiver), 99));
 }
