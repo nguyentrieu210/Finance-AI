@@ -168,11 +168,13 @@ pub(super) async fn decide(
         &state.runtime,
         &proof,
         &key,
-        dossier,
-        body.snapshot_id,
-        &body.decision,
-        &body.confirmed_field_ids,
-        &body.reason,
+        review::ReviewDecision {
+            dossier,
+            snapshot: body.snapshot_id,
+            decision: &body.decision,
+            confirmed: &body.confirmed_field_ids,
+            reason: &body.reason,
+        },
     )
     .await
     {

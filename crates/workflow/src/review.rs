@@ -202,16 +202,27 @@ pub async fn begin(
     Ok(receipt)
 }
 
+pub struct ReviewDecision<'a> {
+    pub dossier: Uuid,
+    pub snapshot: Uuid,
+    pub decision: &'a str,
+    pub confirmed: &'a [Uuid],
+    pub reason: &'a str,
+}
+
 pub async fn decide(
     pool: &sqlx::PgPool,
     proof: &AuthenticatedCommand,
     key: &IdempotencyKey,
-    dossier: Uuid,
-    snapshot: Uuid,
-    decision: &str,
-    confirmed: &[Uuid],
-    reason: &str,
+    command: ReviewDecision<'_>,
 ) -> Result<Review, Error> {
+    let ReviewDecision {
+        dossier,
+        snapshot,
+        decision,
+        confirmed,
+        reason,
+    } = command;
     let Some(expected) = proof.context().expected_version else {
         return Err(Error::InvalidInput);
     };
