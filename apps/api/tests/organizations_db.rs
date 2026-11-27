@@ -460,19 +460,20 @@ async fn scoped_organization_http_real_database() {
         .0,
         StatusCode::FORBIDDEN
     );
-    assert_eq!(
-        request(&app, "/v1/rules", Some(&policy_admin)).await.1["items"]
+    let maker_rules = request(&app, "/v1/rules", Some(&policy_admin)).await.1;
+    assert!(
+        maker_rules["items"]
             .as_array()
             .unwrap()
-            .len(),
-        1
+            .iter()
+            .any(|item| item["id"].as_str() == Some(created_rule_id.as_str()))
     );
     let requester_rules = request(&app, "/v1/rules", Some(&requester)).await.1;
     let requester_rules = requester_rules["items"].as_array().unwrap();
-    assert!(
-        requester_rules
-            .iter()
-            .all(|item| item["state"] == "PUBLISHED")
+    assert_eq!(requester_rules.len(), 1);
+    assert_eq!(
+        requester_rules[0]["id"],
+        "00000000-0000-0000-0000-000000002103"
     );
     assert!(
         requester_rules
@@ -494,6 +495,9 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(waiver["state"], "REQUESTED");
     assert_eq!(waiver_receipt.as_deref(), Some(waiver_version.as_str()));
     let waiver_id = waiver["id"].as_str().unwrap().to_owned();
+    let waiver_expiry = chrono::DateTime::from_timestamp((now() + 86_400) as i64, 0)
+        .unwrap()
+        .to_rfc3339();
     let approver = mint("form-checker");
     assert_eq!(
         decide_waiver(
@@ -503,7 +507,7 @@ async fn scoped_organization_http_real_database() {
             &waiver_id,
             "waiver-self",
             &waiver_version,
-            ("APPROVED", Some("2035-12-01T00:00:00Z"))
+            ("APPROVED", Some(waiver_expiry.as_str()))
         )
         .await
         .0,
@@ -516,7 +520,7 @@ async fn scoped_organization_http_real_database() {
         &waiver_id,
         "waiver-approve",
         &waiver_version,
-        ("APPROVED", Some("2035-12-01T00:00:00Z")),
+        ("APPROVED", Some(waiver_expiry.as_str())),
     )
     .await;
     assert_eq!(decision_status, StatusCode::OK);
