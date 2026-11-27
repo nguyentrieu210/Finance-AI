@@ -588,6 +588,10 @@ pub fn router(state: OrganizationState) -> Router {
             "/v1/dossiers/{dossier_id}/handoffs",
             get(integration::list_handoffs).post(integration::create_handoff),
         )
+        .route(
+            "/v1/dossiers/{dossier_id}/payment-status",
+            get(integration::payment_status),
+        )
         .route("/v1/reconciliation", get(integration::list_reconciliation))
         .route(
             "/v1/reconciliation/{item_id}",

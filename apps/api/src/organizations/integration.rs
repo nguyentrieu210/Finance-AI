@@ -308,3 +308,26 @@ pub(super) async fn resolve_reconciliation(
         Err(e) => error(dossiers::status(e), correlation),
     }
 }
+
+pub(super) async fn payment_status(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(dossier): Path<Uuid>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match dossiers::authenticate_version(&state, &headers, correlation, None).await {
+        Ok(proof) => proof,
+        Err(s) => return error(s, correlation),
+    };
+    match repository::payment_status(&state.runtime, &proof, dossier).await {
+        Ok(Some(row)) => {
+            let mut response = Json(row).into_response();
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Ok(None) => error(StatusCode::NOT_FOUND, correlation),
+        Err(e) => error(dossiers::status(e), correlation),
+    }
+}

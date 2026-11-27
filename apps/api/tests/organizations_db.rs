@@ -1070,6 +1070,23 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(handoff_status, StatusCode::CREATED);
     assert_eq!(handoff["state"], "ACKNOWLEDGED");
     assert_ne!(handoff["state"], "APPROVED");
+    let payment_uri = format!("/v1/dossiers/{handoff_dossier}/payment-status");
+    let (payment_status, payment) = request(&app, &payment_uri, Some(&requester)).await;
+    assert_eq!(payment_status, StatusCode::OK);
+    assert_eq!(payment["state"], "UNKNOWN");
+    assert!(payment.get("confirmed_paid").is_none());
+    assert_eq!(
+        request(&app, &payment_uri, Some(&other_requester)).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        request(&app, &payment_uri, Some(&auditor)).await.0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        request(&app, &payment_uri, None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
     assert!(handoff_receipt.as_deref().unwrap().ends_with(":1\""));
     assert_eq!(
         create_handoff(

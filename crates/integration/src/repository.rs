@@ -152,6 +152,7 @@ pub async fn create_manual_handoff(
         || external_ref.trim() != external_ref
         || external_ref.is_empty()
         || external_ref.len() > 256
+        || external_ref.chars().any(char::is_control)
     {
         return Err(Error::InvalidInput);
     }
@@ -194,7 +195,7 @@ pub async fn create_manual_handoff(
         if old != digest {
             return Err(Error::Conflict);
         }
-        let row = sqlx::query_as::<_, Handoff>(&format!(
+        let mut row = sqlx::query_as::<_, Handoff>(&format!(
             "{SELECT_HANDOFF} WHERE h.tenant_id=$1 AND h.company_id=$2 AND h.id=$3"
         ))
         .bind(tenant)
@@ -202,13 +203,18 @@ pub async fn create_manual_handoff(
         .bind(result)
         .fetch_one(&mut *tx)
         .await?;
+        if row.dossier_id != dossier {
+            return Err(Error::Conflict);
+        }
+        row.dossier_version = expected.checked_add(1).ok_or(Error::Conflict)?;
+        row.state = "ACKNOWLEDGED".into();
         recheck_authenticated(&mut tx, Some(proof)).await?;
         tx.commit().await?;
         return Ok(row);
     }
     let command: Uuid = proof.context().command.into();
     let correlation: Uuid = proof.context().correlation.into();
-    sqlx::query_scalar::<_, i64>(
+    let receipt_version = sqlx::query_scalar::<_, i64>(
         "SELECT finance.integration_manual_handoff($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
     )
     .bind(tenant)
@@ -243,6 +249,7 @@ pub async fn create_manual_handoff(
     .bind(handoff)
     .fetch_one(&mut *tx)
     .await?;
+    row.dossier_version = receipt_version;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(row)
@@ -427,4 +434,45 @@ pub async fn resolve_reconciliation(
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(row)
+}
+
+#[derive(Serialize)]
+pub struct PaymentStatus {
+    pub dossier_id: Uuid,
+    pub state: &'static str,
+    pub evidence_ids: Vec<Uuid>,
+}
+
+/// Fail closed until an approved payment-to-dossier mapping exists.
+/// A manual DO receipt is not evidence of a financial settlement.
+pub async fn payment_status(
+    pool: &sqlx::PgPool,
+    proof: &AuthenticatedCommand,
+    dossier: Uuid,
+) -> Result<Option<PaymentStatus>, Error> {
+    if dossier.is_nil() {
+        return Err(Error::InvalidInput);
+    }
+    let (t, c, a) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(grant)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let owned: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM finance.dossier WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id=$4)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(dossier)
+    .fetch_one(&mut *tx)
+    .await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(owned.then_some(PaymentStatus {
+        dossier_id: dossier,
+        state: "UNKNOWN",
+        evidence_ids: Vec::new(),
+    }))
 }
