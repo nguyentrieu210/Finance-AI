@@ -414,6 +414,7 @@ dependencies = [
  "chrono",
  "finance-financial",
  "finance-shared",
+ "uuid",
 ]
 
 [[package]]
@@ -421,6 +422,7 @@ name = "finance-analytics"
 version = "0.1.0"
 dependencies = [
  "finance-shared",
+ "uuid",
 ]
 
 [[package]]

@@ -9,3 +9,6 @@ publish.workspace = true
 finance-shared = { path = "../shared" }
 finance-financial = { path = "../financial" }
 chrono.workspace = true
+
+[dev-dependencies]
+uuid.workspace = true
