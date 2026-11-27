@@ -1,5 +1,5 @@
 //! Requester-scoped current-state operational dashboard.
-use super::{OrganizationState, PageQuery, dossiers, error, random_id};
+use super::{OrganizationState, PageQuery, dossiers, error, now, random_id};
 use axum::{
     Json,
     extract::{Query, State, rejection::QueryRejection},
@@ -37,7 +37,13 @@ pub(super) async fn get(
         Ok(counts) => counts,
         Err(e) => return error(dossiers::status(e), correlation),
     };
-    let as_of = chrono::Utc::now().to_rfc3339();
+    let Some(epoch) = now() else {
+        return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+    };
+    let Some(as_of) = chrono::DateTime::<chrono::Utc>::from_timestamp(epoch as i64, 0) else {
+        return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+    };
+    let as_of = as_of.to_rfc3339();
     let mut items = finance_analytics::dashboard::from_state_counts(counts, &as_of);
     items.truncate(limit as usize);
     let mut response = Json(Page { items }).into_response();
