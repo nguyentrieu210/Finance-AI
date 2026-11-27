@@ -28,6 +28,7 @@ jobs:
           .venv/bin/openapi-spec-validator contracts/openapi.yaml
           .venv/bin/python scripts/validate_http_contract.py
           .venv/bin/python scripts/validate_table_registry.py
+          .venv/bin/python scripts/validate_system_gates.py
       - name: Rust toolchain
         run: |
           rustup toolchain uninstall 1.85.1-x86_64-unknown-linux-gnu || true

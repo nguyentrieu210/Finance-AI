@@ -1,0 +1,63 @@
+version: 1
+gates:
+  G02:
+    kind: technical
+    evidence:
+      - verify
+    proves:
+      - restricted identity and permission revocation
+      - RLS and scoped authorization
+      - append-only audit chain
+      - durable job lease recovery and fencing
+  G03:
+    kind: technical
+    evidence:
+      - verify
+      - s3-capability
+      - ocr-vietnamese-baseline
+      - pdf-renderer
+      - paddle-ocr
+      - ocr-quality
+      - office-export
+    proves:
+      - three-kind dossier/API/browser slice
+      - financial reservation race and lifecycle
+      - sealed snapshot and fenced export
+      - real isolated storage/OCR/PDF/office capability
+  G04_TECHNICAL:
+    kind: technical
+    evidence:
+      - verify
+      - restore-drill
+      - s3-capability
+      - ocr-vietnamese-baseline
+      - pdf-renderer
+      - paddle-ocr
+      - ocr-quality
+      - office-export
+      - paddle-ocr-v3-candidate
+    proves:
+      - same-commit pilot technical gate
+      - PostgreSQL backup/restore drill
+    does_not_prove:
+      - finance owner signoff
+      - security owner signoff
+      - representative business corpus acceptance
+      - live DO/ERP integration
+external_dependencies:
+  - id: CORPUS
+    state: blocked
+    required_for: G04
+    evidence: representative labeled business corpus and approved thresholds
+  - id: FINANCE_SIGNOFF
+    state: blocked
+    required_for: G04
+    evidence: finance owner approval
+  - id: SECURITY_SIGNOFF
+    state: blocked
+    required_for: G04
+    evidence: security owner approval
+  - id: X01
+    state: blocked
+    required_for: G05
+    evidence: DO/ERP API docs, sandbox credentials, owner and approved mapping
