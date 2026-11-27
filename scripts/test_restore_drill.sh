@@ -25,6 +25,10 @@ docker exec -i "$cid" psql -X -U finance_migrator -d finance_restore_source -v O
 
 # Add one chained synthetic audit event so the drill proves more than empty-schema restore.
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_restore_source -v ON_ERROR_STOP=1 <<'SQL'
+BEGIN;
+SELECT set_config('finance.tenant_id','00000000-0000-0000-0000-000000000001',true);
+SELECT set_config('finance.company_id','00000000-0000-0000-0000-00000000000a',true);
+SELECT set_config('finance.actor_id','00000000-0000-0000-0000-0000000003e8',true);
 INSERT INTO finance.audit_event(
  tenant_id,company_id,id,actor_id,command_id,correlation_id,resource_id,action
 ) VALUES(
@@ -37,6 +41,7 @@ INSERT INTO finance.audit_event(
  '00000000-0000-0000-0000-000000000401',
  'AUDIT_READ'
 );
+COMMIT;
 SQL
 
 docker exec "$cid" pg_dump -U finance_migrator -d finance_restore_source -Fc --no-owner > "$work/finance.dump"
