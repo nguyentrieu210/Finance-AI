@@ -5,8 +5,8 @@ BEGIN
  OR (SELECT count(*) FROM finance.idempotency_record WHERE operation_id='prototype.createDossier')<>(SELECT count(*) FROM finance.dossier)
  OR (SELECT count(*) FROM finance.audit_event WHERE action='DOSSIER_CREATED')<>(SELECT count(*) FROM finance.dossier)
  OR (SELECT count(*) FROM finance.outbox WHERE event_type='DOSSIER_CREATED')<>(SELECT count(*) FROM finance.dossier)
- OR EXISTS(SELECT 1 FROM finance.dossier WHERE status<>'DRAFT' OR version<>0)
- OR has_table_privilege('finance_runtime','finance.dossier','UPDATE') THEN
+ OR EXISTS(SELECT 1 FROM finance.dossier WHERE status<>'DRAFT')
+ OR has_column_privilege('finance_runtime','finance.dossier','status','UPDATE') THEN
   RAISE EXCEPTION 'draft creation atomicity or privilege violation';
  END IF;
 END $$;

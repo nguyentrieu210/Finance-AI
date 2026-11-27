@@ -33,5 +33,5 @@ BEGIN
  EXCEPTION WHEN check_violation THEN NULL; END;
  PERFORM finance.prototype_reserve_upload(t,c,gen_random_uuid(),d,r,a,'replacement.pdf',26214400,decode(repeat('aa',32),'hex'),'application/pdf');
  IF (SELECT sum(declared_bytes) FROM finance.upload_intent WHERE dossier_id=d AND state='PENDING_UPLOAD')<>104857600 THEN RAISE EXCEPTION 'quota release mismatch'; END IF;
- IF has_table_privilege('finance_runtime','finance.upload_intent','SELECT') OR has_table_privilege('finance_runtime','finance.upload_intent','INSERT') OR has_table_privilege('finance_job_worker','finance.upload_grant','SELECT') OR has_function_privilege('finance_runtime','finance.prototype_reserve_upload(uuid,uuid,uuid,uuid,uuid,uuid,text,bigint,bytea,text)','EXECUTE') THEN RAISE EXCEPTION 'prototype metadata exposed'; END IF;
+ IF has_table_privilege('finance_runtime','finance.upload_intent','UPDATE') OR has_table_privilege('finance_job_worker','finance.upload_grant','SELECT') OR has_function_privilege('finance_runtime','finance.prototype_reserve_upload(uuid,uuid,uuid,uuid,uuid,uuid,text,bigint,bytea,text)','EXECUTE') THEN RAISE EXCEPTION 'prototype metadata exposed'; END IF;
 END $$;

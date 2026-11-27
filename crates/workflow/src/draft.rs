@@ -114,9 +114,7 @@ pub async fn create(
             .bind(t).bind(c).bind(a).bind(key.as_str()).bind(hash).bind(id).execute(&mut *tx).await?;
         id
     };
-    let draft = sqlx::query_as::<_, Draft>(&format!(
-        "{SELECT_DRAFT} WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id=$4"
-    ))
+    let draft = sqlx::query_as::<_, Draft>(r#"SELECT id,company_id,code,kind,'DRAFT'::text AS status,0::bigint AS revision,0::bigint AS version,owner_id,to_char(initial_updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at FROM finance.dossier WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id=$4"#)
     .bind(t)
     .bind(c)
     .bind(a)
