@@ -42,19 +42,16 @@ SET ROLE finance_runtime;
 SELECT set_config('finance.tenant_id','00000000-0000-0000-0000-000000000001',true);
 SELECT set_config('finance.company_id','00000000-0000-0000-0000-00000000000a',true);
 SELECT set_config('finance.actor_id','00000000-0000-0000-0000-0000000003e9',true);
-DO $$
-DECLARE n bigint;
-BEGIN
- SELECT count(*) INTO n FROM finance.runtime_fields(
+SELECT 1 / CASE WHEN (
+ SELECT count(*) FROM finance.runtime_fields(
   '00000000-0000-0000-0000-000000000001',
   '00000000-0000-0000-0000-00000000000a',
   '00000000-0000-0000-0000-000000001f41',
   '00000000-0000-0000-0000-0000000003e9',
   '00000000-0000-0000-0000-000000000000',
   NULL,100
- );
- IF n<>6 THEN RAISE EXCEPTION 'runtime field projection expected 6 rows, got %',n; END IF;
-END $$;
+ )
+)=6 THEN 1 ELSE 0 END AS runtime_field_projection_ok;
 ROLLBACK;
 SQL
 FINANCE_OCR_RUNTIME_URL="$runtime_url" FINANCE_OCR_IDENTITY_URL="$identity_url" cargo test --locked -p finance-api --test fields_db -- --ignored --exact actual_ocr_fields_http_review
