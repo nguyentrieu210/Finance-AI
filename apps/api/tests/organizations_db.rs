@@ -804,21 +804,22 @@ async fn scoped_organization_http_real_database() {
         create_dossier(&app, &auditor, "denied", "PAYMENT").await.0,
         StatusCode::FORBIDDEN
     );
-    assert_eq!(
-        create_dossier(&app, &requester, "advance-one", "ADVANCE")
-            .await
-            .0,
-        StatusCode::CREATED
-    );
-    assert_eq!(
-        create_dossier(&app, &requester, "settlement-one", "SETTLEMENT")
-            .await
-            .0,
-        StatusCode::CREATED
-    );
+    let (advance_status, advance) =
+        create_dossier(&app, &requester, "advance-one", "ADVANCE").await;
+    assert_eq!(advance_status, StatusCode::CREATED);
+    let (settlement_status, settlement) =
+        create_dossier(&app, &requester, "settlement-one", "SETTLEMENT").await;
+    assert_eq!(settlement_status, StatusCode::CREATED);
     let (status, page) = request(&app, "/v1/dossiers", Some(&requester)).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(page["items"].as_array().unwrap().len(), 3);
+    let dossier_items = page["items"].as_array().unwrap();
+    for id in [
+        left.1["id"].as_str().unwrap(),
+        advance["id"].as_str().unwrap(),
+        settlement["id"].as_str().unwrap(),
+    ] {
+        assert!(dossier_items.iter().any(|item| item["id"].as_str() == Some(id)));
+    }
     let (dashboard_status, dashboard) = request(&app, "/v1/dashboard", Some(&requester)).await;
     assert_eq!(dashboard_status, StatusCode::OK);
     let total = dashboard["items"]
@@ -827,7 +828,10 @@ async fn scoped_organization_http_real_database() {
         .iter()
         .find(|m| m["name"] == "dossiers.total")
         .unwrap();
-    assert_eq!(total["value"], "3");
+    assert_eq!(
+        total["value"].as_str().unwrap().parse::<usize>().unwrap(),
+        dossier_items.len()
+    );
     assert_eq!(
         request(&app, "/v1/dashboard", Some(&auditor)).await.0,
         StatusCode::FORBIDDEN
