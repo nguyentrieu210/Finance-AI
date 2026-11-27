@@ -58,13 +58,7 @@ fn split_words_and_conflicting_titles() {
 #[test]
 fn unknown_pages_and_multi_document_boundaries() {
     let pages = vec![
-        PageResult::new(
-            1,
-            3,
-            vec![block("HỢP ĐỒNG", 10_000, 20_000, 100_000)],
-            None,
-        )
-        .unwrap(),
+        PageResult::new(1, 3, vec![block("HỢP ĐỒNG", 10_000, 20_000, 100_000)], None).unwrap(),
         PageResult::new(2, 3, vec![], None).unwrap(),
         PageResult::new(
             3,

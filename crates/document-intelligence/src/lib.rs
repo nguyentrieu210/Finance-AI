@@ -59,12 +59,22 @@ fn normalize(text: &str) -> String {
 // business semantics, fuzzy score, transliteration or accent stripping.
 fn title(text: &str) -> Option<Kind> {
     match text {
-        "hợp đồng" | "hợp đồng kinh tế" | "hợp đồng mua bán" => Some(Kind::Contract),
+        "hợp đồng" | "hợp đồng kinh tế" | "hợp đồng mua bán" => {
+            Some(Kind::Contract)
+        }
         "phụ lục hợp đồng" => Some(Kind::ContractAppendix),
-        "hóa đơn" | "hóa đơn giá trị gia tăng" | "hóa đơn bán hàng" => Some(Kind::Invoice),
-        "đề nghị thanh toán" | "giấy đề nghị thanh toán" => Some(Kind::PaymentRequest),
-        "đề nghị tạm ứng" | "giấy đề nghị tạm ứng" => Some(Kind::AdvanceRequest),
-        "quyết toán tạm ứng" | "giấy thanh toán tiền tạm ứng" => Some(Kind::AdvanceSettlement),
+        "hóa đơn" | "hóa đơn giá trị gia tăng" | "hóa đơn bán hàng" => {
+            Some(Kind::Invoice)
+        }
+        "đề nghị thanh toán" | "giấy đề nghị thanh toán" => {
+            Some(Kind::PaymentRequest)
+        }
+        "đề nghị tạm ứng" | "giấy đề nghị tạm ứng" => {
+            Some(Kind::AdvanceRequest)
+        }
+        "quyết toán tạm ứng" | "giấy thanh toán tiền tạm ứng" => {
+            Some(Kind::AdvanceSettlement)
+        }
         "biên bản nghiệm thu" => Some(Kind::AcceptanceRecord),
         "phiếu chi" => Some(Kind::PaymentVoucher),
         _ => None,
