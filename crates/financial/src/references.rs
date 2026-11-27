@@ -50,10 +50,10 @@ pub async fn list(
     let ResourceScope::Company(CompanyScope { tenant, company }) = proof.context().scope else {
         return Err(Error::Forbidden);
     };
-    let Principal::User(actor) = proof.context().actor else {
+    let Principal::User(_) = proof.context().actor else {
         return Err(Error::Forbidden);
     };
-    let (t, c, a): (Uuid, Uuid, Uuid) = (tenant.into(), company.into(), actor.into());
+    let (t, c): (Uuid, Uuid) = (tenant.into(), company.into());
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     require_role(&mut tx, proof.context(), Role::Requester)
         .await
