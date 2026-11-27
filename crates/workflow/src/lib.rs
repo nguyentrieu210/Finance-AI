@@ -122,5 +122,6 @@ mod tests {
     }
 }
 
+pub mod analytics;
 pub mod checks;
 pub mod draft;

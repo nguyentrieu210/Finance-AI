@@ -258,6 +258,12 @@ async fn scoped_organization_http_real_database() {
     let (status, page) = request(&app, "/v1/dossiers", Some(&requester)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(page["items"].as_array().unwrap().len(), 3);
+    let (dashboard_status, dashboard) = request(&app, "/v1/dashboard", Some(&requester)).await;
+    assert_eq!(dashboard_status, StatusCode::OK);
+    let total = dashboard["items"].as_array().unwrap().iter().find(|m| m["name"]=="dossiers.total").unwrap();
+    assert_eq!(total["value"], "3");
+    assert_eq!(request(&app, "/v1/dashboard", Some(&auditor)).await.0, StatusCode::FORBIDDEN);
+
     let (status, page) = request(
         &app,
         "/v1/dossiers?kind=ADVANCE&status=DRAFT",

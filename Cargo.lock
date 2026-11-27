@@ -422,6 +422,8 @@ name = "finance-analytics"
 version = "0.1.0"
 dependencies = [
  "finance-shared",
+ "finance-workflow",
+ "serde",
  "uuid",
 ]
 
@@ -433,6 +435,7 @@ dependencies = [
  "base64",
  "chrono",
  "finance-advances",
+ "finance-analytics",
  "finance-budget",
  "finance-contracts",
  "finance-core",

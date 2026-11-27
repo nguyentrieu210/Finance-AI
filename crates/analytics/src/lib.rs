@@ -4,6 +4,7 @@ use finance_shared::ids::{CompanyScope, DossierId};
 use std::collections::BTreeMap;
 
 pub mod coverage;
+pub mod dashboard;
 
 pub struct Case {
     pub scope: CompanyScope,

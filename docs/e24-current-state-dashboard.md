@@ -1,0 +1,2 @@
+# E24 current-state dashboard slice
+The dashboard uses the public E18 workflow read port rather than querying workflow tables from E24. It returns only requester-scoped current-state dossier counts and explicitly omits first-pass acceptance and active handling time until immutable transition history exists. API and UI are real sandbox paths; no fabricated KPI or cross-company aggregate is emitted.
