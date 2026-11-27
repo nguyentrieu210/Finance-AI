@@ -23,14 +23,14 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_transitions)]
+#[serde(deny_unknown_fields)]
 pub struct Create {
     policy_id: Uuid,
     name: String,
     transitions: Vec<Transition>,
 }
 #[derive(Deserialize)]
-#[serde(deny_unknown_transitions)]
+#[serde(deny_unknown_fields)]
 pub struct Revise {
     name: String,
     transitions: Vec<Transition>,

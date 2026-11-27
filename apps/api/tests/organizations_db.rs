@@ -536,9 +536,13 @@ async fn scoped_organization_http_real_database() {
     let (workflow_list_status, workflow_page) =
         request(&app, "/v1/workflows", Some(&policy_admin)).await;
     assert_eq!(workflow_list_status, StatusCode::OK);
-    assert!(workflow_page["items"].as_array().unwrap().iter().any(|item| {
-        item["id"] == workflow_id && item["version"] == 2
-    }));
+    assert!(
+        workflow_page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| { item["id"] == workflow_id && item["version"] == 2 })
+    );
     let fields = json!([
         {"path":"advance","label":"Có tạm ứng","type":"boolean","required":true,"source_path":"request.advance","layout_row":0,"layout_column":0,"layout_width":12},
         {"path":"amount","label":"Số tiền","type":"money","required":true,"source_path":"request.amount","layout_row":1,"layout_column":0,"layout_width":6,"condition_ref":"advance"},
@@ -1655,8 +1659,11 @@ async fn create_workflow(
     name: &str,
     transitions: Value,
 ) -> (StatusCode, Value, Option<String>) {
-    let body =
-        json!({"policy_id":"00000000-0000-0000-0000-000000001900","name":name,"transitions":transitions});
+    let body = json!({
+        "policy_id":"00000000-0000-0000-0000-000000001900",
+        "name":name,
+        "transitions":transitions
+    });
     let response = app
         .clone()
         .oneshot(
