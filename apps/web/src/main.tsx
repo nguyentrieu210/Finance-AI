@@ -26,9 +26,9 @@ const groups: readonly { name: string; items: readonly (readonly [string, string
   { name: 'Vận hành', items: [['E18','Quy trình'],['E19','Biểu mẫu'],['E20','Xuất hồ sơ'],['E21','Rủi ro'],['E23','Tích hợp'],['E24','Báo cáo']] },
 ] as const;
 
-// Deliberately limited to the synthetic test harness. No production login,
-// token persistence, refresh flow or real financial data entry.
-const sandbox = import.meta.env.VITE_FINANCE_SYNTHETIC === '1';
+// Business UI is opt-in. Synthetic CI and the deployable pilot runtime may
+// enable it explicitly; an ordinary production build remains fail-closed.
+const sandbox = import.meta.env.VITE_FINANCE_SYNTHETIC === '1' || import.meta.env.VITE_FINANCE_PILOT === '1';
 
 function App() {
   const [selected, select] = useState('E04');
