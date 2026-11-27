@@ -1,7 +1,7 @@
 //! Explicitly injected synthetic organization read router. Not mounted by the default API.
 use axum::{
     Json, Router,
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
@@ -9,7 +9,7 @@ use axum::{
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use finance_core::prototype::Error as DomainError;
 use finance_identity::{IdentityError, VerifierStore};
-use finance_organization::list_units_authenticated;
+use finance_organization::{get_unit_authenticated, list_units_authenticated};
 use finance_shared::{
     contracts::Principal,
     ids::{ActorId, CommandId, CompanyScope, CorrelationId},
@@ -38,6 +38,7 @@ mod jobs;
 mod knowledge;
 mod lifecycle;
 mod matches;
+mod memberships;
 mod policies;
 mod references;
 mod reservations;
@@ -287,9 +288,62 @@ async fn list(
     response
 }
 
+
+async fn get_organization(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match dossiers::authenticate_version(&state, &headers, correlation, None).await {
+        Ok(proof) => proof,
+        Err(status) => return error(status, correlation),
+    };
+    match get_unit_authenticated(&state.runtime, &proof, id).await {
+        Ok(Some(unit)) => {
+            let Ok(version) = finance_shared::contracts::Version::try_from(unit.version) else {
+                return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+            };
+            let token = finance_shared::http_contract::VersionToken {
+                target: finance_shared::http_contract::VersionTarget::Organization,
+                resource_id: finance_shared::ids::ResourceId::try_from(unit.id)
+                    .expect("stored nonnil organization"),
+                version,
+            };
+            let mut response = Json(Organization {
+                id: unit.id,
+                parent_id: unit.parent,
+                kind: unit.kind,
+                code: unit.code,
+                name: unit.name,
+                active: unit.active,
+            })
+            .into_response();
+            response.headers_mut().insert(
+                "finance-version",
+                axum::http::HeaderValue::from_str(&token.to_string())
+                    .expect("canonical organization version"),
+            );
+            response.headers_mut().insert(
+                axum::http::header::CACHE_CONTROL,
+                axum::http::HeaderValue::from_static("no-store"),
+            );
+            response
+        }
+        Ok(None) => error(StatusCode::NOT_FOUND, correlation),
+        Err(DomainError::Forbidden) => error(StatusCode::FORBIDDEN, correlation),
+        Err(DomainError::InvalidInput) => error(StatusCode::BAD_REQUEST, correlation),
+        Err(_) => error(StatusCode::SERVICE_UNAVAILABLE, correlation),
+    }
+}
+
 pub fn router(state: OrganizationState) -> Router {
     Router::new()
         .route("/v1/organizations", get(list))
+        .route("/v1/organizations/{item_id}", get(get_organization))
+        .route("/v1/memberships", get(memberships::list).post(memberships::create))
+        .route("/v1/memberships/{item_id}", get(memberships::get))
+        .route("/v1/memberships/{item_id}/revoke", axum::routing::post(memberships::revoke))
         .route("/v1/dossiers", get(dossiers::list).post(dossiers::create))
         .route("/v1/dossiers/{dossier_id}", get(dossiers::get))
         .route(

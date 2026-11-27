@@ -144,6 +144,62 @@ async fn scoped_organization_http_real_database() {
         scope,
         [71; 32],
     ));
+    let membership_subject = "00000000-0000-0000-0000-0000000003ef";
+    let (membership_status, membership, membership_version) = create_membership(
+        &app,
+        &token,
+        "membership-create-one",
+        membership_subject,
+        &["REQUESTER", "AUDITOR"],
+    )
+    .await;
+    assert_eq!(membership_status, StatusCode::CREATED);
+    assert_eq!(membership["id"], membership_subject);
+    assert_eq!(membership["subject_id"], membership_subject);
+    assert_eq!(membership["active"], true);
+    assert_eq!(membership["roles"].as_array().unwrap().len(), 2);
+    let membership_uri = format!("/v1/memberships/{membership_subject}");
+    assert_eq!(
+        request(&app, &membership_uri, Some(&token)).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        request(&app, "/v1/memberships", Some(&requester)).await.0,
+        StatusCode::FORBIDDEN
+    );
+    let (revoke_status, revoked, revoked_version) = revoke_membership(
+        &app,
+        &token,
+        membership_subject,
+        "membership-revoke-one",
+        membership_version.as_deref().unwrap(),
+    )
+    .await;
+    assert_eq!(revoke_status, StatusCode::OK);
+    assert_eq!(revoked["active"], false);
+    assert_ne!(membership_version, revoked_version);
+    assert_eq!(
+        revoke_membership(
+            &app,
+            &token,
+            "00000000-0000-0000-0000-0000000003e8",
+            "membership-self-revoke",
+            ""v1:membership:00000000-0000-0000-0000-0000000003e8:0"",
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        request(
+            &app,
+            "/v1/organizations/00000000-0000-0000-0000-000000000401",
+            Some(&token)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
     for (uri, kind) in [
         ("/v1/contracts?limit=10", "CONTRACT"),
         ("/v1/advances?limit=10", "ADVANCE"),
@@ -1819,4 +1875,75 @@ async fn decide_review(
         serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({})),
         receipt,
     )
+}
+
+
+async fn create_membership(
+    app: &Router,
+    token: &str,
+    key: &str,
+    subject: &str,
+    roles: &[&str],
+) -> (StatusCode, Value, Option<String>) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/memberships")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("idempotency-key", key)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "subject_id": subject,
+                        "company_id": "00000000-0000-0000-0000-00000000000a",
+                        "roles": roles,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let version = response
+        .headers()
+        .get("finance-version")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    (status, serde_json::from_slice(&bytes).unwrap(), version)
+}
+
+async fn revoke_membership(
+    app: &Router,
+    token: &str,
+    subject: &str,
+    key: &str,
+    version: &str,
+) -> (StatusCode, Value, Option<String>) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1/memberships/{subject}/revoke"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("idempotency-key", key)
+                .header("if-finance-version", version)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(json!({"reason":"synthetic revocation"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let next = response
+        .headers()
+        .get("finance-version")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    (status, serde_json::from_slice(&bytes).unwrap(), next)
 }
