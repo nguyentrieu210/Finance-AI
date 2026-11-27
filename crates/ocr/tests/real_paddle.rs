@@ -21,6 +21,7 @@ struct Envelope {
     schema: String,
     version: String,
     runtime: String,
+    model_name: String,
     model_sha256: String,
     config_sha256: String,
     raster_sha256: String,
@@ -44,6 +45,9 @@ fn real_paddle_vietnamese() {
     assert_eq!(result.schema, "finance.ocr.synthetic.v1");
     assert_eq!(result.version, "3.1.1");
     assert_eq!(result.runtime, "3.0.0");
+    let recognizer = std::env::var("FINANCE_PADDLE_RECOGNIZER")
+        .unwrap_or_else(|_| "latin_PP-OCRv5_mobile_rec".into());
+    assert_eq!(result.model_name, recognizer);
     let _model = ModelIdentity::new(
         "PaddleOCR",
         &result.version,

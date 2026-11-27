@@ -4,13 +4,16 @@ import hashlib
 import importlib.metadata
 import json
 import math
+import os
 from pathlib import Path
 import sys
 
 WIDTH, HEIGHT = 1800, 480
 ROOT = Path("/models")
 DETECT = "PP-OCRv5_mobile_det"
-RECOGNIZE = "latin_PP-OCRv5_mobile_rec"
+RECOGNIZE = os.environ.get("FINANCE_PADDLE_RECOGNIZER", "latin_PP-OCRv5_mobile_rec")
+if RECOGNIZE not in {"latin_PP-OCRv5_mobile_rec", "latin_PP-OCRv3_mobile_rec"}:
+    raise ValueError("unsupported recognition baseline")
 OPTIONS = {
     "text_detection_model_name": DETECT,
     "text_detection_model_dir": str(ROOT / DETECT),
@@ -27,7 +30,7 @@ OPTIONS = {
 
 def model_digest():
     digest = hashlib.sha256()
-    for path in sorted(ROOT.glob("*/*")):
+    for path in sorted(p for p in ROOT.glob("*/*") if p.parent.name in {DETECT, RECOGNIZE}):
         name = str(path.relative_to(ROOT)).encode("utf-8")
         digest.update(len(name).to_bytes(4, "big"))
         digest.update(name)
@@ -84,6 +87,7 @@ def run():
         "schema": "finance.ocr.synthetic.v1",
         "version": version,
         "runtime": runtime,
+        "model_name": RECOGNIZE,
         "model_sha256": model_digest(),
         "config_sha256": hashlib.sha256(config.encode()).hexdigest(),
         "raster_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),

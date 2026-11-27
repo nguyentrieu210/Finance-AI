@@ -9,7 +9,7 @@ import urllib.request
 
 ROOT = Path("/models")
 BASE = "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/"
-MODELS = ("PP-OCRv5_mobile_det", "latin_PP-OCRv5_mobile_rec")
+MODELS = ("PP-OCRv5_mobile_det", "latin_PP-OCRv5_mobile_rec", "latin_PP-OCRv3_mobile_rec")
 CAP = 100 * 1024 * 1024
 
 
