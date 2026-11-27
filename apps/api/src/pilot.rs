@@ -173,11 +173,7 @@ async fn connect(url: &str, role: &'static str) -> Result<PgPool, Error> {
         .map_err(|_| Error::Database)
 }
 
-fn spawn_jwks_refresh(
-    store: Arc<VerifierStore>,
-    config: Config,
-    valid_until: Arc<AtomicU64>,
-) {
+fn spawn_jwks_refresh(store: Arc<VerifierStore>, config: Config, valid_until: Arc<AtomicU64>) {
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(config.jwks_refresh));
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
