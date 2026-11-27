@@ -388,6 +388,74 @@ async fn scoped_organization_http_real_database() {
         request(&app, "/v1/templates", Some(&requester)).await.1["items"],
         json!([])
     );
+    let ready_id = "00000000-0000-0000-0000-000000001800";
+    let check_id = "00000000-0000-0000-0000-000000001802";
+    let ready_version = format!("\"v1:dossier:{ready_id}:0\"");
+    let (ready_status, ready_body, ready_receipt) = ready_dossier(
+        &app,
+        &requester,
+        ready_id,
+        "ready-one",
+        &ready_version,
+        check_id,
+    )
+    .await;
+    assert_eq!(ready_status, StatusCode::OK);
+    assert_eq!(ready_body["status"], "READY");
+    assert_eq!(ready_body["version"], 1);
+    assert_eq!(
+        ready_dossier(
+            &app,
+            &requester,
+            ready_id,
+            "ready-one",
+            &ready_version,
+            check_id,
+        )
+        .await
+        .1,
+        ready_body
+    );
+    assert_eq!(
+        ready_dossier(
+            &app,
+            &requester,
+            ready_id,
+            "ready-stale",
+            &ready_version,
+            check_id,
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let (snapshot_status, sealed) = request(
+        &app,
+        &format!("/v1/dossiers/{ready_id}/snapshot"),
+        Some(&requester),
+    )
+    .await;
+    assert_eq!(snapshot_status, StatusCode::OK);
+    assert_eq!(sealed["dossier_id"], ready_id);
+    assert_eq!(sealed["check_run_id"], check_id);
+    assert_eq!(sealed["policy_version_id"], "00000000-0000-0000-0000-000000001600");
+    assert_eq!(sealed["revision"], 0);
+    assert_eq!(sealed["input_hash"].as_str().unwrap().len(), 64);
+    assert!(ready_receipt.as_deref().unwrap().ends_with(":1\""));
+    assert_ne!(
+        ready_receipt.as_deref().unwrap(),
+        ready_version
+    );
+    assert_eq!(
+        request(
+            &app,
+            &format!("/v1/dossiers/{ready_id}/snapshot"),
+            Some(&other_requester),
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
     let uri = "/v1/organizations?limit=1";
     assert_eq!(request(&app, uri, None).await.0, StatusCode::UNAUTHORIZED);
     assert_eq!(
@@ -789,6 +857,40 @@ async fn revise_template(
             Request::builder()
                 .method("POST")
                 .uri(format!("/v1/templates/{template}/revise"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("idempotency-key", key)
+                .header("if-finance-version", version)
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let receipt = response
+        .headers()
+        .get("finance-version")
+        .map(|value| value.to_str().unwrap().to_owned());
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let value: Value = serde_json::from_slice(&bytes).unwrap();
+    (status, value, receipt)
+}
+
+async fn ready_dossier(
+    app: &Router,
+    token: &str,
+    dossier: &str,
+    key: &str,
+    version: &str,
+    check_run: &str,
+) -> (StatusCode, Value, Option<String>) {
+    let body = json!({"check_run_id":check_run});
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1/dossiers/{dossier}/ready"))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .header("idempotency-key", key)

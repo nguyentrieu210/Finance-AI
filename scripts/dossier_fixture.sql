@@ -40,3 +40,44 @@ BEGIN
   INSERT INTO finance.document_ref(tenant_id,company_id,id,dossier_id,revision_id) VALUES(t,c,doc,d,r);
  END LOOP;
 END $$;
+
+-- E18 READY fixture: REVIEWABLE dossier with current PASS checks, published assets and active hold.
+INSERT INTO finance.dossier(tenant_id,company_id,id,owner_id,code,kind,status,version,revision)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001800','00000000-0000-0000-0000-0000000003e9',
+'SYN-READY','SETTLEMENT','REVIEWABLE',0,0);
+INSERT INTO finance.dossier_revision(tenant_id,company_id,dossier_id,id,owner_id,number)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001800','00000000-0000-0000-0000-000000001801',
+'00000000-0000-0000-0000-0000000003e9',0);
+INSERT INTO finance.check_run(
+ tenant_id,company_id,id,dossier_id,revision_id,dossier_version,actor_id,policy_id,business_day,input_hash,blocked)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001802','00000000-0000-0000-0000-000000001800',
+'00000000-0000-0000-0000-000000001801',0,'00000000-0000-0000-0000-0000000003e9',
+'00000000-0000-0000-0000-000000001600','2027-01-01',decode(repeat('18',32),'hex'),false);
+INSERT INTO finance.check_result(tenant_id,company_id,run_id,rule_key,outcome,severity,detail_code)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001802','ready.synthetic','PASS','BLOCK','SYNTHETIC_PASS');
+INSERT INTO finance.form_version(
+ tenant_id,company_id,id,form_id,policy_id,name,version,state,schema_json,author_id,checker_id,published_at)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001803','00000000-0000-0000-0000-000000001803',
+'00000000-0000-0000-0000-000000001600','Synthetic settlement form',1,'PUBLISHED',
+'{"version":1,"fields":[{"key":"amount","type":"money","required":true,"required_when_visible":false,"visible_if":null,"options":null,"source_path":"settlement.amount","layout":{"row":0,"column":0,"width":12}}]}'::jsonb,
+'00000000-0000-0000-0000-0000000003e8','00000000-0000-0000-0000-0000000003e9',clock_timestamp());
+INSERT INTO finance.template_version(
+ tenant_id,company_id,id,template_id,policy_id,name,version,state,format,source_digest,author_id,checker_id,published_at)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001804','00000000-0000-0000-0000-000000001804',
+'00000000-0000-0000-0000-000000001600','Synthetic settlement package',1,'PUBLISHED','PDF',
+decode(repeat('1a',32),'hex'),'00000000-0000-0000-0000-0000000003e8',
+'00000000-0000-0000-0000-0000000003e9',clock_timestamp());
+INSERT INTO finance.reservation(
+ tenant_id,company_id,id,revision_id,currency,amount,resource_ids,state,remaining)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001805','00000000-0000-0000-0000-000000001801',
+'VND',10,ARRAY['00000000-0000-0000-0000-000000001210'::uuid],'RESERVED',10);
+INSERT INTO finance.reservation_line(tenant_id,company_id,reservation_id,resource_id,amount)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001805','00000000-0000-0000-0000-000000001210',10);

@@ -32,6 +32,7 @@ mod documents;
 mod dossiers;
 mod forms;
 mod knowledge;
+mod lifecycle;
 mod policies;
 mod references;
 mod templates;
@@ -277,6 +278,14 @@ pub fn router(state: OrganizationState) -> Router {
             get(documents::list).post(documents::create),
         )
         .route("/v1/dossiers/{dossier_id}/checks", get(checks::list))
+        .route(
+            "/v1/dossiers/{dossier_id}/ready",
+            axum::routing::post(lifecycle::ready),
+        )
+        .route(
+            "/v1/dossiers/{dossier_id}/snapshot",
+            get(lifecycle::snapshot),
+        )
         .route("/v1/audit", get(audit::list))
         .route("/v1/dashboard", get(dashboard::get))
         .route("/__diagnostics/knowledge", get(knowledge::search))
