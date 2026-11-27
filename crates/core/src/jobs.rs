@@ -23,6 +23,15 @@ pub struct Lease {
     pub fence: i64,
     worker: Uuid,
 }
+impl Lease {
+    pub fn scope(self) -> CompanyScope {
+        self.scope
+    }
+
+    pub fn worker_id(self) -> Uuid {
+        self.worker
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Failure {
     Transient,

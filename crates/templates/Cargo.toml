@@ -16,5 +16,6 @@ finance-core = { path = "../core" }
 finance-shared = { path = "../shared" }
 
 [dev-dependencies]
+tokio.workspace = true
 base64 = "=0.22.1"
 serde_json.workspace = true

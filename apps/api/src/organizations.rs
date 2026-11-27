@@ -30,6 +30,7 @@ mod checks;
 mod dashboard;
 mod documents;
 mod dossiers;
+mod exports;
 mod forms;
 mod integration;
 mod knowledge;

@@ -642,6 +642,36 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(sealed["input_hash"].as_str().unwrap().len(), 64);
     assert!(ready_receipt.as_deref().unwrap().ends_with(":1\""));
     assert_ne!(ready_receipt.as_deref().unwrap(), ready_version);
+    let snapshot_id = sealed["id"].as_str().unwrap();
+    let (export_status, export_job, export_receipt) = create_export(
+        &app,
+        &requester,
+        ready_id,
+        "export-one",
+        ready_receipt.as_deref().unwrap(),
+        snapshot_id,
+        "00000000-0000-0000-0000-000000001804",
+    )
+    .await;
+    assert_eq!(export_status, StatusCode::ACCEPTED);
+    assert_eq!(export_job["state"], "QUEUED");
+    assert_eq!(export_job["attempt"], 0);
+    assert_eq!(export_job["progress"], 0);
+    assert_eq!(export_receipt, ready_receipt);
+    assert_eq!(
+        create_export(
+            &app,
+            &requester,
+            ready_id,
+            "export-one",
+            ready_receipt.as_deref().unwrap(),
+            snapshot_id,
+            "00000000-0000-0000-0000-000000001804",
+        )
+        .await
+        .1,
+        export_job
+    );
     assert_eq!(
         request(
             &app,
@@ -1492,6 +1522,46 @@ async fn resolve_reconciliation(
         .headers()
         .get("finance-version")
         .and_then(|x| x.to_str().ok())
+        .map(str::to_owned);
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({})),
+        receipt,
+    )
+}
+
+async fn create_export(
+    app: &Router,
+    token: &str,
+    dossier: &str,
+    key: &str,
+    version: &str,
+    snapshot: &str,
+    template: &str,
+) -> (StatusCode, serde_json::Value, Option<String>) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1/dossiers/{dossier}/exports"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("idempotency-key", key)
+                .header("if-finance-version", version)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({"snapshot_id":snapshot,"template_ids":[template]}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let receipt = response
+        .headers()
+        .get("finance-version")
+        .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
     let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     (
