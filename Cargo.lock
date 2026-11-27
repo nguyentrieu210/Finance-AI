@@ -547,8 +547,11 @@ dependencies = [
  "finance-core",
  "finance-document-intelligence",
  "finance-documents",
+ "finance-identity",
  "finance-ocr",
+ "finance-permissions",
  "finance-shared",
+ "serde",
  "serde_json",
  "sha2",
  "sqlx",
@@ -764,7 +767,14 @@ dependencies = [
 name = "finance-validation"
 version = "0.1.0"
 dependencies = [
+ "finance-core",
+ "finance-extraction",
+ "finance-identity",
+ "finance-permissions",
  "finance-shared",
+ "sha2",
+ "sqlx",
+ "uuid",
 ]
 
 [[package]]

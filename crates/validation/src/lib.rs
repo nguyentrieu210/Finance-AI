@@ -3,6 +3,7 @@
 use finance_shared::money::Money;
 
 pub mod schema;
+pub mod repository;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Outcome {

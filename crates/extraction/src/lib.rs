@@ -12,6 +12,7 @@ use unicode_normalization::UnicodeNormalization;
 
 pub mod gateway;
 pub mod rows;
+pub mod repository;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Field {

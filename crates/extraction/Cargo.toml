@@ -6,6 +6,12 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+uuid.workspace = true
+sqlx.workspace = true
+serde.workspace = true
+finance-permissions = { path = "../permissions" }
+finance-identity = { path = "../identity" }
+finance-core = { path = "../core" }
 chrono.workspace = true
 finance-document-intelligence = { path = "../document-intelligence" }
 finance-ocr = { path = "../ocr" }
@@ -13,10 +19,7 @@ finance-shared = { path = "../shared" }
 unicode-normalization = "=0.1.26"
 
 [dev-dependencies]
-finance-core = { path = "../core" }
 serde_json.workspace = true
 sha2 = "=0.10.9"
-sqlx.workspace = true
 tokio.workspace = true
-uuid.workspace = true
 finance-documents = { path = "../documents" }
