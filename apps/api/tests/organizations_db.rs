@@ -385,7 +385,7 @@ async fn create_document(
             Request::builder()
                 .method("POST")
                 .uri(uri)
-                .header(header::AUTHORIZATION,format!("Bearer {token}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .header("idempotency-key", key)
                 .header(
