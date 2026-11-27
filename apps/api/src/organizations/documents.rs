@@ -186,3 +186,119 @@ pub(super) async fn evidence(
         Err(value) => error(status(value), correlation),
     }
 }
+
+#[derive(Serialize)]
+struct Download {
+    url: String,
+    expires_at: String,
+    sha256: String,
+}
+
+fn download_key(state: &OrganizationState, dossier: Uuid, digest: &str) -> [u8; 32] {
+    Sha256::digest(
+        [
+            b"finance.document.download/v1".as_slice(),
+            &state.cursor_key,
+            dossier.as_bytes(),
+            digest.as_bytes(),
+        ]
+        .concat(),
+    )
+    .into()
+}
+
+pub(super) async fn download(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path((dossier, document)): Path<(Uuid, Uuid)>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match authenticate_version(&state, &headers, correlation, None).await {
+        Ok(proof) => proof,
+        Err(s) => return error(s, correlation),
+    };
+    let Principal::User(actor) = proof.context().actor else {
+        return error(StatusCode::FORBIDDEN, correlation);
+    };
+    let digest = match repository::original_digest(&state.runtime, &proof, dossier, document).await {
+        Ok(Some(value)) => value,
+        Ok(None) => return error(StatusCode::NOT_FOUND, correlation),
+        Err(e) => return error(status(e), correlation),
+    };
+    let Some(expires) = now().and_then(|value| value.checked_add(120)) else {
+        return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+    };
+    let Some(timestamp) = chrono::DateTime::from_timestamp(expires as i64, 0) else {
+        return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+    };
+    let key = download_key(&state, dossier, &digest);
+    let token = encode_cursor(&key, state.scope, actor, document, expires);
+    let mut out = Json(Download {
+        url: format!("/v1/dossiers/{dossier}/documents/{document}/content?grant={token}"),
+        expires_at: timestamp.to_rfc3339(),
+        sha256: digest,
+    })
+    .into_response();
+    out.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    out
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ContentGrant {
+    grant: String,
+}
+
+pub(super) async fn content(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path((dossier, document)): Path<(Uuid, Uuid)>,
+    query: Result<Query<ContentGrant>, QueryRejection>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match authenticate_version(&state, &headers, correlation, None).await {
+        Ok(proof) => proof,
+        Err(s) => return error(s, correlation),
+    };
+    let Principal::User(actor) = proof.context().actor else {
+        return error(StatusCode::FORBIDDEN, correlation);
+    };
+    let Ok(Query(query)) = query else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let digest = match repository::original_digest(&state.runtime, &proof, dossier, document).await {
+        Ok(Some(value)) => value,
+        Ok(None) => return error(StatusCode::NOT_FOUND, correlation),
+        Err(e) => return error(status(e), correlation),
+    };
+    let Some(time) = now() else {
+        return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+    };
+    let key = download_key(&state, dossier, &digest);
+    if decode_cursor(&key, state.scope, actor, &query.grant, time) != Some(document) {
+        return error(StatusCode::FORBIDDEN, correlation);
+    }
+    match repository::download_original(&state.runtime, &proof, dossier, document).await {
+        Ok(Some(row)) if row.sha256 == digest => {
+            let Ok(mime) = HeaderValue::from_str(&row.mime) else {
+                return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+            };
+            let mut out = row.bytes.into_response();
+            out.headers_mut().insert(header::CONTENT_TYPE, mime);
+            out.headers_mut().insert(
+                header::CONTENT_DISPOSITION,
+                HeaderValue::from_static("attachment"),
+            );
+            out.headers_mut().insert(
+                header::X_CONTENT_TYPE_OPTIONS,
+                HeaderValue::from_static("nosniff"),
+            );
+            out.headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            out
+        }
+        Ok(_) => error(StatusCode::NOT_FOUND, correlation),
+        Err(e) => error(status(e), correlation),
+    }
+}

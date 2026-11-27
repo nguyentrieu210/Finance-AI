@@ -239,3 +239,76 @@ pub async fn get_evidence(
     tx.commit().await?;
     Ok(row)
 }
+
+#[derive(sqlx::FromRow)]
+pub struct Original {
+    pub sha256: String,
+    pub mime: String,
+    pub bytes: Vec<u8>,
+}
+
+pub async fn original_digest(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    dossier: Uuid,
+    document: Uuid,
+) -> Result<Option<String>, Error> {
+    if dossier.is_nil() || document.is_nil() {
+        return Err(Error::InvalidInput);
+    }
+    let (t, c, a) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let digest = sqlx::query_scalar(
+        "SELECT finance.runtime_original_digest($1,$2,$3,$4,$5)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(dossier)
+    .bind(document)
+    .fetch_one(&mut *tx)
+    .await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(digest)
+}
+
+pub async fn download_original(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    dossier: Uuid,
+    document: Uuid,
+) -> Result<Option<Original>, Error> {
+    if dossier.is_nil() || document.is_nil() {
+        return Err(Error::InvalidInput);
+    }
+    let (t, c, a) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let command: Uuid = proof.context().command.into();
+    let correlation: Uuid = proof.context().correlation.into();
+    let original = sqlx::query_as::<_, Original>(
+        "SELECT * FROM finance.runtime_download_original($1,$2,$3,$4,$5,$6,$7)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(dossier)
+    .bind(document)
+    .bind(command)
+    .bind(correlation)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(row) = &original {
+        if row.bytes.is_empty()
+            || row.bytes.len() > DEFAULT_MAX_FILE_BYTES as usize
+            || format!("{:x}", Sha256::digest(&row.bytes)) != row.sha256
+        {
+            return Err(Error::Conflict);
+        }
+    }
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(original)
+}

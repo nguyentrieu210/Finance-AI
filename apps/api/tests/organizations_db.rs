@@ -413,6 +413,43 @@ async fn scoped_organization_http_real_database() {
         request(&app, "/v1/references", None).await.0,
         StatusCode::UNAUTHORIZED
     );
+    let download_uri = "/v1/dossiers/00000000-0000-0000-0000-000000002320/documents/00000000-0000-0000-0000-000000002330/download";
+    let (download_status, download) = request(&app, download_uri, Some(&requester)).await;
+    assert_eq!(download_status, StatusCode::OK);
+    let content_uri = download["url"].as_str().unwrap();
+    let content_request = |actor: &str, uri: &str| {
+        Request::builder()
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("Bearer {actor}"))
+            .body(Body::empty())
+            .unwrap()
+    };
+    let denied = app
+        .clone()
+        .oneshot(content_request(&review_accountant, content_uri))
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+    let bad_uri = format!("{content_uri}x");
+    let denied = app
+        .clone()
+        .oneshot(content_request(&requester, &bad_uri))
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+    let result = app
+        .clone()
+        .oneshot(content_request(&requester, content_uri))
+        .await
+        .unwrap();
+    assert_eq!(result.status(), StatusCode::OK);
+    assert_eq!(result.headers()[header::CACHE_CONTROL], "no-store");
+    let bytes = to_bytes(result.into_body(), 1024 * 1024).await.unwrap();
+    assert_eq!(bytes.as_ref(), b"%PDF-1.4\nsynthetic risk evidence");
+    assert_eq!(
+        request(&app, download_uri, Some(&other_requester)).await.0,
+        StatusCode::NOT_FOUND
+    );
     let evidence_uri = "/v1/evidence/00000000-0000-0000-0000-000000002333";
     for reader in [&requester, &review_accountant] {
         let (evidence_status, evidence) = request(&app, evidence_uri, Some(reader)).await;
