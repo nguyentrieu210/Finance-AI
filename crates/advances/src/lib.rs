@@ -4,6 +4,8 @@ use chrono::NaiveDate;
 use finance_financial::{Error, available};
 use finance_shared::money::Money;
 
+pub mod settlement;
+
 pub struct Advance {
     pub issued: Option<Money>,
     pub settled: Money,
@@ -21,10 +23,16 @@ impl Advance {
         {
             return Err(Error::Negative);
         }
+        if self.settled.currency != issued.currency
+            || self.confirmed_refund.currency != issued.currency
+            || self.reserved.currency != issued.currency
+        {
+            return Err(Error::Currency);
+        }
         let consumed = self
             .settled
             .checked_add(self.confirmed_refund)
-            .map_err(|_| Error::Currency)?;
+            .map_err(|_| Error::Overflow)?;
         available(issued, consumed, self.reserved, true)
     }
 
@@ -32,7 +40,12 @@ impl Advance {
         let due = self
             .approved_extension
             .map_or(self.due, |d| d.max(self.due));
-        Ok(as_of > due && self.remaining()?.amount.decimal() > 0.into())
+        // Holds restrict new allocations but are not confirmed settlement.
+        let available = self.remaining()?;
+        let outstanding = available
+            .checked_add(self.reserved)
+            .map_err(|_| Error::Overflow)?;
+        Ok(as_of > due && outstanding.amount.decimal() > 0.into())
     }
 }
 
@@ -60,6 +73,9 @@ mod tests {
         a.issued = Some(m("100"));
         assert_eq!(a.remaining(), Ok(m("65")));
         assert_eq!(a.overdue(due), Ok(false));
+        assert_eq!(a.overdue(due.succ_opt().unwrap()), Ok(true));
+        a.reserved = m("70");
+        assert_eq!(a.remaining(), Ok(m("0")));
         assert_eq!(a.overdue(due.succ_opt().unwrap()), Ok(true));
     }
 }

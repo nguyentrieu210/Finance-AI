@@ -3,6 +3,8 @@
 use finance_shared::ids::{CompanyScope, DossierId};
 use std::collections::BTreeMap;
 
+pub mod coverage;
+
 pub struct Case {
     pub scope: CompanyScope,
     pub dossier: DossierId,

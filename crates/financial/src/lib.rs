@@ -2,6 +2,8 @@
 //! Synthetic-only domain prototype. No authorization, durable mutation or production claim.
 use finance_shared::money::Money;
 
+pub mod payment;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
     Unknown,
