@@ -35,13 +35,13 @@ identity_pw="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
 printf "CREATE ROLE finance_ocr_runtime_login LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD '%s';\nGRANT finance_runtime TO finance_ocr_runtime_login;\nCREATE ROLE finance_ocr_identity_login LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD '%s';\nGRANT finance_identity_lookup TO finance_ocr_identity_login;\n" "$runtime_pw" "$identity_pw" | docker exec -i "$cid" psql -X -U finance_migrator -d finance_ocr -v ON_ERROR_STOP=1 >/dev/null
 runtime_url="postgresql://finance_ocr_runtime_login:$runtime_pw@$port/finance_ocr?sslmode=disable"
 identity_url="postgresql://finance_ocr_identity_login:$identity_pw@$port/finance_ocr?sslmode=disable"
-unset runtime_pw identity_pw
-docker exec -i "$cid" psql -X -U finance_migrator -d finance_ocr -v ON_ERROR_STOP=1 -f - <<'SQL'
+docker exec -e PGPASSWORD="$runtime_pw" -i "$cid" psql -X -h 127.0.0.1 -U finance_ocr_runtime_login -d finance_ocr -v ON_ERROR_STOP=1 -f - <<'SQL'
 BEGIN;
-SET ROLE finance_runtime;
+SELECT current_user,session_user;
 SELECT set_config('finance.tenant_id','00000000-0000-0000-0000-000000000001',true);
 SELECT set_config('finance.company_id','00000000-0000-0000-0000-00000000000a',true);
 SELECT set_config('finance.actor_id','00000000-0000-0000-0000-0000000003e9',true);
+SELECT finance.lock_current_roles() AS runtime_roles;
 SELECT 1 / CASE WHEN (
  SELECT count(*) FROM finance.runtime_fields(
   '00000000-0000-0000-0000-000000000001',
@@ -54,6 +54,7 @@ SELECT 1 / CASE WHEN (
 )=6 THEN 1 ELSE 0 END AS runtime_field_projection_ok;
 ROLLBACK;
 SQL
+unset runtime_pw identity_pw
 FINANCE_OCR_RUNTIME_URL="$runtime_url" FINANCE_OCR_IDENTITY_URL="$identity_url" cargo test --locked -p finance-api --test fields_db -- --ignored --exact actual_ocr_fields_http_review
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_ocr -v ON_ERROR_STOP=1 -f - < scripts/ocr_review_preflight_assert.sql
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_ocr -v ON_ERROR_STOP=1 -f - < scripts/check_read_assert.sql

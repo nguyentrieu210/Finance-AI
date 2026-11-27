@@ -153,13 +153,24 @@ async fn actual_ocr_fields_http_review() {
         [89; 32],
     ));
     let dossier = "00000000-0000-0000-0000-000000001f41";
+    let (dossier_status, dossier_body) =
+        get(&app, &format!("/v1/dossiers/{dossier}"), &requester).await;
+    assert_eq!(
+        dossier_status,
+        StatusCode::OK,
+        "requester dossier auth/read failed first: {dossier_body}"
+    );
     let (status, page) = get(
         &app,
         &format!("/v1/dossiers/{dossier}/fields?limit=100"),
         &requester,
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "field projection failed after dossier auth succeeded: {page}"
+    );
     let fields = page["items"].as_array().unwrap();
     assert_eq!(fields.len(), 6);
     let total = fields
