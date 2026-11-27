@@ -670,6 +670,31 @@ async fn scoped_organization_http_real_database() {
             .all(|item| item["id"].as_str() != Some(created_rule_id.as_str()))
     );
     let waiver_dossier = "00000000-0000-0000-0000-000000002120";
+    // Exercise the SQL security boundary directly using the runtime role.
+    // Even with a valid same-company dossier/owner argument, the session actor
+    // must not be allowed to impersonate that owner.
+    let mut checklist_tx = runtime.begin().await.unwrap();
+    sqlx::query("SELECT set_config('finance.tenant_id',$1,true),set_config('finance.company_id',$2,true),set_config('finance.actor_id',$3,true)")
+        .bind(id(1).to_string())
+        .bind(id(10).to_string())
+        .bind(id(1002).to_string())
+        .execute(&mut *checklist_tx)
+        .await
+        .unwrap();
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM finance.runtime_checklist($1,$2,$3,$4,$5,$6)",
+    )
+    .bind(id(1))
+    .bind(id(10))
+    .bind(id(1001))
+    .bind(Uuid::parse_str(waiver_dossier).unwrap())
+    .bind(Uuid::nil())
+    .bind(10_i32)
+    .fetch_one(&mut *checklist_tx)
+    .await
+    .unwrap();
+    assert_eq!(count, 0);
+    checklist_tx.rollback().await.unwrap();
     let (checklist_status, checklist) = request(
         &app,
         &format!("/v1/dossiers/{waiver_dossier}/checklist?limit=10"),
