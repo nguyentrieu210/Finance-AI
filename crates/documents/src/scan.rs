@@ -6,12 +6,12 @@ use finance_shared::{
     upload_contract::{DEFAULT_MAX_FILE_BYTES, Sha256Digest},
 };
 use sqlx::PgPool;
-use uuid::Uuid;
 use std::{
     io::{Read, Write},
     net::{IpAddr, SocketAddr, TcpStream},
     time::{Duration, Instant},
 };
+use uuid::Uuid;
 
 const MAX_RESPONSE: usize = 512;
 const CHUNK_SIZE: usize = 8192;
@@ -216,7 +216,6 @@ mod tests {
         );
     }
 }
-
 
 #[derive(Debug)]
 pub enum PersistError {

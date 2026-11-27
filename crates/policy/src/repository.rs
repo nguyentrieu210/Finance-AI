@@ -62,14 +62,21 @@ pub async fn get(
     proof: &AuthenticatedCommand,
     id: Uuid,
 ) -> Result<Option<PublishedPolicy>, AppError> {
-    if id.is_nil() { return Err(AppError::InvalidInput); }
-    let (t,c,_) = binding(proof)?;
-    let mut tx=scoped_transaction(pool,proof.context()).await?;
-    require_role(&mut tx,proof.context(),Role::Requester).await.map_err(|e|match e{GrantError::Forbidden=>AppError::Forbidden,GrantError::Database(e)=>AppError::Database(e)})?;
-    recheck_authenticated(&mut tx,Some(proof)).await?;
+    if id.is_nil() {
+        return Err(AppError::InvalidInput);
+    }
+    let (t, c, _) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(|e| match e {
+            GrantError::Forbidden => AppError::Forbidden,
+            GrantError::Database(e) => AppError::Database(e),
+        })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
     let row=sqlx::query_as::<_,PublishedPolicy>("SELECT id,company_id,1::bigint AS version,dossier_kind||' policy' AS name,state,to_char(effective_from,'YYYY-MM-DD')||'T00:00:00Z' AS effective_from,to_char(effective_until,'YYYY-MM-DD')||'T00:00:00Z' AS effective_to,encode(source_digest,'hex') AS hash FROM finance.policy_version WHERE tenant_id=$1 AND company_id=$2 AND state='PUBLISHED' AND id=$3")
         .bind(t).bind(c).bind(id).fetch_optional(&mut *tx).await?;
-    recheck_authenticated(&mut tx,Some(proof)).await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(row)
 }

@@ -81,10 +81,7 @@ fn source_path_valid(path: &str) -> bool {
     !path.is_empty()
         && path.len() <= 128
         && path.split('.').all(|part| {
-            !part.is_empty()
-                && part
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            !part.is_empty() && part.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
         })
 }
 

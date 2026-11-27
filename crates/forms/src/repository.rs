@@ -88,7 +88,10 @@ fn schema(fields: &[DraftField], version: i64) -> Result<Value, Error> {
                 return Err(Error::InvalidInput);
             }
         }
-        if known.insert(field.path.clone(), field.field_type.clone()).is_some() {
+        if known
+            .insert(field.path.clone(), field.field_type.clone())
+            .is_some()
+        {
             return Err(Error::InvalidInput);
         }
         let layout = match (field.layout_row, field.layout_column, field.layout_width) {
@@ -126,12 +129,10 @@ async fn allowed_read(
     tx: &mut Transaction<'_, Postgres>,
     proof: &AuthenticatedCommand,
 ) -> Result<(), Error> {
-    let roles = lock_roles(tx, proof.context())
-        .await
-        .map_err(|e| match e {
-            GrantError::Forbidden => Error::Forbidden,
-            GrantError::Database(e) => Error::Database(e),
-        })?;
+    let roles = lock_roles(tx, proof.context()).await.map_err(|e| match e {
+        GrantError::Forbidden => Error::Forbidden,
+        GrantError::Database(e) => Error::Database(e),
+    })?;
     if roles.contains(&Role::Requester) || roles.contains(&Role::PolicyAdmin) {
         Ok(())
     } else {
@@ -188,11 +189,7 @@ pub async fn create(
     }
     let schema = schema(fields, 1)?;
     let payload = schema.to_string();
-    let hash = request_hash(&[
-        policy.as_bytes(),
-        name.as_bytes(),
-        payload.as_bytes(),
-    ]);
+    let hash = request_hash(&[policy.as_bytes(), name.as_bytes(), payload.as_bytes()]);
     let (t, c, a) = binding(proof)?;
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     require_role(&mut tx, proof.context(), Role::PolicyAdmin)
@@ -340,14 +337,14 @@ pub async fn list(
     if !(1..=100).contains(&limit) {
         return Err(Error::InvalidInput);
     }
-    let (t,c,_) = binding(proof)?;
-    let mut tx=scoped_transaction(pool,proof.context()).await?;
-    allowed_read(&mut tx,proof).await?;
-    recheck_authenticated(&mut tx,Some(proof)).await?;
+    let (t, c, _) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    allowed_read(&mut tx, proof).await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
     let rows=sqlx::query_as::<_,Form>(&format!(
         "SELECT id,policy_id,version,name,schema_hash,state FROM (SELECT DISTINCT ON(form_id) form_id AS id,policy_id,version,name,encode(sha256(convert_to(schema_json::text,'UTF8')),'hex') AS schema_hash,CASE WHEN state='REVOKED' THEN 'RETIRED' ELSE state END AS state FROM finance.form_version WHERE tenant_id=$1 AND company_id=$2 AND form_id>$3 ORDER BY form_id,version DESC) f ORDER BY id LIMIT $4"
     )).bind(t).bind(c).bind(after).bind(limit).fetch_all(&mut *tx).await?;
-    recheck_authenticated(&mut tx,Some(proof)).await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(rows)
 }
@@ -357,15 +354,17 @@ pub async fn get(
     proof: &AuthenticatedCommand,
     form: Uuid,
 ) -> Result<Option<Form>, Error> {
-    if form.is_nil() { return Err(Error::InvalidInput); }
-    let (t,c,_) = binding(proof)?;
-    let mut tx=scoped_transaction(pool,proof.context()).await?;
-    allowed_read(&mut tx,proof).await?;
-    recheck_authenticated(&mut tx,Some(proof)).await?;
+    if form.is_nil() {
+        return Err(Error::InvalidInput);
+    }
+    let (t, c, _) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    allowed_read(&mut tx, proof).await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
     let row=sqlx::query_as::<_,Form>(&format!(
         "{SELECT_FORM} WHERE tenant_id=$1 AND company_id=$2 AND form_id=$3 ORDER BY version DESC LIMIT 1"
     )).bind(t).bind(c).bind(form).fetch_optional(&mut *tx).await?;
-    recheck_authenticated(&mut tx,Some(proof)).await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(row)
 }
