@@ -133,11 +133,12 @@ pub async fn read_page(
     };
     let (t, c, a): (Uuid, Uuid, Uuid) = (scope.tenant.into(), scope.company.into(), actor.into());
     let mut tx = scoped_transaction(pool, ctx).await?;
-    let allowed:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM finance.membership m JOIN finance.identity_subject i ON (i.tenant_id,i.id)=(m.tenant_id,m.actor_id) JOIN finance.company c ON (c.tenant_id,c.id)=(m.tenant_id,m.company_id) JOIN finance.tenant t ON t.id=m.tenant_id WHERE m.tenant_id=$1 AND m.company_id=$2 AND m.actor_id=$3 AND m.role='AUDITOR' AND m.active AND i.active AND c.active AND t.active AND m.valid_from<=statement_timestamp() AND (m.valid_until IS NULL OR m.valid_until>statement_timestamp()))")
-        .bind(t).bind(c).bind(a).fetch_one(&mut *tx).await?;
-    if !allowed {
-        return Err(Error::Forbidden);
-    }
+    finance_permissions::require_role(&mut tx, ctx, finance_permissions::Role::Auditor)
+        .await
+        .map_err(|e| match e {
+            finance_permissions::GrantError::Forbidden => Error::Forbidden,
+            finance_permissions::GrantError::Database(e) => Error::Database(e),
+        })?;
     let sql = format!(
         "SELECT {EVENT_FIELDS} FROM finance.audit_event WHERE tenant_id=$1 AND company_id=$2 AND sequence>$3 AND action<>'AUDIT_READ' ORDER BY sequence LIMIT $4"
     );

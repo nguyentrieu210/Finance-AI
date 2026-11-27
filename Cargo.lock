@@ -423,6 +423,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "finance-core",
+ "finance-permissions",
  "finance-shared",
  "sha2",
  "sqlx",
@@ -435,6 +436,7 @@ name = "finance-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "finance-permissions",
  "finance-shared",
  "sha2",
  "sqlx",
@@ -464,6 +466,15 @@ version = "0.1.0"
 dependencies = [
  "sqlx",
  "tokio",
+]
+
+[[package]]
+name = "finance-permissions"
+version = "0.1.0"
+dependencies = [
+ "finance-shared",
+ "sqlx",
+ "uuid",
 ]
 
 [[package]]

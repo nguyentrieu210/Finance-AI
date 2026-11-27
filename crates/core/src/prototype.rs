@@ -84,7 +84,7 @@ fn hash_command(input: &CreateUnit<'_>) -> Vec<u8> {
     hash.finalize().to_vec()
 }
 /// This is an internal prototype operation, not an OpenAPI handler. Trusted context only.
-/// Role revocation races, hierarchy cycle updates, full ABAC and production roles are later work.
+/// Hierarchy cycle updates, full ABAC and production roles are later work.
 pub async fn create_unit(
     pool: &PgPool,
     context: &CommandContext,
@@ -122,11 +122,12 @@ pub async fn create_unit(
         .bind(lock)
         .execute(&mut *tx)
         .await?;
-    let allowed:bool=sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM finance.membership m JOIN finance.company c ON (c.tenant_id,c.id)=(m.tenant_id,m.company_id) JOIN finance.tenant t ON t.id=m.tenant_id JOIN finance.identity_subject i ON (i.tenant_id,i.id)=(m.tenant_id,m.actor_id) WHERE m.tenant_id=$1 AND m.company_id=$2 AND m.actor_id=$3 AND m.role='ORG_ADMIN' AND m.active AND c.active AND t.active AND i.active AND m.valid_from<=statement_timestamp() AND (m.valid_until IS NULL OR m.valid_until>statement_timestamp()))")
-        .bind(tenant).bind(company).bind(actor).fetch_one(&mut *tx).await?;
-    if !allowed {
-        return Err(Error::Forbidden);
-    }
+    finance_permissions::require_role(&mut tx, context, finance_permissions::Role::OrgAdmin)
+        .await
+        .map_err(|e| match e {
+            finance_permissions::GrantError::Forbidden => Error::Forbidden,
+            finance_permissions::GrantError::Database(e) => Error::Database(e),
+        })?;
     let request_hash = hash_command(input);
     let prior:Option<(Vec<u8>,Uuid)>=sqlx::query_as("SELECT request_hash,result_id FROM finance.idempotency_record WHERE tenant_id=$1 AND company_id=$2 AND actor_id=$3 AND operation_id='prototype.createOrganizationUnit' AND key=$4")
         .bind(tenant).bind(company).bind(actor).bind(key.as_str()).fetch_optional(&mut *tx).await?;
