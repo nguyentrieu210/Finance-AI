@@ -173,6 +173,39 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(policy["state"], "PUBLISHED");
     assert_eq!(request(&app, "/v1/policies", Some(&auditor)).await.0, StatusCode::FORBIDDEN);
+    let (knowledge_status, hits) = request(
+        &app,
+        "/__diagnostics/knowledge?kind=SETTLEMENT&day=2031-06-01&q=settlement&limit=10",
+        Some(&requester),
+    )
+    .await;
+    assert_eq!(knowledge_status, StatusCode::OK);
+    assert_eq!(hits.as_array().unwrap().len(), 1);
+    assert_eq!(hits[0]["source_page"], 1);
+    assert!(hits[0]["excerpt"].as_str().unwrap().contains("settlement"));
+    assert_eq!(
+        request(
+            &app,
+            "/__diagnostics/knowledge?kind=SETTLEMENT&day=2030-06-01&q=settlement&limit=10",
+            Some(&requester),
+        )
+        .await
+        .1
+        .as_array()
+        .unwrap()
+        .len(),
+        0
+    );
+    assert_eq!(
+        request(
+            &app,
+            "/__diagnostics/knowledge?kind=SETTLEMENT&day=2031-06-01&q=settlement",
+            Some(&auditor),
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
     let uri = "/v1/organizations?limit=1";
     assert_eq!(request(&app, uri, None).await.0, StatusCode::UNAUTHORIZED);
     assert_eq!(

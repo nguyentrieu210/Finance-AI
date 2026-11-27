@@ -35,3 +35,25 @@ INSERT INTO finance.financial_resource(tenant_id,company_id,id,currency,cap,cons
 -- One non-overlapping PUBLISHED policy for runtime read tests (SETTLEMENT only).
 INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,checker_id,state,effective_from,effective_until,source_digest,published_at) VALUES
 ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001600','SETTLEMENT','00000000-0000-0000-0000-0000000003e8','00000000-0000-0000-0000-0000000003e9','PUBLISHED','2026-01-01','2030-01-01',decode(repeat('16',32),'hex'),now());
+
+-- E17 operational diagnostic fixture: insert content while DRAFT, then freeze as PUBLISHED.
+INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,effective_from,effective_until,source_digest)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001700','SETTLEMENT','00000000-0000-0000-0000-0000000003e8',
+'2031-01-01','2032-01-01',decode(repeat('17',32),'hex'));
+INSERT INTO finance.policy_clause(tenant_id,company_id,policy_id,id,clause_key,excerpt,source_digest,source_page)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001700','00000000-0000-0000-0000-000000001701','DIAG',
+'Synthetic settlement retrieval clause',decode(repeat('17',32),'hex'),1);
+INSERT INTO finance.checklist_item(tenant_id,company_id,policy_id,id,clause_id,document_kind,mandatory)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001700','00000000-0000-0000-0000-000000001703',
+'00000000-0000-0000-0000-000000001701','SETTLEMENT_RECEIPT',true);
+INSERT INTO finance.knowledge_chunk(tenant_id,company_id,policy_id,clause_id,id,ordinal,source_start,source_end,excerpt,model_digest,embedding)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001700','00000000-0000-0000-0000-000000001701',
+'00000000-0000-0000-0000-000000001702',0,0,37,'Synthetic settlement retrieval clause',
+decode(repeat('33',32),'hex'),'[1,0,0]'::finance.vector);
+UPDATE finance.policy_version
+SET state='PUBLISHED',checker_id='00000000-0000-0000-0000-0000000003e9',published_at=clock_timestamp()
+WHERE id='00000000-0000-0000-0000-000000001700';

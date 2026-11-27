@@ -76,7 +76,7 @@ pub async fn retrieve(
          JOIN finance.policy_clause cl ON (cl.tenant_id,cl.company_id,cl.policy_id,cl.id)=(x.tenant_id,x.company_id,x.policy_id,x.clause_id)
          JOIN finance.policy_version p ON (p.tenant_id,p.company_id,p.id)=(x.tenant_id,x.company_id,x.policy_id)
          WHERE x.tenant_id=$1 AND x.company_id=$2 AND p.state='PUBLISHED' AND p.dossier_kind=$3
-         AND p.effective_from<=$4 AND $4<p.effective_until AND x.model_digest=decode($5,'hex')
+         AND p.effective_from<=$4::text::date AND $4::text::date<p.effective_until AND x.model_digest=decode($5,'hex')
          ORDER BY (position(lower($6) in lower(x.excerpt))>0) DESC,
                   x.embedding OPERATOR(finance.<=>) $7::text::finance.vector,x.id
          LIMIT $8",
@@ -84,7 +84,7 @@ pub async fn retrieve(
     .bind(t)
     .bind(c)
     .bind(kind)
-    .bind(day)
+    .bind(day.to_string())
     .bind(model_sha256)
     .bind(query)
     .bind(vector)

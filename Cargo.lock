@@ -442,6 +442,7 @@ dependencies = [
  "finance-documents",
  "finance-financial",
  "finance-identity",
+ "finance-knowledge",
  "finance-organization",
  "finance-policy",
  "finance-shared",
@@ -602,7 +603,13 @@ dependencies = [
 name = "finance-knowledge"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "finance-core",
+ "finance-identity",
+ "finance-permissions",
  "finance-shared",
+ "serde",
+ "sqlx",
  "uuid",
 ]
 

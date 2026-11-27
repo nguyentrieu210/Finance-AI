@@ -30,6 +30,7 @@ mod checks;
 mod dashboard;
 mod documents;
 mod dossiers;
+mod knowledge;
 mod policies;
 mod references;
 
@@ -276,6 +277,7 @@ pub fn router(state: OrganizationState) -> Router {
         .route("/v1/dossiers/{dossier_id}/checks", get(checks::list))
         .route("/v1/audit", get(audit::list))
         .route("/v1/dashboard", get(dashboard::get))
+        .route("/__diagnostics/knowledge", get(knowledge::search))
         .route("/v1/policies", get(policies::list))
         .route("/v1/policies/{item_id}", get(policies::get))
         .route("/v1/contracts", get(references::contracts))
