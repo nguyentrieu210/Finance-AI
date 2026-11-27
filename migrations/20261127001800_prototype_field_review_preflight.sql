@@ -15,7 +15,7 @@ ALTER TABLE finance.review_assignment ENABLE ROW LEVEL SECURITY;
 ALTER TABLE finance.review_assignment FORCE ROW LEVEL SECURITY;
 CREATE TRIGGER review_assignment_immutable BEFORE UPDATE OR DELETE ON finance.review_assignment FOR EACH ROW EXECUTE FUNCTION finance.reject_synthetic_document_mutation();
 CREATE FUNCTION finance.prototype_assign_candidate_review(t uuid,c uuid,d uuid,r uuid,a uuid,checker uuid)
-RETURNS void LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog AS $
+RETURNS void LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog AS $$
 DECLARE ds finance.dossier%ROWTYPE;
 BEGIN
  IF current_setting('transaction_isolation')<>'read committed' OR a IS NULL OR checker IS NULL OR a=checker
@@ -27,7 +27,7 @@ BEGIN
  OR NOT EXISTS(SELECT 1 FROM finance.membership WHERE tenant_id=t AND company_id=c AND actor_id=checker AND role='FINANCE_APPROVER' AND active AND valid_from<=clock_timestamp() AND (valid_until IS NULL OR valid_until>clock_timestamp()))
  THEN RAISE EXCEPTION 'review assignment authority' USING ERRCODE='23514'; END IF;
  INSERT INTO finance.review_assignment(tenant_id,company_id,dossier_id,revision_id,accountant_id,assigned_by) VALUES(t,c,d,r,a,checker);
-END $;
+END $$;
 REVOKE ALL ON FUNCTION finance.prototype_assign_candidate_review(uuid,uuid,uuid,uuid,uuid,uuid) FROM PUBLIC;
 CREATE TABLE finance.field_decision (
  tenant_id uuid NOT NULL,company_id uuid NOT NULL,id uuid NOT NULL,

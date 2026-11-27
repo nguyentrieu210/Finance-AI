@@ -16,7 +16,11 @@ port="$(docker port "$cid" 5432/tcp)"
 [[ "$port" =~ ^127\.0\.0\.1:[0-9]+$ ]]
 url="postgresql://finance_migrator:$password@$port/finance_prototype?sslmode=disable"
 unset password
-FINANCE_MIGRATION_DATABASE_URL="$url" "$migrator" --apply
+if ! FINANCE_MIGRATION_DATABASE_URL="$url" "$migrator" --apply; then
+  # Disposable synthetic DB only; migration diagnostics contain no real records.
+  docker logs "$cid" 2>&1 | grep -E 'ERROR:|HINT:|DETAIL:|LINE [0-9]+:' | tail -20 >&2 || true
+  exit 1
+fi
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/prototype_fixture.sql
 runtime_pw="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
 # Ephemeral non-privileged login in this disposable DB. Never share migration credentials.

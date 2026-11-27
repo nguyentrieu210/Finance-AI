@@ -16,7 +16,11 @@ port="$(docker port "$cid" 5432/tcp)"
 url="postgresql://finance_migrator:$password@$port/finance_ocr?sslmode=disable"
 unset password
 cargo build --locked -p finance-migrate
-FINANCE_MIGRATION_DATABASE_URL="$url" target/debug/finance-migrate --apply
+if ! FINANCE_MIGRATION_DATABASE_URL="$url" target/debug/finance-migrate --apply; then
+  # Disposable synthetic DB only; migration diagnostics contain no real records.
+  docker logs "$cid" 2>&1 | grep -E 'ERROR:|HINT:|DETAIL:|LINE [0-9]+:' | tail -20 >&2 || true
+  exit 1
+fi
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_ocr -v ON_ERROR_STOP=1 -f - < scripts/prototype_fixture.sql
 pw="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
 printf "CREATE ROLE finance_ocr_test_worker LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD '%s';\nGRANT finance_job_worker TO finance_ocr_test_worker;\nINSERT INTO finance.worker_scope(login_name,tenant_id,company_id) VALUES ('finance_ocr_test_worker','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a');\n" "$pw" | docker exec -i "$cid" psql -X -U finance_migrator -d finance_ocr -v ON_ERROR_STOP=1 >/dev/null

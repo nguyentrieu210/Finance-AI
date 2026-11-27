@@ -21,7 +21,11 @@ unset password
 # Require explicit command and credentials, then run twice to prove SQLx ledger replay.
 if "$migrator"; then echo 'migrator accepted missing --apply' >&2; exit 1; fi
 if env -u FINANCE_MIGRATION_DATABASE_URL "$migrator" --apply; then echo 'migrator accepted missing URL' >&2; exit 1; fi
-FINANCE_MIGRATION_DATABASE_URL="$url" "$migrator" --apply
+if ! FINANCE_MIGRATION_DATABASE_URL="$url" "$migrator" --apply; then
+  # Disposable synthetic DB only; migration diagnostics contain no real records.
+  docker logs "$cid" 2>&1 | grep -E 'ERROR:|HINT:|DETAIL:|LINE [0-9]+:' | tail -20 >&2 || true
+  exit 1
+fi
 FINANCE_MIGRATION_DATABASE_URL="$url" "$migrator" --apply
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_baseline -v ON_ERROR_STOP=1 <<'SQL'
 CREATE ROLE finance_probe NOLOGIN;
