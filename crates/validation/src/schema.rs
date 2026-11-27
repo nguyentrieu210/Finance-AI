@@ -28,7 +28,7 @@ pub fn valid_date(value: &str) -> bool {
     let year = value[..4].parse::<u32>().unwrap_or(0);
     let month = value[5..7].parse::<u32>().unwrap_or(0);
     let day = value[8..].parse::<u32>().unwrap_or(0);
-    let leap = year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
     let max = match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
