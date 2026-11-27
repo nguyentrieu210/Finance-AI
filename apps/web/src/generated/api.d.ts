@@ -14,7 +14,10 @@ export interface paths {
         /** listDossiers */
         get: operations["listDossiers"];
         put?: never;
-        /** createDossier */
+        /**
+         * createDossier
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["createDossier"];
         delete?: never;
         options?: never;
@@ -65,7 +68,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** readyDossier */
+        /**
+         * readyDossier
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["readyDossier"];
         delete?: never;
         options?: never;
@@ -82,7 +88,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** reopenDossier */
+        /**
+         * reopenDossier
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["reopenDossier"];
         delete?: never;
         options?: never;
@@ -99,7 +108,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** cancelDossier */
+        /**
+         * cancelDossier
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["cancelDossier"];
         delete?: never;
         options?: never;
@@ -116,7 +128,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** reviseDossier */
+        /**
+         * reviseDossier
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["reviseDossier"];
         delete?: never;
         options?: never;
@@ -133,7 +148,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** begin_reviewDossier */
+        /**
+         * begin_reviewDossier
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["begin_reviewDossier"];
         delete?: never;
         options?: never;
@@ -151,7 +169,10 @@ export interface paths {
         /** listDocuments */
         get: operations["listDocuments"];
         put?: never;
-        /** createDocument */
+        /**
+         * createDocument
+         * @description Reserve quota and create stable PENDING_UPLOAD intent metadata, without a signed URL. Reauthorize before replay.
+         */
         post: operations["createDocument"];
         delete?: never;
         options?: never;
@@ -168,7 +189,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** finalizeDocument */
+        /**
+         * finalizeDocument
+         * @description Verify exact immutable staged object bytes and current grant generation, expiry, parent revision and quota; attach quarantine object and enqueue scan atomically. No client claim is proof.
+         */
         post: operations["finalizeDocument"];
         delete?: never;
         options?: never;
@@ -185,7 +209,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** supersedeDocument */
+        /**
+         * supersedeDocument
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["supersedeDocument"];
         delete?: never;
         options?: never;
@@ -236,7 +263,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** rerunOcr */
+        /**
+         * rerunOcr
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["rerunOcr"];
         delete?: never;
         options?: never;
@@ -253,7 +283,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** classifyDocument */
+        /**
+         * classifyDocument
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["classifyDocument"];
         delete?: never;
         options?: never;
@@ -270,7 +303,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** extractDocument */
+        /**
+         * extractDocument
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["extractDocument"];
         delete?: never;
         options?: never;
@@ -304,7 +340,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** decideField */
+        /**
+         * decideField
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["decideField"];
         delete?: never;
         options?: never;
@@ -322,7 +361,10 @@ export interface paths {
         /** listMatches */
         get: operations["listMatches"];
         put?: never;
-        /** confirmMatch */
+        /**
+         * confirmMatch
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["confirmMatch"];
         delete?: never;
         options?: never;
@@ -357,7 +399,10 @@ export interface paths {
         /** listChecks */
         get: operations["listChecks"];
         put?: never;
-        /** runChecks */
+        /**
+         * runChecks
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["runChecks"];
         delete?: never;
         options?: never;
@@ -392,7 +437,10 @@ export interface paths {
         /** listWaivers */
         get: operations["listWaivers"];
         put?: never;
-        /** requestWaiver */
+        /**
+         * requestWaiver
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["requestWaiver"];
         delete?: never;
         options?: never;
@@ -409,7 +457,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** decideWaiver */
+        /**
+         * decideWaiver
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["decideWaiver"];
         delete?: never;
         options?: never;
@@ -427,7 +478,10 @@ export interface paths {
         /** listExports */
         get: operations["listExports"];
         put?: never;
-        /** createExport */
+        /**
+         * createExport
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["createExport"];
         delete?: never;
         options?: never;
@@ -462,7 +516,10 @@ export interface paths {
         /** listHandoffs */
         get: operations["listHandoffs"];
         put?: never;
-        /** createHandoff */
+        /**
+         * createHandoff
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["createHandoff"];
         delete?: never;
         options?: never;
@@ -480,7 +537,10 @@ export interface paths {
         /** getReview */
         get: operations["getReview"];
         put?: never;
-        /** decideReview */
+        /**
+         * decideReview
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["decideReview"];
         delete?: never;
         options?: never;
@@ -549,7 +609,10 @@ export interface paths {
         /** listOrganizations */
         get: operations["listOrganizations"];
         put?: never;
-        /** createOrganization */
+        /**
+         * createOrganization
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["createOrganization"];
         delete?: never;
         options?: never;
@@ -584,7 +647,10 @@ export interface paths {
         /** listMemberships */
         get: operations["listMemberships"];
         put?: never;
-        /** createMembership */
+        /**
+         * createMembership
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["createMembership"];
         delete?: never;
         options?: never;
@@ -619,7 +685,10 @@ export interface paths {
         /** listPolicies */
         get: operations["listPolicies"];
         put?: never;
-        /** createPolicy */
+        /**
+         * createPolicy
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["createPolicy"];
         delete?: never;
         options?: never;
@@ -654,7 +723,10 @@ export interface paths {
         /** listRules */
         get: operations["listRules"];
         put?: never;
-        /** createRule */
+        /**
+         * createRule
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["createRule"];
         delete?: never;
         options?: never;
@@ -689,7 +761,10 @@ export interface paths {
         /** listForms */
         get: operations["listForms"];
         put?: never;
-        /** createForm */
+        /**
+         * createForm
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["createForm"];
         delete?: never;
         options?: never;
@@ -724,7 +799,10 @@ export interface paths {
         /** listTemplates */
         get: operations["listTemplates"];
         put?: never;
-        /** createTemplate */
+        /**
+         * createTemplate
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["createTemplate"];
         delete?: never;
         options?: never;
@@ -759,7 +837,10 @@ export interface paths {
         /** listWorkflows */
         get: operations["listWorkflows"];
         put?: never;
-        /** createWorkflow */
+        /**
+         * createWorkflow
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["createWorkflow"];
         delete?: never;
         options?: never;
@@ -794,7 +875,10 @@ export interface paths {
         /** listReferences */
         get: operations["listReferences"];
         put?: never;
-        /** createReference */
+        /**
+         * createReference
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["createReference"];
         delete?: never;
         options?: never;
@@ -896,7 +980,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** revokeMembership */
+        /**
+         * revokeMembership
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["revokeMembership"];
         delete?: never;
         options?: never;
@@ -913,7 +1000,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** submitPolicy */
+        /**
+         * submitPolicy
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["submitPolicy"];
         delete?: never;
         options?: never;
@@ -930,7 +1020,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** publishPolicy */
+        /**
+         * publishPolicy
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["publishPolicy"];
         delete?: never;
         options?: never;
@@ -947,7 +1040,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** revokePolicy */
+        /**
+         * revokePolicy
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["revokePolicy"];
         delete?: never;
         options?: never;
@@ -964,7 +1060,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** retirePolicy */
+        /**
+         * retirePolicy
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["retirePolicy"];
         delete?: never;
         options?: never;
@@ -981,7 +1080,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** simulateRule */
+        /**
+         * simulateRule
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["simulateRule"];
         delete?: never;
         options?: never;
@@ -1015,7 +1117,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** previewTemplate */
+        /**
+         * previewTemplate
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["previewTemplate"];
         delete?: never;
         options?: never;
@@ -1032,7 +1137,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** verifyReference */
+        /**
+         * verifyReference
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["verifyReference"];
         delete?: never;
         options?: never;
@@ -1049,7 +1157,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** resolveRisk */
+        /**
+         * resolveRisk
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["resolveRisk"];
         delete?: never;
         options?: never;
@@ -1066,7 +1177,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** resolveReconciliation */
+        /**
+         * resolveReconciliation
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["resolveReconciliation"];
         delete?: never;
         options?: never;
@@ -1168,7 +1282,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** recordPaymentObservation */
+        /**
+         * recordPaymentObservation
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["recordPaymentObservation"];
         delete?: never;
         options?: never;
@@ -1185,7 +1302,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** revisePolicy */
+        /**
+         * revisePolicy
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["revisePolicy"];
         delete?: never;
         options?: never;
@@ -1202,7 +1322,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** reviseRule */
+        /**
+         * reviseRule
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["reviseRule"];
         delete?: never;
         options?: never;
@@ -1219,7 +1342,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** reviseForm */
+        /**
+         * reviseForm
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["reviseForm"];
         delete?: never;
         options?: never;
@@ -1236,7 +1362,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** reviseWorkflow */
+        /**
+         * reviseWorkflow
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["reviseWorkflow"];
         delete?: never;
         options?: never;
@@ -1253,7 +1382,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** reviseTemplate */
+        /**
+         * reviseTemplate
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["reviseTemplate"];
         delete?: never;
         options?: never;
@@ -1270,8 +1402,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** acknowledgeWarning */
+        /**
+         * acknowledgeWarning
+         * @description Reauthorize before replay; idempotency receipt is immutable and scoped.
+         */
         post: operations["acknowledgeWarning"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/dossiers/{dossier_id}/documents/{document_id}/upload-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue or refresh a fenced upload grant
+         * @description New key and current parent version rotate staging generation. Replayed expired or superseded grant returns 409 UPLOAD_GRANT_INACTIVE; no replacement URL is issued by replay.
+         */
+        post: operations["issueUploadGrant"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1329,7 +1484,7 @@ export interface components {
             file_name: string;
             sha256: string;
             /** @enum {string} */
-            state: "QUARANTINED" | "CLEAN" | "REJECTED" | "PROCESSING" | "EXTRACTED" | "FAILED";
+            state: "PENDING_UPLOAD" | "QUARANTINED" | "CLEAN" | "REJECTED" | "PROCESSING" | "EXTRACTED" | "FAILED";
             revision: number;
         };
         Field: {
@@ -1660,11 +1815,20 @@ export interface components {
         UploadIntent: {
             /** Format: uuid */
             document_id: string;
+            required_sha256: string;
+            /** @enum {string} */
+            state: "PENDING_UPLOAD";
+        };
+        UploadGrant: {
+            /** Format: uuid */
+            document_id: string;
+            generation: number;
             /** Format: uri */
             upload_url: string;
             /** Format: date-time */
             expires_at: string;
-            required_sha256: string;
+            content_type: string;
+            checksum_sha256_base64: string;
         };
         node: {
             ref: string;
@@ -1721,6 +1885,14 @@ export interface operations {
             query?: {
                 cursor?: string;
                 limit?: number;
+                /** @description Filter within verified actor scope; never grants additional access. */
+                company_id?: string;
+                /** @description Filter within verified actor scope; never grants additional access. */
+                kind?: "PAYMENT" | "ADVANCE" | "SETTLEMENT";
+                /** @description Filter within verified actor scope; never grants additional access. */
+                status?: "DRAFT" | "PROCESSING" | "NEEDS_INPUT" | "REVIEWABLE" | "READY" | "EXPORTED" | "HANDED_OFF" | "ACCOUNTING_REVIEW" | "ACCEPTED" | "RETURNED" | "CANCELLED";
+                updated_from?: string;
+                updated_to?: string;
             };
             header?: never;
             path?: never;
@@ -1818,6 +1990,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
             };
             path?: never;
@@ -1837,6 +2010,8 @@ export interface operations {
             /** @description Success */
             201: {
                 headers: {
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -1931,8 +2106,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2027,8 +2202,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2113,8 +2286,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -2133,8 +2308,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2219,8 +2394,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -2239,8 +2416,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2325,8 +2502,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -2345,8 +2524,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2431,8 +2610,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -2451,8 +2632,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2537,8 +2718,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -2557,8 +2740,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2656,8 +2839,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2745,8 +2926,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -2756,8 +2939,11 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @description Display metadata only; never a storage path. */
                     file_name: string;
-                    mime: string;
+                    /** @enum {string} */
+                    mime: "application/pdf" | "image/jpeg" | "image/png" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                    /** @description Server applies configured quotas; 25 MiB/file default. */
                     bytes: number;
                     sha256: string;
                     kind: string;
@@ -2768,8 +2954,8 @@ export interface operations {
             /** @description Success */
             201: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2854,8 +3040,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -2867,6 +3055,7 @@ export interface operations {
             content: {
                 "application/json": {
                     sha256: string;
+                    generation: number;
                 };
             };
         };
@@ -2874,8 +3063,8 @@ export interface operations {
             /** @description Success */
             202: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2918,7 +3107,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Conflict or stale version */
+            /** @description Conflict: stale parent version, idempotency mismatch, expired/superseded grant or closed intent. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2960,8 +3149,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -2982,8 +3173,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3079,8 +3270,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3175,8 +3364,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3261,8 +3448,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -3281,8 +3470,8 @@ export interface operations {
             /** @description Success */
             202: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3367,8 +3556,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -3387,8 +3578,8 @@ export interface operations {
             /** @description Success */
             202: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3473,8 +3664,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -3493,8 +3686,8 @@ export interface operations {
             /** @description Success */
             202: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3592,8 +3785,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3681,8 +3872,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -3704,8 +3897,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3803,8 +3996,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3892,8 +4083,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -3915,8 +4108,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4014,8 +4207,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4116,8 +4307,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4205,8 +4394,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -4225,8 +4416,8 @@ export interface operations {
             /** @description Success */
             202: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4324,8 +4515,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4426,8 +4615,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4515,8 +4702,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -4537,8 +4726,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4623,8 +4812,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -4648,8 +4839,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4747,8 +4938,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4836,8 +5025,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -4857,8 +5048,8 @@ export interface operations {
             /** @description Success */
             202: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4954,8 +5145,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -5053,8 +5242,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -5142,8 +5329,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -5166,8 +5355,8 @@ export interface operations {
             /** @description Success */
             201: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -5262,8 +5451,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -5348,8 +5535,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -5372,8 +5561,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -5566,8 +5755,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -5662,8 +5849,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -5846,6 +6031,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
             };
             path?: never;
@@ -5867,6 +6053,8 @@ export interface operations {
             /** @description Success */
             201: {
                 headers: {
+                    /** @description Current organization aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -5961,8 +6149,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current organization aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -6145,6 +6333,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
             };
             path?: never;
@@ -6165,6 +6354,8 @@ export interface operations {
             /** @description Success */
             201: {
                 headers: {
+                    /** @description Current membership aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -6259,8 +6450,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current membership aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -6443,6 +6634,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
             };
             path?: never;
@@ -6461,6 +6653,8 @@ export interface operations {
             /** @description Success */
             201: {
                 headers: {
+                    /** @description Current policy aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -6555,8 +6749,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current policy aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -6739,6 +6933,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
             };
             path?: never;
@@ -6758,6 +6953,8 @@ export interface operations {
             /** @description Success */
             201: {
                 headers: {
+                    /** @description Current rule aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -6852,8 +7049,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current rule aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7036,6 +7233,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
             };
             path?: never;
@@ -7055,6 +7253,8 @@ export interface operations {
             /** @description Success */
             201: {
                 headers: {
+                    /** @description Current form aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7149,8 +7349,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current form aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7333,6 +7533,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
             };
             path?: never;
@@ -7355,6 +7556,8 @@ export interface operations {
             /** @description Success */
             201: {
                 headers: {
+                    /** @description Current template aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7449,8 +7652,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current template aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7633,6 +7836,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
             };
             path?: never;
@@ -7652,6 +7856,8 @@ export interface operations {
             /** @description Success */
             201: {
                 headers: {
+                    /** @description Current workflow aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7746,8 +7952,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current workflow aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7930,6 +8136,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
             };
             path?: never;
@@ -8047,8 +8254,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current reference aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -8241,8 +8448,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current risk aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -8435,8 +8642,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current reconciliation aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -8521,8 +8728,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected membership aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -8540,8 +8749,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current membership aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -8626,8 +8835,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected policy aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -8645,8 +8856,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current policy aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -8731,8 +8942,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected policy aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -8752,8 +8965,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current policy aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -8838,8 +9051,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected policy aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -8857,8 +9072,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current policy aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -8943,8 +9158,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected policy aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -8962,8 +9179,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current policy aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -9048,8 +9265,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected rule aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -9068,8 +9287,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current rule aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -9164,8 +9383,6 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -9250,8 +9467,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected template aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -9270,8 +9489,8 @@ export interface operations {
             /** @description Success */
             202: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current template aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -9356,8 +9575,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected reference aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -9376,8 +9597,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current reference aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -9462,8 +9683,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected risk aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -9482,8 +9705,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current risk aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -9568,8 +9791,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected reconciliation aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -9588,8 +9813,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current reconciliation aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -10164,8 +10389,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -10186,8 +10413,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -10272,8 +10499,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected policy aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -10294,8 +10523,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current policy aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -10380,8 +10609,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected rule aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -10401,8 +10632,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current rule aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -10487,8 +10718,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected form aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -10508,8 +10741,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current form aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -10594,8 +10827,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected workflow aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -10615,8 +10850,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current workflow aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -10701,8 +10936,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected template aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 item_id: string;
@@ -10722,8 +10959,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current template aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -10808,8 +11045,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
                 "Idempotency-Key": string;
-                "If-Match": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
             };
             path: {
                 dossier_id: string;
@@ -10829,8 +11068,8 @@ export interface operations {
             /** @description Success */
             200: {
                 headers: {
-                    /** @description Opaque current resource version for versioned resources; absent for non-versioned resources. */
-                    ETag?: string;
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -10874,6 +11113,108 @@ export interface operations {
                 };
             };
             /** @description Conflict or stale version */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Business guard failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    issueUploadGrant: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload returns 409. */
+                "Idempotency-Key": string;
+                /** @description Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400; stale version: 409. */
+                "If-Finance-Version": string;
+            };
+            path: {
+                dossier_id: string;
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    /** @description Current dossier aggregate token after successful operation; clients send it as If-Finance-Version. On idempotent replay returns original receipt token. */
+                    "Finance-Version": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadGrant"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found or out of scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict: stale parent version, key mismatch, or UPLOAD_GRANT_INACTIVE on expired/superseded grant replay. */
             409: {
                 headers: {
                     [name: string]: unknown;

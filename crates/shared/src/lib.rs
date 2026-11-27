@@ -14,3 +14,11 @@ pub const API_LIVENESS: Health = Health {
     status: "alive",
     phase: "foundation",
 };
+
+pub mod contracts;
+pub mod ids;
+pub mod money;
+
+pub mod http_contract;
+
+pub mod upload_contract;

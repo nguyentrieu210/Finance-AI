@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
   title: Finance AI Platform
-  version: 2.0.0-draft
-  description: Typed draft; G01 freeze required. No transfer API. Tenant derived from verified actor; every command checks
-    scoped resource.
+  version: 2.0.0-draft.2
+  description: Typed technical draft; G01 owner approval required. No transfer API. Tenant derived from verified actor; every
+    command checks scoped resource.
 servers:
 - url: https://finance.example.invalid
 security:
@@ -77,6 +77,53 @@ paths:
           minimum: 1
           maximum: 100
           default: 50
+      - name: company_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Filter within verified actor scope; never grants additional access.
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PAYMENT
+          - ADVANCE
+          - SETTLEMENT
+        description: Filter within verified actor scope; never grants additional access.
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - DRAFT
+          - PROCESSING
+          - NEEDS_INPUT
+          - REVIEWABLE
+          - READY
+          - EXPORTED
+          - HANDED_OFF
+          - ACCOUNTING_REVIEW
+          - ACCEPTED
+          - RETURNED
+          - CANCELLED
+        description: Filter within verified actor scope; never grants additional access.
+      - name: updated_from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: updated_to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
       responses:
         '200':
           description: Success
@@ -156,6 +203,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
       responses:
         '201':
           description: Success
@@ -163,6 +213,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Dossier'
+          headers:
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -231,6 +291,7 @@ paths:
               required:
               - company_id
               - kind
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}:
     get:
       operationId: getDossier
@@ -253,10 +314,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Dossier'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: &id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
                 type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -326,10 +392,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Snapshot'
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -399,11 +461,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -412,9 +482,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Dossier'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -476,6 +552,7 @@ paths:
                   format: uuid
               required:
               - check_run_id
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/reopen:
     post:
       operationId: reopenDossier
@@ -497,11 +574,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -510,9 +595,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Dossier'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -568,11 +659,11 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              properties: &id002
-                reason: &id003
+              properties: &id001
+                reason: &id002
                   type: string
                   minLength: 1
-                evidence_ids: &id004
+                evidence_ids: &id003
                   type: array
                   items:
                     type: string
@@ -580,6 +671,7 @@ paths:
               required:
               - reason
               - evidence_ids
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/cancel:
     post:
       operationId: cancelDossier
@@ -601,11 +693,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -614,9 +714,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Dossier'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -672,10 +778,11 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              properties: *id002
+              properties: *id001
               required:
               - reason
               - evidence_ids
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/revise:
     post:
       operationId: reviseDossier
@@ -697,11 +804,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -710,9 +825,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Dossier'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -768,10 +889,11 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              properties: *id002
+              properties: *id001
               required:
               - reason
               - evidence_ids
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/begin-review:
     post:
       operationId: begin_reviewDossier
@@ -793,11 +915,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -806,9 +936,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Dossier'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -864,10 +1000,11 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              properties: *id002
+              properties: *id001
               required:
               - reason
               - evidence_ids
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/documents:
     get:
       operationId: listDocuments
@@ -910,10 +1047,6 @@ paths:
                     type: string
                 required:
                 - items
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -982,11 +1115,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '201':
           description: Success
@@ -995,9 +1136,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/UploadIntent'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -1056,13 +1203,25 @@ paths:
               properties:
                 file_name:
                   type: string
+                  minLength: 1
+                  maxLength: 255
+                  description: Display metadata only; never a storage path.
                 mime:
                   type: string
+                  enum:
+                  - application/pdf
+                  - image/jpeg
+                  - image/png
+                  - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+                  - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
                 bytes:
                   type: integer
                   minimum: 1
+                  maximum: 9007199254740991
+                  description: Server applies configured quotas; 25 MiB/file default.
                 sha256:
                   type: string
+                  pattern: ^[a-f0-9]{64}$
                 kind:
                   type: string
               required:
@@ -1071,6 +1230,8 @@ paths:
               - bytes
               - sha256
               - kind
+      description: Reserve quota and create stable PENDING_UPLOAD intent metadata, without a signed URL. Reauthorize before
+        replay.
   /v1/dossiers/{dossier_id}/documents/{document_id}/finalize:
     post:
       operationId: finalizeDocument
@@ -1098,11 +1259,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '202':
           description: Success
@@ -1111,9 +1280,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Job'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -1139,7 +1314,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Conflict or stale version
+          description: 'Conflict: stale parent version, idempotency mismatch, expired/superseded grant or closed intent.'
           content:
             application/json:
               schema:
@@ -1172,8 +1347,16 @@ paths:
               properties:
                 sha256:
                   type: string
+                  pattern: ^[a-f0-9]{64}$
+                generation: &id010
+                  type: integer
+                  minimum: 1
+                  maximum: 9007199254740991
               required:
               - sha256
+              - generation
+      description: Verify exact immutable staged object bytes and current grant generation, expiry, parent revision and quota;
+        attach quarantine object and enqueue scan atomically. No client claim is proof.
   /v1/dossiers/{dossier_id}/documents/{document_id}/supersede:
     post:
       operationId: supersedeDocument
@@ -1201,11 +1384,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -1214,9 +1405,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Dossier'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -1281,6 +1478,7 @@ paths:
               required:
               - replacement_id
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/documents/{document_id}/download:
     get:
       operationId: downloadDocument
@@ -1308,10 +1506,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Download'
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -1381,10 +1575,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Evidence'
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -1460,11 +1650,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '202':
           description: Success
@@ -1473,9 +1671,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Job'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -1536,6 +1740,7 @@ paths:
                   type: string
               required:
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/documents/{document_id}/classify:
     post:
       operationId: classifyDocument
@@ -1563,11 +1768,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '202':
           description: Success
@@ -1576,9 +1789,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Job'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -1639,6 +1858,7 @@ paths:
                   type: string
               required:
               - kind
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/documents/{document_id}/extract:
     post:
       operationId: extractDocument
@@ -1666,11 +1886,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '202':
           description: Success
@@ -1679,9 +1907,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Job'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -1742,6 +1976,7 @@ paths:
                   type: string
               required:
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/fields:
     get:
       operationId: listFields
@@ -1784,10 +2019,6 @@ paths:
                     type: string
                 required:
                 - items
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -1857,11 +2088,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -1870,9 +2109,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Field'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -1946,6 +2191,7 @@ paths:
               - value
               - reason
               - evidence_ids
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/matches:
     get:
       operationId: listMatches
@@ -1988,10 +2234,6 @@ paths:
                     type: string
                 required:
                 - items
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -2060,11 +2302,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -2073,9 +2323,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Match'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -2144,6 +2400,7 @@ paths:
               - left_evidence_id
               - right_evidence_id
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/reservations:
     get:
       operationId: listReservations
@@ -2186,10 +2443,6 @@ paths:
                     type: string
                 required:
                 - items
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -2280,10 +2533,6 @@ paths:
                     type: string
                 required:
                 - items
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -2352,11 +2601,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '202':
           description: Success
@@ -2365,9 +2622,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Job'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -2429,6 +2692,7 @@ paths:
                   format: uuid
               required:
               - policy_version_id
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/checklist:
     get:
       operationId: getChecklist
@@ -2471,10 +2735,6 @@ paths:
                     type: string
                 required:
                 - items
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -2565,10 +2825,6 @@ paths:
                     type: string
                 required:
                 - items
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -2637,11 +2893,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -2650,9 +2914,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Waiver'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -2712,12 +2982,13 @@ paths:
                 result_id:
                   type: string
                   format: uuid
-                reason: *id003
-                evidence_ids: *id004
+                reason: *id002
+                evidence_ids: *id003
               required:
               - result_id
               - reason
               - evidence_ids
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/waivers/{waiver_id}/decision:
     post:
       operationId: decideWaiver
@@ -2745,11 +3016,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -2758,9 +3037,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Waiver'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -2822,15 +3107,16 @@ paths:
                   enum:
                   - APPROVED
                   - REJECTED
-                expires_at: &id005
+                expires_at: &id004
                   type: string
                   format: date-time
-                reason: *id003
-                evidence_ids: *id004
+                reason: *id002
+                evidence_ids: *id003
               required:
               - decision
               - reason
               - evidence_ids
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/exports:
     get:
       operationId: listExports
@@ -2873,10 +3159,6 @@ paths:
                     type: string
                 required:
                 - items
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -2945,11 +3227,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '202':
           description: Success
@@ -2958,9 +3248,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Job'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -3028,6 +3324,7 @@ paths:
               required:
               - snapshot_id
               - template_ids
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/exports/{package_id}/download:
     get:
       operationId: downloadExport
@@ -3055,10 +3352,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Download'
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -3149,10 +3442,6 @@ paths:
                     type: string
                 required:
                 - items
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -3221,11 +3510,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '201':
           description: Success
@@ -3234,9 +3531,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Handoff'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -3312,6 +3615,7 @@ paths:
               - package_id
               - channel
               - evidence_ids
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/review:
     get:
       operationId: getReview
@@ -3333,10 +3637,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Review'
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -3405,11 +3705,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -3418,9 +3726,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Review'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -3497,6 +3811,7 @@ paths:
               - decision
               - confirmed_field_ids
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/review/queue:
     get:
       operationId: listReviewQueue
@@ -3602,10 +3917,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaymentStatus'
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -3675,10 +3986,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Job'
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -3825,6 +4132,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
       responses:
         '201':
           description: Success
@@ -3832,6 +4142,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Organization'
+          headers:
+            Finance-Version:
+              required: true
+              description: Current organization aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -3905,6 +4225,7 @@ paths:
               - kind
               - code
               - name
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/organizations/{item_id}:
     get:
       operationId: getOrganization
@@ -3927,9 +4248,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Organization'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current organization aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -4076,6 +4403,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
       responses:
         '201':
           description: Success
@@ -4083,6 +4413,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Membership'
+          headers:
+            Finance-Version:
+              required: true
+              description: Current membership aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -4153,6 +4493,7 @@ paths:
               - subject_id
               - company_id
               - roles
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/memberships/{item_id}:
     get:
       operationId: getMembership
@@ -4175,9 +4516,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Membership'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current membership aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -4324,6 +4671,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
       responses:
         '201':
           description: Success
@@ -4331,6 +4681,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Policy'
+          headers:
+            Finance-Version:
+              required: true
+              description: Current policy aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -4395,6 +4755,7 @@ paths:
               required:
               - company_id
               - name
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/policies/{item_id}:
     get:
       operationId: getPolicy
@@ -4417,9 +4778,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Policy'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current policy aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -4566,6 +4933,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
       responses:
         '201':
           description: Success
@@ -4573,6 +4943,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Rule'
+          headers:
+            Finance-Version:
+              required: true
+              description: Current rule aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -4640,6 +5020,7 @@ paths:
               - policy_id
               - name
               - definition
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/rules/{item_id}:
     get:
       operationId: getRule
@@ -4662,9 +5043,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Rule'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current rule aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -4811,6 +5198,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
       responses:
         '201':
           description: Success
@@ -4818,6 +5208,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Form'
+          headers:
+            Finance-Version:
+              required: true
+              description: Current form aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -4887,6 +5287,7 @@ paths:
               - policy_id
               - name
               - fields
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/forms/{item_id}:
     get:
       operationId: getForm
@@ -4909,9 +5310,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Form'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current form aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -5058,6 +5465,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
       responses:
         '201':
           description: Success
@@ -5065,6 +5475,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Template'
+          headers:
+            Finance-Version:
+              required: true
+              description: Current template aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -5140,6 +5560,7 @@ paths:
               - name
               - document_id
               - format
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/templates/{item_id}:
     get:
       operationId: getTemplate
@@ -5162,9 +5583,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Template'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current template aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -5311,6 +5738,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
       responses:
         '201':
           description: Success
@@ -5318,6 +5748,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Workflow'
+          headers:
+            Finance-Version:
+              required: true
+              description: Current workflow aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -5387,6 +5827,7 @@ paths:
               - policy_id
               - name
               - transitions
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/workflows/{item_id}:
     get:
       operationId: getWorkflow
@@ -5409,9 +5850,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Workflow'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current workflow aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -5558,6 +6005,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
       responses:
         '202':
           description: Success
@@ -5633,7 +6083,7 @@ paths:
                   - ADVANCE
                   - BUDGET
                   - PAYMENT
-                as_of: *id005
+                as_of: *id004
                 coverage:
                   type: string
                   enum:
@@ -5645,6 +6095,7 @@ paths:
               - kind
               - as_of
               - coverage
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/references/{item_id}:
     get:
       operationId: getReference
@@ -5667,9 +6118,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Reference'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current reference aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -5824,9 +6281,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Risk'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current risk aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -5981,9 +6444,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Reconciliation'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current reconciliation aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -6053,11 +6522,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected membership aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -6066,9 +6543,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Membership'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current membership aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -6129,6 +6612,7 @@ paths:
                   type: string
               required:
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/policies/{item_id}/submit:
     post:
       operationId: submitPolicy
@@ -6150,11 +6634,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected policy aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -6163,9 +6655,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Policy'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current policy aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -6226,6 +6724,7 @@ paths:
                   type: string
               required:
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/policies/{item_id}/publish:
     post:
       operationId: publishPolicy
@@ -6247,11 +6746,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected policy aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -6260,9 +6767,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Policy'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current policy aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -6321,10 +6834,11 @@ paths:
               properties:
                 reason:
                   type: string
-                effective_from: *id005
+                effective_from: *id004
               required:
               - reason
               - effective_from
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/policies/{item_id}/revoke:
     post:
       operationId: revokePolicy
@@ -6346,11 +6860,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected policy aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -6359,9 +6881,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Policy'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current policy aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -6422,6 +6950,7 @@ paths:
                   type: string
               required:
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/policies/{item_id}/retire:
     post:
       operationId: retirePolicy
@@ -6443,11 +6972,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected policy aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -6456,9 +6993,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Policy'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current policy aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -6519,6 +7062,7 @@ paths:
                   type: string
               required:
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/rules/{item_id}/simulate:
     post:
       operationId: simulateRule
@@ -6540,11 +7084,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected rule aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400;
+          stale version: 409.'
       responses:
         '200':
           description: Success
@@ -6553,9 +7105,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Simulation'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current rule aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -6617,6 +7175,7 @@ paths:
                   format: uuid
               required:
               - corpus_id
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/simulations/{item_id}:
     get:
       operationId: getSimulation
@@ -6638,10 +7197,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Simulation'
-          headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
         '400':
           description: Invalid input
           content:
@@ -6711,11 +7266,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected template aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '202':
           description: Success
@@ -6724,9 +7287,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Job'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current template aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -6788,6 +7357,7 @@ paths:
                   format: uuid
               required:
               - fixture_id
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/references/{item_id}/verify:
     post:
       operationId: verifyReference
@@ -6809,11 +7379,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected reference aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -6822,9 +7400,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Reference'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current reference aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -6880,10 +7464,11 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              properties: *id002
+              properties: *id001
               required:
               - reason
               - evidence_ids
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/risks/{item_id}/resolve:
     post:
       operationId: resolveRisk
@@ -6905,11 +7490,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected risk aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400;
+          stale version: 409.'
       responses:
         '200':
           description: Success
@@ -6918,9 +7511,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Risk'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current risk aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -6976,10 +7575,11 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              properties: *id002
+              properties: *id001
               required:
               - reason
               - evidence_ids
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/reconciliation/{item_id}/resolve:
     post:
       operationId: resolveReconciliation
@@ -7001,11 +7601,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected reconciliation aggregate version, not an HTTP representation ETag. Wrong target or malformed
+          token: 400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -7014,9 +7622,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Reconciliation'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current reconciliation aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -7072,10 +7686,11 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              properties: *id002
+              properties: *id001
               required:
               - reason
               - evidence_ids
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/contracts:
     get:
       operationId: listContracts
@@ -7517,11 +8132,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       responses:
         '200':
           description: Success
@@ -7530,9 +8153,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaymentStatus'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -7603,6 +8232,7 @@ paths:
               - reference_id
               - evidence_ids
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/policies/{item_id}/revise:
     post:
       operationId: revisePolicy
@@ -7618,11 +8248,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected policy aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       - name: item_id
         in: path
         required: true
@@ -7637,9 +8275,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Policy'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current policy aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -7696,15 +8340,17 @@ paths:
               type: object
               additionalProperties: false
               properties:
-                name: *id001
+                name: &id005
+                  type: string
                 effective_from:
                   type: string
                   format: date-time
-                reason: *id001
+                reason: *id005
               required:
               - name
               - effective_from
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/rules/{item_id}/revise:
     post:
       operationId: reviseRule
@@ -7720,11 +8366,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected rule aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400;
+          stale version: 409.'
       - name: item_id
         in: path
         required: true
@@ -7739,9 +8393,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Rule'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current rule aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -7798,14 +8458,15 @@ paths:
               type: object
               additionalProperties: false
               properties:
-                name: *id001
+                name: *id005
                 definition:
                   $ref: ./rule-dsl.schema.json
-                reason: *id001
+                reason: *id005
               required:
               - name
               - definition
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/forms/{item_id}/revise:
     post:
       operationId: reviseForm
@@ -7821,11 +8482,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected form aggregate version, not an HTTP representation ETag. Wrong target or malformed token: 400;
+          stale version: 409.'
       - name: item_id
         in: path
         required: true
@@ -7840,9 +8509,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Form'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current form aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -7899,16 +8574,17 @@ paths:
               type: object
               additionalProperties: false
               properties:
-                name: *id001
+                name: *id005
                 fields:
                   type: array
                   items:
                     $ref: '#/components/schemas/FormField'
-                reason: *id001
+                reason: *id005
               required:
               - name
               - fields
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/workflows/{item_id}/revise:
     post:
       operationId: reviseWorkflow
@@ -7924,11 +8600,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected workflow aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       - name: item_id
         in: path
         required: true
@@ -7943,9 +8627,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Workflow'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current workflow aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -8002,16 +8692,17 @@ paths:
               type: object
               additionalProperties: false
               properties:
-                name: *id001
+                name: *id005
                 transitions:
                   type: array
                   items:
                     $ref: '#/components/schemas/Transition'
-                reason: *id001
+                reason: *id005
               required:
               - name
               - transitions
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/templates/{item_id}/revise:
     post:
       operationId: reviseTemplate
@@ -8027,11 +8718,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected template aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       - name: item_id
         in: path
         required: true
@@ -8046,9 +8745,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Template'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current template aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -8108,10 +8813,11 @@ paths:
                 document_id: &id006
                   type: string
                   format: uuid
-                reason: *id001
+                reason: *id005
               required:
               - document_id
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
   /v1/dossiers/{dossier_id}/acknowledge:
     post:
       operationId: acknowledgeWarning
@@ -8127,11 +8833,19 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: If-Match
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
         in: header
         required: true
         schema:
           type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
       - name: dossier_id
         in: path
         required: true
@@ -8146,9 +8860,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/CheckResult'
           headers:
-            ETag:
-              description: Opaque current resource version for versioned resources; absent for non-versioned resources.
-              schema: *id001
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
         '400':
           description: Invalid input
           content:
@@ -8206,10 +8926,119 @@ paths:
               additionalProperties: false
               properties:
                 result_id: *id006
-                reason: *id001
+                reason: *id005
               required:
               - result_id
               - reason
+      description: Reauthorize before replay; idempotency receipt is immutable and scoped.
+  /v1/dossiers/{dossier_id}/documents/{document_id}/upload-grants:
+    post:
+      operationId: issueUploadGrant
+      tags:
+      - E05
+      summary: Issue or refresh a fenced upload grant
+      x-release-gate: pilot
+      parameters:
+      - name: dossier_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: document_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
+        description: Scoped by verified tenant/company, actor and registered operation. Reuse with a different target/version/payload
+          returns 409.
+      - name: If-Finance-Version
+        in: header
+        required: true
+        schema:
+          type: string
+          pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+          description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target kind,
+            ID and current version after authorization.
+        description: 'Expected dossier aggregate version, not an HTTP representation ETag. Wrong target or malformed token:
+          400; stale version: 409.'
+      responses:
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found or out of scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 'Conflict: stale parent version, key mismatch, or UPLOAD_GRANT_INACTIVE on expired/superseded grant
+            replay.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Business guard failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadGrant'
+          headers:
+            Finance-Version:
+              required: true
+              description: Current dossier aggregate token after successful operation; clients send it as If-Finance-Version.
+                On idempotent replay returns original receipt token.
+              schema:
+                type: string
+                pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
+                description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
+                  kind, ID and current version after authorization.
+      description: New key and current parent version rotate staging generation. Replayed expired or superseded grant returns
+        409 UPLOAD_GRANT_INACTIVE; no replacement URL is issued by replay.
 components:
   securitySchemes:
     oidc:
@@ -8303,14 +9132,18 @@ components:
           - ACCEPTED
           - RETURNED
           - CANCELLED
-        revision: &id007
+        revision:
           type: integer
           minimum: 0
-        version: *id007
+          maximum: 9007199254740991
+        version:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
         owner_id:
           type: string
           format: uuid
-        updated_at: *id005
+        updated_at: *id004
       required:
       - id
       - company_id
@@ -8340,13 +9173,17 @@ components:
         state:
           type: string
           enum:
+          - PENDING_UPLOAD
           - QUARANTINED
           - CLEAN
           - REJECTED
           - PROCESSING
           - EXTRACTED
           - FAILED
-        revision: *id007
+        revision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
       required:
       - id
       - dossier_id
@@ -8408,7 +9245,9 @@ components:
           format: uuid
         rule_id:
           type: string
-        rule_version: *id007
+        rule_version: &id007
+          type: integer
+          minimum: 0
         outcome:
           type: string
           enum:
@@ -8479,7 +9318,10 @@ components:
         dossier_id:
           type: string
           format: uuid
-        revision: *id007
+        revision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
         input_hash:
           type: string
         policy_version_id:
@@ -8488,7 +9330,7 @@ components:
         check_run_id:
           type: string
           format: uuid
-        sealed_at: *id005
+        sealed_at: *id004
       required:
       - id
       - dossier_id
@@ -8538,7 +9380,10 @@ components:
         company_id:
           type: string
           format: uuid
-        version: *id007
+        version:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
         name:
           type: string
         state:
@@ -8549,8 +9394,8 @@ components:
           - PUBLISHED
           - RETIRED
           - REVOKED
-        effective_from: *id005
-        effective_to: *id005
+        effective_from: *id004
+        effective_to: *id004
         hash:
           type: string
       required:
@@ -8570,7 +9415,10 @@ components:
         policy_id:
           type: string
           format: uuid
-        version: *id007
+        version:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
         name:
           type: string
         severity:
@@ -8620,7 +9468,10 @@ components:
           - PARTIAL
           - CONSUMED
           - RELEASED
-        version: *id007
+        version:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
       required:
       - id
       - snapshot_id
@@ -8647,7 +9498,7 @@ components:
           - FAILED
         manifest_hash:
           type: string
-        created_at: *id005
+        created_at: *id004
       required:
       - id
       - snapshot_id
@@ -8708,7 +9559,7 @@ components:
           - REVERSED
         confirmed_paid:
           $ref: '#/components/schemas/Money'
-        as_of: *id005
+        as_of: *id004
         evidence_ids:
           type: array
           items:
@@ -8741,16 +9592,17 @@ components:
           - REVOKED
         reason:
           type: string
-        expires_at: *id005
+        expires_at: *id004
         evidence_ids:
           type: array
           items:
             type: string
             format: uuid
-        input_hash: *id001
+        input_hash: *id005
         revision:
           type: integer
           minimum: 0
+          maximum: 9007199254740991
       required:
       - id
       - result_id
@@ -8860,7 +9712,7 @@ components:
           - PAYMENT
         source_key:
           type: string
-        as_of: *id005
+        as_of: *id004
         coverage:
           type: string
           enum:
@@ -8896,7 +9748,10 @@ components:
         policy_id:
           type: string
           format: uuid
-        version: *id007
+        version:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
         name:
           type: string
         schema_hash:
@@ -8924,7 +9779,10 @@ components:
         policy_id:
           type: string
           format: uuid
-        version: *id007
+        version:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
         name:
           type: string
         format:
@@ -8959,7 +9817,10 @@ components:
         policy_id:
           type: string
           format: uuid
-        version: *id007
+        version:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
         name:
           type: string
         state:
@@ -9056,7 +9917,7 @@ components:
         correlation_id:
           type: string
           format: uuid
-        occurred_at: *id005
+        occurred_at: *id004
         digest:
           type: string
       required:
@@ -9077,7 +9938,7 @@ components:
         unit:
           type: string
         denominator: *id007
-        as_of: *id005
+        as_of: *id004
       required:
       - name
       - value
@@ -9090,7 +9951,7 @@ components:
         url:
           type: string
           format: uri
-        expires_at: *id005
+        expires_at: *id004
         sha256:
           type: string
       required:
@@ -9211,14 +10072,40 @@ components:
         document_id:
           type: string
           format: uuid
+        required_sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        state:
+          type: string
+          enum:
+          - PENDING_UPLOAD
+      required:
+      - document_id
+      - required_sha256
+      - state
+    UploadGrant:
+      type: object
+      additionalProperties: false
+      properties:
+        document_id:
+          type: string
+          format: uuid
+        generation: *id010
         upload_url:
           type: string
           format: uri
-        expires_at: *id005
-        required_sha256:
+        expires_at:
           type: string
+          format: date-time
+        content_type:
+          type: string
+        checksum_sha256_base64:
+          type: string
+          pattern: ^[A-Za-z0-9+/]{43}=$
       required:
       - document_id
+      - generation
       - upload_url
       - expires_at
-      - required_sha256
+      - content_type
+      - checksum_sha256_base64
