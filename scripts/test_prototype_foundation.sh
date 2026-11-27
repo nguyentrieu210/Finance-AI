@@ -69,5 +69,6 @@ else
  FINANCE_PROTOTYPE_TEST_DATABASE_URL="$runtime_url" FINANCE_IDENTITY_TEST_DATABASE_URL="$identity_url" FINANCE_AUDIT_TEST_ADMIN_URL="$url" cargo test --locked -p finance-organization --test binding_db -- --ignored --exact authenticated_commands_real_database
 fi
 bash scripts/test_document_metadata.sh "$cid"
+bash scripts/test_financial_reservation.sh "$cid"
 unset url runtime_url worker_url identity_url
 echo 'PASS: real PostgreSQL synthetic prototype atomic command, replay, RLS and scoped FK'
