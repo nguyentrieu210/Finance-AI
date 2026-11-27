@@ -35,6 +35,7 @@ mod knowledge;
 mod lifecycle;
 mod policies;
 mod references;
+mod rules;
 mod templates;
 
 type Hmac256 = Hmac<Sha256>;
@@ -309,6 +310,8 @@ pub fn router(state: OrganizationState) -> Router {
         .route("/v1/contracts", get(references::contracts))
         .route("/v1/advances", get(references::advances))
         .route("/v1/budgets", get(references::budgets))
+        .route("/v1/rules", get(rules::list).post(rules::create))
+        .route("/v1/rules/{item_id}", get(rules::get))
         .layer(axum::extract::DefaultBodyLimit::max(8192))
         .with_state(Arc::new(state))
 }

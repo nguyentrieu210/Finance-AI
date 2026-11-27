@@ -10,3 +10,9 @@ serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
 finance-shared = { path = "../shared" }
+
+finance-core = { path = "../core" }
+finance-identity = { path = "../identity" }
+finance-permissions = { path = "../permissions" }
+sha2 = "=0.10.9"
+sqlx.workspace = true

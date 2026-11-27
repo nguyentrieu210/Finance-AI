@@ -388,6 +388,18 @@ async fn scoped_organization_http_real_database() {
         request(&app, "/v1/templates", Some(&requester)).await.1["items"],
         json!([])
     );
+    let rule_definition=json!({"rule_id":"invoice_total_positive","version":1,"condition":{"op":"gt","args":[{"ref":"invoice.total"},{"literal":"0","value_type":"money","currency":"VND"}]},"severity":"BLOCK","waivable":false,"clause_id":"00000000-0000-0000-0000-000000001901"});
+    let (rule_status,rule,rule_token)=create_rule(&app,&policy_admin,"rule-one","invoice_total_positive",rule_definition.clone()).await;
+    assert_eq!(rule_status,StatusCode::CREATED);
+    assert_eq!(rule["version"],1);
+    assert_eq!(rule["severity"],"BLOCK");
+    assert!(rule_token.is_some());
+    assert_eq!(create_rule(&app,&policy_admin,"rule-one","invoice_total_positive",rule_definition.clone()).await.1,rule);
+    let changed=json!({"rule_id":"invoice_total_positive","version":1,"condition":{"literal":false,"value_type":"boolean"},"severity":"BLOCK","waivable":false,"clause_id":"00000000-0000-0000-0000-000000001901"});
+    assert_eq!(create_rule(&app,&policy_admin,"rule-one","invoice_total_positive",changed).await.0,StatusCode::CONFLICT);
+    assert_eq!(create_rule(&app,&requester,"rule-denied","invoice_total_positive",rule_definition).await.0,StatusCode::FORBIDDEN);
+    assert_eq!(request(&app,"/v1/rules",Some(&policy_admin)).await.1["items"].as_array().unwrap().len(),1);
+    assert_eq!(request(&app,"/v1/rules",Some(&requester)).await.1["items"],json!([]));
     let ready_id = "00000000-0000-0000-0000-000000001800";
     let check_id = "00000000-0000-0000-0000-000000001802";
     let ready_version = format!("\"v1:dossier:{ready_id}:0\"");
@@ -1054,4 +1066,25 @@ fn binary_probe(jwks: &str, token: &str) {
     drop(child);
     let denied = process.env("FINANCE_BIND", "0.0.0.0:0").status().unwrap();
     assert_eq!(denied.code(), Some(78));
+}
+
+async fn create_rule(
+    app:&Router,
+    token:&str,
+    key:&str,
+    name:&str,
+    definition:serde_json::Value,
+)->(StatusCode,serde_json::Value,Option<String>){
+    let response=app.clone().oneshot(
+        Request::builder().method("POST").uri("/v1/rules")
+        .header(header::AUTHORIZATION,format!("Bearer {token}"))
+        .header("idempotency-key",key)
+        .header(header::CONTENT_TYPE,"application/json")
+        .body(Body::from(json!({"policy_id":"00000000-0000-0000-0000-000000001900","name":name,"definition":definition}).to_string())).unwrap()
+    ).await.unwrap();
+    let status=response.status();
+    let version=response.headers().get("finance-version").and_then(|v|v.to_str().ok()).map(str::to_owned);
+    let bytes=response.into_body().collect().await.unwrap().to_bytes();
+    let body=serde_json::from_slice(&bytes).unwrap_or_else(|_|json!({}));
+    (status,body,version)
 }

@@ -447,6 +447,7 @@ dependencies = [
  "finance-knowledge",
  "finance-organization",
  "finance-policy",
+ "finance-rule-engine",
  "finance-shared",
  "finance-templates",
  "finance-workflow",
@@ -705,9 +706,14 @@ dependencies = [
 name = "finance-rule-engine"
 version = "0.1.0"
 dependencies = [
+ "finance-core",
+ "finance-identity",
+ "finance-permissions",
  "finance-shared",
  "serde",
  "serde_json",
+ "sha2",
+ "sqlx",
  "uuid",
 ]
 

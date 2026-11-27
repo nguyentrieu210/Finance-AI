@@ -3,6 +3,7 @@
 use finance_shared::money::Money;
 
 pub mod compiler;
+pub mod repository;
 
 pub mod simulator;
 
