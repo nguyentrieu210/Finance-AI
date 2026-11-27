@@ -15,12 +15,22 @@ use std::fs;
 fn real_word_rows_to_financial_candidates() {
     let input = fs::read_to_string(std::env::var("FINANCE_OCR_ROWS_TSV").unwrap()).unwrap();
     let page = parse_page(&input, 1, 1, 1800, 480).unwrap();
-    let fields = extract(Kind::Invoice, std::slice::from_ref(&page), Format::Vietnamese).unwrap();
-    let total = fields.iter().find(|f| f.field == Field::TotalAmount).unwrap();
+    let fields = extract(
+        Kind::Invoice,
+        std::slice::from_ref(&page),
+        Format::Vietnamese,
+    )
+    .unwrap();
+    let total = fields
+        .iter()
+        .find(|f| f.field == Field::TotalAmount)
+        .unwrap();
     assert_eq!(total.state, State::Candidate);
     assert_eq!(total.observations.len(), 1);
     let row = &total.observations[0];
-    assert!(row.outcome == Outcome::Candidate(OwnedValue::Amount(Amount::parse("125000").unwrap())));
+    assert!(
+        row.outcome == Outcome::Candidate(OwnedValue::Amount(Amount::parse("125000").unwrap()))
+    );
     assert!(row.block_indexes.len() >= 2);
     assert_eq!(
         row.reconstructed_row,
