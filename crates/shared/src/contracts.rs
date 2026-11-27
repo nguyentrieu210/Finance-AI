@@ -1,17 +1,17 @@
-use crate::ids::*;
+use crate::{http_contract::IdempotencyKey, ids::*};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 
-/// Business revision and command versions map to a nonnegative PostgreSQL BIGINT.
+/// Nonnegative PostgreSQL BIGINT capped at the largest exactly representable JavaScript integer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "i64", into = "i64")]
 pub struct Version(i64);
 impl TryFrom<i64> for Version {
     type Error = &'static str;
     fn try_from(n: i64) -> Result<Self, Self::Error> {
-        if n < 0 {
-            Err("negative version")
+        if !(0..=9_007_199_254_740_991).contains(&n) {
+            Err("version outside safe wire range")
         } else {
             Ok(Self(n))
         }
@@ -166,24 +166,39 @@ pub trait AuditPort<Tx>: Send + Sync {
     ) -> impl Future<Output = Result<(), PortError>> + Send + 'a;
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReplayReceipt {
+    /// Immutable receipt/result reference, not a pointer to mutable current state.
+    pub result: ResourceId,
+    pub version: Option<Version>,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IdempotencyDecision {
     Fresh,
-    Replay(ResourceId),
+    Replay(ReplayReceipt),
     Conflict,
 }
-/// Canonical payload hash must be computed by server from validated typed command.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IdempotencyRequest {
+    pub context: CommandContext,
+    /// Registered server-side OpenAPI operation ID, never accepted from user body.
+    pub operation_id: &'static str,
+    pub target: Option<ResourceId>,
+    pub key: IdempotencyKey,
+    /// Hash canonical validated payload, target and expected version; never raw untrusted JSON.
+    pub payload_hash: [u8; 32],
+}
+/// Scope keys by authenticated actor, tenant/company and operation.
+/// Recheck current authorization before replay; reserve/check and store receipt atomically.
 pub trait IdempotencyPort<Tx>: Send + Sync {
     fn check<'a>(
         &'a self,
         tx: &'a mut Tx,
-        context: &'a CommandContext,
-        payload_hash: [u8; 32],
+        request: &'a IdempotencyRequest,
     ) -> impl Future<Output = Result<IdempotencyDecision, PortError>> + Send + 'a;
     fn record<'a>(
         &'a self,
         tx: &'a mut Tx,
-        context: &'a CommandContext,
-        payload_hash: [u8; 32],
-        result: ResourceId,
+        request: &'a IdempotencyRequest,
+        receipt: ReplayReceipt,
     ) -> impl Future<Output = Result<(), PortError>> + Send + 'a;
 }

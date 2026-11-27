@@ -7,3 +7,5 @@ Rust source of truth: `crates/shared/src/{ids,money,contracts}.rs`. This is a pr
 - Authorization, audit and idempotency are Rust ports generic over the caller's transaction. Adapter failures do not authorize, no separate audit connection; audit record contains IDs and action only. Redacted diff schema, hash-chain and transactional outbox are E22/E01 work. Worker cannot gain business approval permissions. Ports do not constitute security implementation.
 - Command/version and request canonicalization rules need engineering review before freeze. Scope and grants must be rechecked on execution. No client-supplied timestamp as authority.
 - No production rule activation or bank/payment endpoints. Owner decisions for G01: finance policies/formulas/form templates, source coverage, rounding/FX/tax; security owner confirms trust boundary, AI egress and delegation; engineering owner reviews OpenAPI response headers, version semantics, schema and migration.
+
+See http-versioning.md for the draft aggregate version token and operation-scoped immutable idempotency receipt. The Rust Version cap matches JavaScript safe integer limits.

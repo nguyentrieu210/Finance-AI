@@ -26,6 +26,7 @@ jobs:
           .venv/bin/pip install -r scripts/spec-requirements.txt
           .venv/bin/python scripts/validate_spec.py
           .venv/bin/openapi-spec-validator contracts/openapi.yaml
+          .venv/bin/python scripts/validate_http_contract.py
       - name: Rust toolchain
         run: rustup show
       - name: Rust checks

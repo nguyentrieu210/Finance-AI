@@ -1,0 +1,14 @@
+# G01 technical draft: version guards and idempotency
+This is a deliberate draft contract change, not production ratification. OpenAPI 2.0.0-draft.1 and generated frontend types are synchronized.
+
+## Aggregate concurrency
+HTTP ETag refers to a representation, not to a mutable parent behind a child action. Replace the draft If-Match/ETag convention with explicit application headers:
+- Finance-Version: current canonical quoted token on aggregate GET, create and successful aggregate mutation.
+- If-Finance-Version: required on a versioned mutation, including child commands that operate on a dossier aggregate.
+- Token: a quoted v1:kind:canonical-uuid:nonnegative-integer value. Version max 9007199254740991 (safe JS integer); database BIGINT with the same constraint. A malformed token or wrong aggregate kind/ID is 400, stale token 409. Missing required token 400. Reject wildcard, weak tags, lists and noncanonical encodings. Authenticated scope and actual current version must be checked server-side in the mutation transaction. Child GETs do not expose a misleading parent token; refresh parent aggregate GET for current token. Never use a version token to grant access. Do not confuse immutable policy revision with mutable lock version: the token carries the aggregate lock version, not a published policy version number.
+- Dossier child mutations lock the parent dossier; registry item mutation locks its own aggregate. Create reference returns a job, not a created reference token. Subsequent reads use the real reference ID after import. No generic status PATCH.
+- Dossier list filters: company, kind, status, updated_from/to. Scope filter cannot widen access. Validate time range and cursor binding against the verified scope, normalized filter set and stable ordering. Other list filters still require business review.
+
+## Idempotency
+Every write has a required key: 1–128 ASCII characters A–Z, a–z, 0–9, dot, underscore, tilde or hyphen. Scope it by authenticated tenant/company, actor and registered server operation. Canonical request hash includes validated payload, target ID and expected version. Same key with different request is 409. Reauthorize before returning any replay. Check/reserve, effects, audit, outbox and immutable receipt must commit atomically. Identical successful retry returns the original result and original version token, even if current state later advanced; client refreshes aggregate before further writes. Never return a replay based on client assertion or mutable result pointer. Signed URLs must not be replayed after expiry: receipt points to authorized download/intention lifecycle; reissue only via separately authorized operation. Exact upload URL refresh lifecycle remains a review item.
+- No auth, persistence, replay storage, or real API handler is implied by this contract. Rust parsing tests and structural checks are not authorization tests. Finance/security/engineering approval remains pending.

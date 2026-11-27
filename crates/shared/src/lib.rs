@@ -18,3 +18,5 @@ pub const API_LIVENESS: Health = Health {
 pub mod contracts;
 pub mod ids;
 pub mod money;
+
+pub mod http_contract;
