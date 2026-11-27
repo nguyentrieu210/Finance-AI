@@ -125,6 +125,14 @@ BEGIN
  IF NOT EXISTS(SELECT 1 FROM finance.review_assignment ra WHERE ra.tenant_id=t AND ra.company_id=c
    AND ra.dossier_id=d AND ra.revision_id=rev AND ra.accountant_id=a)
  THEN RAISE EXCEPTION 'assigned accountant required' USING ERRCODE='23514'; END IF;
+ IF cardinality(sorted)>0 AND (
+  SELECT count(DISTINCT e.id) FROM finance.evidence e
+  JOIN finance.ocr_run o ON (o.tenant_id,o.company_id,o.id)=(e.tenant_id,e.company_id,e.ocr_run_id)
+  JOIN finance.document_ref dr ON (dr.tenant_id,dr.company_id,dr.id)=(o.tenant_id,o.company_id,o.document_id)
+  WHERE e.tenant_id=t AND e.company_id=c AND e.id=ANY(sorted)
+   AND dr.dossier_id=d AND dr.revision_id=rev
+ )<>cardinality(sorted)
+ THEN RAISE EXCEPTION 'review evidence outside current revision' USING ERRCODE='23514'; END IF;
  SELECT s.id INTO snap FROM finance.dossier_snapshot s
   WHERE s.tenant_id=t AND s.company_id=c AND s.dossier_id=d AND s.revision_id=rev
   ORDER BY s.sealed_at DESC,s.id DESC LIMIT 1;
@@ -211,7 +219,7 @@ BEGIN
    WHERE pc.tenant_id=t AND pc.company_id=c AND pc.policy_id=s.policy_id;
 
   WITH valid AS (
-   SELECT pc.field_path,fi.id,fd.evidence_ids
+   SELECT pc.field_path,fi.id,fi.evidence_ids
    FROM finance.policy_critical_field pc
    JOIN LATERAL (
     SELECT fi0.id,fd0.evidence_ids
@@ -347,7 +355,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
   ON (ra.tenant_id,ra.company_id,ra.dossier_id,ra.revision_id)=(ds.tenant_id,ds.company_id,ds.id,dr.id)
  WHERE t=finance.scope_tenant() AND c=finance.scope_company() AND a=finance.scope_actor()
  AND ds.tenant_id=t AND ds.company_id=c AND ra.accountant_id=a AND ds.id>after_id
- AND ds.status IN ('HANDED_OFF','ACCOUNTING_REVIEW')
+ AND ds.status IN ('HANDED_OFF','ACCOUNTING_REVIEW') AND n BETWEEN 1 AND 100
  AND EXISTS(SELECT 1 FROM finance.membership m WHERE m.tenant_id=t AND m.company_id=c
   AND m.actor_id=a AND m.role='ACCOUNTANT' AND m.active
   AND m.valid_from<=statement_timestamp() AND (m.valid_until IS NULL OR m.valid_until>statement_timestamp()))

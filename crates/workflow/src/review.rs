@@ -158,17 +158,8 @@ pub async fn begin(
         if old != hash {
             return Err(Error::Conflict);
         }
-        let stored: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM finance.accounting_review WHERE tenant_id=$1 AND company_id=$2              AND id=$3 AND dossier_id=$4 AND reviewer_id=$5",
-        )
-        .bind(t)
-        .bind(c)
-        .bind(result)
-        .bind(dossier)
-        .bind(a)
-        .fetch_optional(&mut *tx)
-        .await?;
-        if stored.is_none() {
+        let stored = review_by_dossier(&mut tx, t, c, dossier, a).await?;
+        if stored.as_ref().is_none_or(|row| row.id != result) {
             return Err(Error::Conflict);
         }
         let receipt = accountant_dossier(&mut tx, t, c, dossier, a).await?;
@@ -178,7 +169,7 @@ pub async fn begin(
     }
     let command: Uuid = proof.context().command.into();
     let correlation: Uuid = proof.context().correlation.into();
-    let (result, version): (Uuid, i64) = sqlx::query_as(
+    let (result, _version): (Uuid, i64) = sqlx::query_as(
         "SELECT review_id_out,dossier_version_out FROM finance.workflow_begin_accounting_review(         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
     )
     .bind(t)
@@ -195,7 +186,7 @@ pub async fn begin(
     .await
     .map_err(map_guard)?;
     sqlx::query(
-        "INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id,result_version)          VALUES($1,$2,$3,'review.begin',$4,$5,$6,$7)",
+        "INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id)          VALUES($1,$2,$3,'review.begin',$4,$5,$6)",
     )
     .bind(t)
     .bind(c)
@@ -270,17 +261,11 @@ pub async fn decide(
         if old != hash {
             return Err(Error::Conflict);
         }
-        let row = sqlx::query_as::<_, Review>(
-            "SELECT id,snapshot_id,reviewer_id,state AS decision,confirmed_field_ids,decision_reason AS reason,             $5::bigint AS dossier_version FROM finance.accounting_review              WHERE tenant_id=$1 AND company_id=$2 AND id=$3 AND dossier_id=$4 AND reviewer_id=$6",
-        )
-        .bind(t)
-        .bind(c)
-        .bind(result)
-        .bind(dossier)
-        .bind(expected + 1)
-        .bind(a)
-        .fetch_one(&mut *tx)
-        .await?;
+        let mut row = review_by_dossier(&mut tx, t, c, dossier, a)
+            .await?
+            .filter(|row| row.id == result && row.decision != "PENDING")
+            .ok_or(Error::Conflict)?;
+        row.dossier_version = expected + 1;
         recheck_authenticated(&mut tx, Some(proof)).await?;
         tx.commit().await?;
         return Ok(row);
@@ -312,7 +297,7 @@ pub async fn decide(
     .await
     .map_err(map_guard)?;
     sqlx::query(
-        "INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id,result_version)          VALUES($1,$2,$3,'review.decide',$4,$5,$6,$7)",
+        "INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id)          VALUES($1,$2,$3,'review.decide',$4,$5,$6)",
     )
     .bind(t)
     .bind(c)
@@ -322,16 +307,11 @@ pub async fn decide(
     .bind(current.id)
     .execute(&mut *tx)
     .await?;
-    let row = sqlx::query_as::<_, Review>(
-        "SELECT id,snapshot_id,reviewer_id,state AS decision,confirmed_field_ids,decision_reason AS reason,         $5::bigint AS dossier_version FROM finance.accounting_review          WHERE tenant_id=$1 AND company_id=$2 AND id=$3 AND dossier_id=$4",
-    )
-    .bind(t)
-    .bind(c)
-    .bind(current.id)
-    .bind(dossier)
-    .bind(version)
-    .fetch_one(&mut *tx)
-    .await?;
+    let mut row = review_by_dossier(&mut tx, t, c, dossier, a)
+        .await?
+        .filter(|row| row.id == current.id && row.decision == decision)
+        .ok_or(Error::Conflict)?;
+    row.dossier_version = version;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(row)

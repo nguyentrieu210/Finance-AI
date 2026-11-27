@@ -13,7 +13,7 @@ use finance_shared::{
     http_contract::{IdempotencyKey, VersionTarget, VersionToken},
     ids::ResourceId,
 };
-use finance_workflow::review::{self, Review};
+use finance_workflow::review;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
