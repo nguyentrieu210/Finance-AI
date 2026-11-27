@@ -433,6 +433,7 @@ dependencies = [
  "finance-identity",
  "finance-organization",
  "finance-shared",
+ "finance-workflow",
  "hmac",
  "jsonwebtoken",
  "rand",

@@ -25,6 +25,8 @@ use std::{
 };
 use uuid::Uuid;
 
+mod dossiers;
+
 type Hmac256 = Hmac<Sha256>;
 
 pub struct OrganizationState {
@@ -90,7 +92,9 @@ fn error(status: StatusCode, correlation_id: Uuid) -> Response {
     let (code, message) = match status {
         StatusCode::UNAUTHORIZED => ("UNAUTHENTICATED", "Authentication required"),
         StatusCode::FORBIDDEN => ("FORBIDDEN", "Access denied"),
-        StatusCode::BAD_REQUEST => ("INVALID_INPUT", "Invalid pagination"),
+        StatusCode::BAD_REQUEST => ("INVALID_INPUT", "Invalid input"),
+        StatusCode::CONFLICT => ("CONFLICT", "Command conflict"),
+        StatusCode::NOT_FOUND => ("NOT_FOUND", "Resource not found"),
         _ => ("UNAVAILABLE", "Dependency unavailable"),
     };
     (
@@ -257,5 +261,8 @@ async fn list(
 pub fn router(state: OrganizationState) -> Router {
     Router::new()
         .route("/v1/organizations", get(list))
+        .route("/v1/dossiers", get(dossiers::list).post(dossiers::create))
+        .route("/v1/dossiers/{dossier_id}", get(dossiers::get))
+        .layer(axum::extract::DefaultBodyLimit::max(8192))
         .with_state(Arc::new(state))
 }

@@ -1,0 +1,2 @@
+# E18 synthetic draft HTTP vertical slice
+Three existing OpenAPI routes mounted only in injected synthetic router: POST /v1/dossiers, GET /v1/dossiers, GET /v1/dossiers/{dossier_id}. Closed create input, trusted server scope, requester only, generated IDs, exact idempotency receipt, version header, owner reads, expiring cursor separated from organization cursor. List currently supports limit/cursor only (other documented filters not implemented). No generic status update, no policy-approved real data, no upload or process, no public production mounting. Tests pending.
