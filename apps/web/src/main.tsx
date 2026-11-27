@@ -7,6 +7,7 @@ import { AuditLog } from './features/audit/AuditLog';
 import { Dashboard } from './features/analytics/Dashboard';
 import { PublishedPolicies } from './features/policy/PublishedPolicies';
 import { KnowledgeDiagnostics } from './features/knowledge/KnowledgeDiagnostics';
+import { FormDesigner } from './features/forms/FormDesigner';
 
 type Organization = components['schemas']['Organization'];
 type Page = { items: Organization[]; next_cursor?: string };
@@ -113,7 +114,7 @@ function App() {
           <div className="table-wrap"><table><thead><tr><th>Mã đơn vị</th><th>Tên đơn vị</th><th>Loại</th><th>Trạng thái</th></tr></thead>
           <tbody>{items.map(row => <tr key={row.id}><td>{row.code}</td><td>{row.name}</td><td>{row.kind}</td><td>{row.active ? 'Hoạt động' : 'Ngừng hoạt động'}</td></tr>)}</tbody></table></div>
           <div className="actions"><button disabled={!connected || busy} onClick={() => void load()}>Trang đầu</button><button disabled={!cursor || busy} onClick={() => void load(cursor)}>Trang tiếp</button></div>
-        </section> : selected === 'E18' && sandbox ? <Drafts /> : selected === 'E22' && sandbox ? <AuditLog /> : selected === 'E24' && sandbox ? <Dashboard /> : selected === 'E16' && sandbox ? <PublishedPolicies /> : selected === 'E17' && sandbox ? <KnowledgeDiagnostics /> : <section aria-labelledby="gate-title"><h2 id="gate-title">Chưa mở nghiệp vụ</h2><p>Phân hệ {selected} chưa vượt qua toàn bộ điều kiện nghiệm thu và phân quyền. Không hiển thị số liệu giả, không cho phép gửi hồ sơ hoặc thay đổi dữ liệu.</p><p role="status">Chưa tiếp nhận chứng từ thực tế — chế độ kỹ thuật.</p></section>}
+        </section> : selected === 'E18' && sandbox ? <Drafts /> : selected === 'E22' && sandbox ? <AuditLog /> : selected === 'E24' && sandbox ? <Dashboard /> : selected === 'E16' && sandbox ? <PublishedPolicies /> : selected === 'E17' && sandbox ? <KnowledgeDiagnostics /> : selected === 'E19' && sandbox ? <FormDesigner /> : <section aria-labelledby="gate-title"><h2 id="gate-title">Chưa mở nghiệp vụ</h2><p>Phân hệ {selected} chưa vượt qua toàn bộ điều kiện nghiệm thu và phân quyền. Không hiển thị số liệu giả, không cho phép gửi hồ sơ hoặc thay đổi dữ liệu.</p><p role="status">Chưa tiếp nhận chứng từ thực tế — chế độ kỹ thuật.</p></section>}
       </main>
     </div>
   </div>;

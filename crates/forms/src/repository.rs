@@ -3,7 +3,7 @@ use finance_core::prototype::{Error, recheck_authenticated, scoped_transaction};
 use finance_identity::AuthenticatedCommand;
 use finance_permissions::{GrantError, Role, lock_roles, require_role};
 use finance_shared::{
-    contracts::{Principal, Version},
+    contracts::Principal,
     http_contract::IdempotencyKey,
     ids::{CompanyScope, ResourceScope},
 };

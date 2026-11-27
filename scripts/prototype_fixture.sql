@@ -57,3 +57,23 @@ decode(repeat('33',32),'hex'),'[1,0,0]'::finance.vector);
 UPDATE finance.policy_version
 SET state='PUBLISHED',checker_id='00000000-0000-0000-0000-0000000003e9',published_at=clock_timestamp()
 WHERE id='00000000-0000-0000-0000-000000001700';
+
+-- E19 form designer fixture: draft policy owned by a PolicyAdmin, separate FinanceApprover checker.
+INSERT INTO finance.identity_subject(tenant_id,id,issuer,subject) VALUES
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-0000000003ec','https://synthetic.invalid','policy-admin'),
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-0000000003ed','https://synthetic.invalid','form-checker');
+INSERT INTO finance.membership(tenant_id,company_id,actor_id,role) VALUES
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-0000000003ec','POLICY_ADMIN'),
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-0000000003ed','FINANCE_APPROVER');
+INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,effective_from,effective_until,source_digest)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001900','PAYMENT','00000000-0000-0000-0000-0000000003ec',
+'2033-01-01','2034-01-01',decode(repeat('19',32),'hex'));
+INSERT INTO finance.policy_clause(tenant_id,company_id,policy_id,id,clause_key,excerpt,source_digest,source_page)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001900','00000000-0000-0000-0000-000000001901','FORM',
+'Synthetic form policy clause',decode(repeat('19',32),'hex'),1);
+INSERT INTO finance.checklist_item(tenant_id,company_id,policy_id,id,clause_id,document_kind,mandatory)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001900','00000000-0000-0000-0000-000000001902',
+'00000000-0000-0000-0000-000000001901','INVOICE',true);

@@ -131,6 +131,7 @@ async fn scoped_organization_http_real_database() {
     let auditor = mint("auditor");
     let requester = mint("requester");
     let other_requester = mint("second-requester");
+    let policy_admin = mint("policy-admin");
     let scope = CompanyScope {
         tenant: TenantId::try_from(id(1)).unwrap(),
         company: CompanyId::try_from(id(10)).unwrap(),
@@ -206,6 +207,47 @@ async fn scoped_organization_http_real_database() {
         .0,
         StatusCode::FORBIDDEN
     );
+    let fields = json!([
+        {"path":"advance","label":"Có tạm ứng","type":"boolean","required":true,"source_path":"request.advance","layout_row":0,"layout_column":0,"layout_width":12},
+        {"path":"amount","label":"Số tiền","type":"money","required":true,"source_path":"request.amount","layout_row":1,"layout_column":0,"layout_width":6,"condition_ref":"advance"},
+        {"path":"date","label":"Ngày đề nghị","type":"date","required":true}
+    ]);
+    let (form_status, form, form_token) = create_form(&app, &policy_admin, "form-one", "Synthetic payment form", fields.clone()).await;
+    assert_eq!(form_status, StatusCode::CREATED);
+    assert_eq!(form["version"], 1);
+    assert_eq!(form["state"], "DRAFT");
+    let form_id = form["id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        create_form(&app, &policy_admin, "form-one", "Synthetic payment form", fields.clone()).await.1,
+        form
+    );
+    assert_eq!(
+        create_form(&app, &policy_admin, "form-one", "Changed name", fields.clone()).await.0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        create_form(&app, &requester, "form-denied", "Denied", fields.clone()).await.0,
+        StatusCode::FORBIDDEN
+    );
+    let (revise_status, revised, revise_token) = revise_form(
+        &app, &policy_admin, &form_id, "form-revise", form_token.as_deref().unwrap(),
+        "Synthetic payment form v2", fields.clone(), "Add stable source mapping"
+    ).await;
+    assert_eq!(revise_status, StatusCode::OK);
+    assert_eq!(revised["id"], form["id"]);
+    assert_eq!(revised["version"], 2);
+    assert_ne!(form_token, revise_token);
+    assert_eq!(
+        revise_form(
+            &app, &policy_admin, &form_id, "form-stale", form_token.as_deref().unwrap(),
+            "stale", fields.clone(), "stale attempt"
+        ).await.0,
+        StatusCode::CONFLICT
+    );
+    let (_, form_page) = request(&app, "/v1/forms", Some(&policy_admin)).await;
+    assert_eq!(form_page["items"].as_array().unwrap().len(), 1);
+    assert_eq!(form_page["items"][0]["version"], 2);
+    assert_eq!(request(&app, "/v1/forms", Some(&requester)).await.1["items"], json!([]));
     let uri = "/v1/organizations?limit=1";
     assert_eq!(request(&app, uri, None).await.0, StatusCode::UNAUTHORIZED);
     assert_eq!(
@@ -474,6 +516,54 @@ async fn scoped_organization_http_real_database() {
         .unwrap();
     runtime.close().await;
     lookup.close().await;
+}
+
+async fn create_form(
+    app: &Router,
+    token: &str,
+    key: &str,
+    name: &str,
+    fields: Value,
+) -> (StatusCode, Value, Option<String>) {
+    let body=json!({"policy_id":"00000000-0000-0000-0000-000000001900","name":name,"fields":fields});
+    let response=app.clone().oneshot(
+        Request::builder().method("POST").uri("/v1/forms")
+        .header(header::AUTHORIZATION,format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE,"application/json")
+        .header("idempotency-key",key)
+        .body(Body::from(body.to_string())).unwrap()
+    ).await.unwrap();
+    let status=response.status();
+    let receipt=response.headers().get("finance-version").map(|v|v.to_str().unwrap().to_owned());
+    let bytes=to_bytes(response.into_body(),1024*1024).await.unwrap();
+    let value:Value=serde_json::from_slice(&bytes).unwrap();
+    (status,value,receipt)
+}
+
+async fn revise_form(
+    app: &Router,
+    token: &str,
+    form: &str,
+    key: &str,
+    version: &str,
+    name: &str,
+    fields: Value,
+    reason: &str,
+) -> (StatusCode, Value, Option<String>) {
+    let body=json!({"name":name,"fields":fields,"reason":reason});
+    let response=app.clone().oneshot(
+        Request::builder().method("POST").uri(format!("/v1/forms/{form}/revise"))
+        .header(header::AUTHORIZATION,format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE,"application/json")
+        .header("idempotency-key",key)
+        .header("if-finance-version",version)
+        .body(Body::from(body.to_string())).unwrap()
+    ).await.unwrap();
+    let status=response.status();
+    let receipt=response.headers().get("finance-version").map(|v|v.to_str().unwrap().to_owned());
+    let bytes=to_bytes(response.into_body(),1024*1024).await.unwrap();
+    let value:Value=serde_json::from_slice(&bytes).unwrap();
+    (status,value,receipt)
 }
 
 async fn create_dossier(app: &Router, token: &str, key: &str, kind: &str) -> (StatusCode, Value) {
