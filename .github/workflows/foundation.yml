@@ -79,3 +79,10 @@ jobs:
           sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-vie python3-pil fonts-dejavu-core
       - name: Real Vietnamese OCR and Rust TSV parser
         run: bash scripts/test_ocr_vietnamese.sh
+  pdf-renderer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Real isolated PDF rendering
+        run: bash scripts/test_pdf_renderer.sh
