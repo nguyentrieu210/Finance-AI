@@ -17,4 +17,4 @@ docker build --tag "$image" tests/ocr/paddle
     "$image" > "$work/result.json"
 )
 FINANCE_PADDLE_JSON="$work/result.json" cargo test --locked -p finance-ocr --test real_paddle -- --ignored --exact real_paddle_vietnamese
-echo 'PASS: real isolated PaddleOCR Latin CPU synthetic inference -> Rust candidate geometry'
+echo 'PASS: real isolated PaddleOCR multilingual CPU exact accented Vietnamese phrase + amount -> Rust candidate geometry'
