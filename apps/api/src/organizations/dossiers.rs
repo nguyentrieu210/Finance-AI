@@ -189,8 +189,7 @@ pub async fn list(
     let parse_date = |value: Option<&str>| {
         value
             .map(|s| {
-                chrono::DateTime::parse_from_rfc3339(s)
-                    .map(|date| date.with_timezone(&chrono::Utc))
+                chrono::DateTime::parse_from_rfc3339(s).map(|date| date.with_timezone(&chrono::Utc))
             })
             .transpose()
     };

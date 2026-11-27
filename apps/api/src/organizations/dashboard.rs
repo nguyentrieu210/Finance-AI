@@ -47,6 +47,8 @@ pub(super) async fn get(
     let mut items = finance_analytics::dashboard::from_state_counts(counts, &as_of);
     items.truncate(limit as usize);
     let mut response = Json(Page { items }).into_response();
-    response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
 }

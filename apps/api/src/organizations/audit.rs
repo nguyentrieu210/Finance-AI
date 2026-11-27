@@ -32,7 +32,12 @@ struct Page {
     #[serde(skip_serializing_if = "Option::is_none")]
     next_cursor: Option<String>,
 }
-fn mac(key: &[u8; 32], scope: CompanyScope, actor: finance_shared::ids::ActorId, payload: &[u8]) -> Hmac256 {
+fn mac(
+    key: &[u8; 32],
+    scope: CompanyScope,
+    actor: finance_shared::ids::ActorId,
+    payload: &[u8],
+) -> Hmac256 {
     let mut mac = Hmac256::new_from_slice(key).expect("fixed HMAC key");
     mac.update(b"finance.audit.cursor/v1");
     mac.update(Uuid::from(scope.tenant).as_bytes());
@@ -41,21 +46,41 @@ fn mac(key: &[u8; 32], scope: CompanyScope, actor: finance_shared::ids::ActorId,
     mac.update(payload);
     mac
 }
-fn encode_cursor(key: &[u8; 32], scope: CompanyScope, actor: finance_shared::ids::ActorId, sequence: i64, expires: u64) -> String {
+fn encode_cursor(
+    key: &[u8; 32],
+    scope: CompanyScope,
+    actor: finance_shared::ids::ActorId,
+    sequence: i64,
+    expires: u64,
+) -> String {
     let mut bytes = Vec::with_capacity(48);
     bytes.extend_from_slice(&sequence.to_be_bytes());
     bytes.extend_from_slice(&expires.to_be_bytes());
     bytes.extend_from_slice(&mac(key, scope, actor, &bytes).finalize().into_bytes());
     URL_SAFE_NO_PAD.encode(bytes)
 }
-fn decode_cursor(key: &[u8; 32], scope: CompanyScope, actor: finance_shared::ids::ActorId, value: &str, now: u64) -> Option<i64> {
-    if value.len() > 96 { return None; }
+fn decode_cursor(
+    key: &[u8; 32],
+    scope: CompanyScope,
+    actor: finance_shared::ids::ActorId,
+    value: &str,
+    now: u64,
+) -> Option<i64> {
+    if value.len() > 96 {
+        return None;
+    }
     let bytes = URL_SAFE_NO_PAD.decode(value).ok()?;
-    if bytes.len() != 48 { return None; }
-    mac(key, scope, actor, &bytes[..16]).verify_slice(&bytes[16..]).ok()?;
+    if bytes.len() != 48 {
+        return None;
+    }
+    mac(key, scope, actor, &bytes[..16])
+        .verify_slice(&bytes[16..])
+        .ok()?;
     let sequence = i64::from_be_bytes(bytes[..8].try_into().ok()?);
     let expires = u64::from_be_bytes(bytes[8..16].try_into().ok()?);
-    if sequence < 0 || expires <= now || expires > now.checked_add(300)? { return None; }
+    if sequence < 0 || expires <= now || expires > now.checked_add(300)? {
+        return None;
+    }
     Some(sequence)
 }
 fn digest_hex(bytes: &[u8; 32]) -> String {
@@ -101,22 +126,38 @@ pub(super) async fn list(
     match finance_audit::read_page_authenticated(&state.runtime, &proof, after, limit).await {
         Ok(events) => {
             let next_cursor = if events.len() == limit as usize {
-                events.last().map(|event| encode_cursor(&state.cursor_key, state.scope, actor, event.sequence, time + 300))
-            } else { None };
-            let items = events.into_iter().filter_map(|event| {
-                let occurred = chrono::DateTime::<chrono::Utc>::from_timestamp_micros(event.unix_micros)?;
-                Some(Audit {
-                    id: event.id,
-                    actor_id: event.actor,
-                    resource_id: event.resource,
-                    action: event.action,
-                    correlation_id: event.correlation,
-                    occurred_at: occurred.to_rfc3339(),
-                    digest: digest_hex(&event.digest),
+                events.last().map(|event| {
+                    encode_cursor(
+                        &state.cursor_key,
+                        state.scope,
+                        actor,
+                        event.sequence,
+                        time + 300,
+                    )
                 })
-            }).collect();
+            } else {
+                None
+            };
+            let items = events
+                .into_iter()
+                .filter_map(|event| {
+                    let occurred =
+                        chrono::DateTime::<chrono::Utc>::from_timestamp_micros(event.unix_micros)?;
+                    Some(Audit {
+                        id: event.id,
+                        actor_id: event.actor,
+                        resource_id: event.resource,
+                        action: event.action,
+                        correlation_id: event.correlation,
+                        occurred_at: occurred.to_rfc3339(),
+                        digest: digest_hex(&event.digest),
+                    })
+                })
+                .collect();
             let mut response = Json(Page { items, next_cursor }).into_response();
-            response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
             response
         }
         Err(e) => error(dossiers::status(e), correlation),

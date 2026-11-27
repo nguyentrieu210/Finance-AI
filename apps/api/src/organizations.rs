@@ -29,8 +29,8 @@ mod audit;
 mod checks;
 mod dashboard;
 mod documents;
-mod forms;
 mod dossiers;
+mod forms;
 mod knowledge;
 mod policies;
 mod references;
@@ -281,7 +281,10 @@ pub fn router(state: OrganizationState) -> Router {
         .route("/__diagnostics/knowledge", get(knowledge::search))
         .route("/v1/forms", get(forms::list).post(forms::create))
         .route("/v1/forms/{item_id}", get(forms::get))
-        .route("/v1/forms/{item_id}/revise", axum::routing::post(forms::revise))
+        .route(
+            "/v1/forms/{item_id}/revise",
+            axum::routing::post(forms::revise),
+        )
         .route("/v1/policies", get(policies::list))
         .route("/v1/policies/{item_id}", get(policies::get))
         .route("/v1/contracts", get(references::contracts))
