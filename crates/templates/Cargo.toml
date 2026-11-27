@@ -3,7 +3,7 @@ name = "finance-templates"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-publish.workspace = false
+publish.workspace = true
 
 [dependencies]
 finance-shared = { path = "../shared" }
