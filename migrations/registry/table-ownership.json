@@ -11,7 +11,8 @@
         "job_attempt",
         "outbox",
         "inbox",
-        "idempotency_record"
+        "idempotency_record",
+        "worker_scope"
       ],
       "invariants": "Job fence, bounded retries, dedupe and receipt immutable; same transaction as mutation."
     },
@@ -214,7 +215,8 @@
       "default_scope": "tenant",
       "tables": [
         "audit_event",
-        "audit_checkpoint"
+        "audit_checkpoint",
+        "audit_chain_head"
       ],
       "invariants": "Append-only chain; tenant sequence; company scope for company records; external anchor."
     },
