@@ -57,3 +57,9 @@ jobs:
         run: |
           .venv/bin/pip install -r scripts/s3-probe-requirements.txt
           bash scripts/test_s3_provider.sh
+      - name: Real ClamAV synthetic scanner probe
+        timeout-minutes: 5
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clamav-daemon
+          bash scripts/test_clamd_probe.sh

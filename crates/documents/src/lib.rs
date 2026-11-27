@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 //! Isolated synthetic-only upload and quarantine prototype. No public API, DB,
-//! object-store provider, AV scanner, parser, clean transition or download.
+//! object-store provider, parser, clean transition or download.
+pub mod scan;
 use chrono::{DateTime, TimeDelta, Utc};
 use finance_shared::{
     contracts::Version,
