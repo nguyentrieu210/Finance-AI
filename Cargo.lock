@@ -549,6 +549,12 @@ dependencies = [
 [[package]]
 name = "finance-forms"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+ "finance-shared",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "finance-identity"

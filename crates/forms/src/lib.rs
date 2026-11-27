@@ -2,6 +2,8 @@
 //! Synthetic-only domain prototype. No authorization, durable mutation or production claim.
 use std::collections::{BTreeMap, BTreeSet};
 
+pub mod schema;
+
 pub struct Field<'a> {
     pub key: &'a str,
     pub required: bool,

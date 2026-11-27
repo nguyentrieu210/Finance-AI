@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 from docx import Document
 from openpyxl import Workbook, load_workbook
+from office_guard import inspect, negative_probes
 
 MAX_ARTIFACT = 1024 * 1024
 
@@ -37,6 +38,8 @@ def main():
         doc.add_paragraph("Requested amount: {{amount}} {{currency}}")
         doc.add_paragraph("NOT FOR PAYMENT OR APPROVAL")
         doc.save(template)
+        inspect(checked(template),"docx")
+        negative_probes(checked(template))
         source_hash = hashlib.sha256(checked(template)).hexdigest()
         values = {"{{dossier_code}}":"SYN-EXPORT-001","{{amount}}":"125000","{{currency}}":"VND"}
         generated = Document(template)
@@ -48,6 +51,7 @@ def main():
         docx = root / "request.docx"
         generated.save(docx)
         assert hashlib.sha256(checked(template)).hexdigest() == source_hash
+        inspect(checked(docx),"docx")
         reread = Document(docx)
         assert any("125000 VND" in p.text for p in reread.paragraphs)
 
@@ -61,6 +65,7 @@ def main():
         sheet.append(["Currency", "VND"])
         sheet.append(["Disposition", "UNVERIFIED"])
         book.save(xlsx)
+        inspect(checked(xlsx),"xlsx")
         read = load_workbook(xlsx, read_only=True, data_only=False)
         assert read["Synthetic"]["B2"].value == "125000"
         assert read["Synthetic"]["B2"].data_type == "s"
