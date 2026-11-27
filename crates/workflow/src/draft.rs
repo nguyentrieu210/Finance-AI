@@ -216,7 +216,7 @@ pub async fn list_filtered(
         .map_err(grant_error)?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     let drafts = sqlx::query_as::<_, Draft>(&format!(
-        "{SELECT_DRAFT} WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id>$4 AND ($6::text IS NULL OR kind=$6) AND ($7::text IS NULL OR status=$7) AND ($8::timestamptz IS NULL OR updated_at >= $8) AND ($9::timestamptz IS NULL OR updated_at <= $9) ORDER BY id LIMIT $5"
+        "{SELECT_DRAFT} WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id>$4 AND ($6::text IS NULL OR kind=$6) AND ($7::text IS NULL OR status=$7) AND ($8::text::timestamptz IS NULL OR updated_at >= $8::text::timestamptz) AND ($9::text::timestamptz IS NULL OR updated_at <= $9::text::timestamptz) ORDER BY id LIMIT $5"
     ))
     .bind(t)
     .bind(c)
@@ -225,8 +225,8 @@ pub async fn list_filtered(
     .bind(limit)
     .bind(filters.kind)
     .bind(filters.status)
-    .bind(filters.updated_from)
-    .bind(filters.updated_to)
+    .bind(filters.updated_from.map(|date| date.to_rfc3339()))
+    .bind(filters.updated_to.map(|date| date.to_rfc3339()))
     .fetch_all(&mut *tx)
     .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;

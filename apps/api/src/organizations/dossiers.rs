@@ -45,8 +45,8 @@ pub struct List {
     company_id: Option<Uuid>,
     kind: Option<String>,
     status: Option<String>,
-    updated_from: Option<chrono::DateTime<chrono::Utc>>,
-    updated_to: Option<chrono::DateTime<chrono::Utc>>,
+    updated_from: Option<String>,
+    updated_to: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -186,12 +186,26 @@ pub async fn list(
     let Some(time) = now() else {
         return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
     };
+    let parse_date = |value: Option<&str>| {
+        value
+            .map(|s| {
+                chrono::DateTime::parse_from_rfc3339(s)
+                    .map(|date| date.with_timezone(&chrono::Utc))
+            })
+            .transpose()
+    };
+    let (Ok(updated_from), Ok(updated_to)) = (
+        parse_date(query.updated_from.as_deref()),
+        parse_date(query.updated_to.as_deref()),
+    ) else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
     let filters = draft::Filters {
         company_id: query.company_id,
         kind: query.kind.as_deref(),
         status: query.status.as_deref(),
-        updated_from: query.updated_from,
-        updated_to: query.updated_to,
+        updated_from,
+        updated_to,
     };
     if !filters.valid() {
         return error(StatusCode::BAD_REQUEST, correlation);
