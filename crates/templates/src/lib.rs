@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 //! Synthetic-only domain prototype. No authorization, durable mutation or production claim.
+pub mod repository;
 use finance_shared::upload_contract::Sha256Digest;
 use std::collections::BTreeSet;
 
