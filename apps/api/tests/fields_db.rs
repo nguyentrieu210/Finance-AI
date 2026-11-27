@@ -380,41 +380,6 @@ async fn actual_ocr_fields_http_review() {
         .0,
         StatusCode::FORBIDDEN
     );
-    {
-        let mut tx = runtime.begin().await.unwrap();
-        sqlx::query(
-            "SELECT set_config('finance.tenant_id',$1,true),set_config('finance.company_id',$2,true),set_config('finance.actor_id',$3,true)",
-        )
-        .bind("00000000-0000-0000-0000-000000000001")
-        .bind("00000000-0000-0000-0000-00000000000a")
-        .bind("00000000-0000-0000-0000-000000004001")
-        .execute(&mut *tx)
-        .await
-        .unwrap();
-        let direct = sqlx::query_scalar::<_, i64>(
-            "SELECT finance.runtime_match_confirm($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
-        )
-        .bind(Uuid::from_u128(1))
-        .bind(Uuid::from_u128(10))
-        .bind(Uuid::parse_str(dossier).unwrap())
-        .bind(1_i64)
-        .bind(Uuid::parse_str("00000000-0000-0000-0000-000000004001").unwrap())
-        .bind(Uuid::parse_str("00000000-0000-0000-0000-000000004030").unwrap())
-        .bind(Uuid::parse_str("00000000-0000-0000-0000-000000004031").unwrap())
-        .bind(Uuid::parse_str(evidence[0]).unwrap())
-        .bind(Uuid::parse_str(evidence[1]).unwrap())
-        .bind("Direct SQL diagnostic")
-        .bind(Uuid::parse_str("00000000-0000-0000-0000-000000004032").unwrap())
-        .bind(Uuid::parse_str("00000000-0000-0000-0000-000000004033").unwrap())
-        .fetch_one(&mut *tx)
-        .await;
-        assert!(
-            direct.is_ok(),
-            "runtime_match_confirm direct SQL failed: {:?}",
-            direct.err()
-        );
-        tx.rollback().await.unwrap();
-    }
     let (match_status, matched, match_receipt) = confirm_match(
         &app,
         &accountant,

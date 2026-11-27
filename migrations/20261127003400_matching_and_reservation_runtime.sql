@@ -149,13 +149,13 @@ REVOKE ALL ON FUNCTION finance.runtime_match_confirm(uuid,uuid,uuid,bigint,uuid,
 GRANT EXECUTE ON FUNCTION finance.runtime_match_confirm(uuid,uuid,uuid,bigint,uuid,uuid,uuid,uuid,uuid,text,uuid,uuid)
  TO finance_runtime;
 
-CREATE FUNCTION finance.runtime_match_receipt(t uuid,c uuid,d uuid,a uuid,result_id uuid)
+CREATE FUNCTION finance.runtime_match_receipt(t uuid,c uuid,d uuid,a uuid,target_result_id uuid)
 RETURNS TABLE(
  id uuid,left_evidence_id uuid,right_evidence_id uuid,state text,reason text,dossier_version bigint
 )
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $
 BEGIN
- IF result_id IS NULL OR NOT finance.field_access_allowed(t,c,d,a)
+ IF target_result_id IS NULL OR NOT finance.field_access_allowed(t,c,d,a)
  THEN RAISE EXCEPTION 'match receipt forbidden' USING ERRCODE='42501'; END IF;
  RETURN QUERY
  SELECT m.id,m.left_evidence_id,m.right_evidence_id,
@@ -164,9 +164,10 @@ BEGIN
  FROM finance.match_result m
  JOIN finance.match_decision q
   ON (q.tenant_id,q.company_id,q.result_id)=(m.tenant_id,m.company_id,m.id)
- WHERE m.tenant_id=t AND m.company_id=c AND m.dossier_id=d AND m.id=result_id AND q.actor_id=a
+ WHERE m.tenant_id=t AND m.company_id=c AND m.dossier_id=d
+  AND m.id=target_result_id AND q.actor_id=a
  LIMIT 1;
-END $$;
+END $;
 ALTER FUNCTION finance.runtime_match_receipt(uuid,uuid,uuid,uuid,uuid) OWNER TO finance_matching_writer;
 REVOKE ALL ON FUNCTION finance.runtime_match_receipt(uuid,uuid,uuid,uuid,uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION finance.runtime_match_receipt(uuid,uuid,uuid,uuid,uuid) TO finance_runtime;
