@@ -96,7 +96,7 @@ fn erp_snapshot_is_read_only_fresh_complete_and_replay_safe() {
         reverses: None,
     };
     let reversal = ErpEvent {
-        external_id: rid(31),
+        external_id: rid(29),
         sequence: 2,
         kind: ErpEventKind::Reversal,
         amount: money(),
@@ -114,6 +114,30 @@ fn erp_snapshot_is_read_only_fresh_complete_and_replay_safe() {
     };
     let normalized = validate_erp_snapshot(scope(), 150, &snapshot).unwrap();
     assert_eq!(normalized, vec![payment, reversal]);
+
+    assert_eq!(
+        validate_erp_snapshot(scope(), 99, &snapshot),
+        Err(ContractError::StaleSnapshot)
+    );
+
+    let mut chained = snapshot.clone();
+    chained.events.push(ErpEvent {
+        external_id: rid(32),
+        sequence: 3,
+        reverses: Some(reversal.external_id),
+        ..reversal
+    });
+    assert_eq!(
+        validate_erp_snapshot(scope(), 150, &chained),
+        Err(ContractError::InvalidReversal)
+    );
+
+    let mut wrong_currency = snapshot.clone();
+    wrong_currency.events[2].amount.currency = Currency::parse("USD").unwrap();
+    assert_eq!(
+        validate_erp_snapshot(scope(), 150, &wrong_currency),
+        Err(ContractError::InvalidReversal)
+    );
 
     let mut stale = snapshot.clone();
     stale.fresh_until_unix_s = 120;

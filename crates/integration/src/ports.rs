@@ -131,11 +131,13 @@ pub fn validate_erp_snapshot(
         return Err(ContractError::IncompleteSnapshot);
     }
     if snapshot.fresh_until_unix_s <= snapshot.as_of_unix_s
+        || now_unix_s < snapshot.as_of_unix_s
         || now_unix_s > snapshot.fresh_until_unix_s
     {
         return Err(ContractError::StaleSnapshot);
     }
     let mut by_id = BTreeMap::<ResourceId, ErpEvent>::new();
+    let mut ordered = Vec::new();
     let mut last_sequence = 0_u64;
     for event in &snapshot.events {
         if event.sequence == 0 {
@@ -154,7 +156,12 @@ pub fn validate_erp_snapshot(
             let Some(target) = event.reverses else {
                 return Err(ContractError::InvalidReversal);
             };
-            if !by_id.contains_key(&target) {
+            let Some(original) = by_id.get(&target) else {
+                return Err(ContractError::InvalidReversal);
+            };
+            if original.kind == ErpEventKind::Reversal
+                || original.amount.currency != event.amount.currency
+            {
                 return Err(ContractError::InvalidReversal);
             }
         } else if event.reverses.is_some() {
@@ -162,6 +169,7 @@ pub fn validate_erp_snapshot(
         }
         last_sequence = event.sequence;
         by_id.insert(event.external_id, *event);
+        ordered.push(*event);
     }
-    Ok(by_id.into_values().collect())
+    Ok(ordered)
 }
