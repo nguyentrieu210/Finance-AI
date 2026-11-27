@@ -77,7 +77,8 @@
       "default_scope": "company",
       "tables": [
         "extraction_run",
-        "extracted_field"
+        "extracted_field",
+        "field_identity"
       ],
       "invariants": "Immutable candidates, model/schema provenance."
     },

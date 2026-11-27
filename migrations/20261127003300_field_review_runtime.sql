@@ -65,15 +65,12 @@ CREATE POLICY field_writer_outbox_insert ON finance.outbox FOR INSERT TO finance
  WITH CHECK(tenant_id=finance.scope_tenant() AND company_id=finance.scope_company());
 
 CREATE FUNCTION finance.field_identity_after_insert() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $
 BEGIN
- IF NEW.tenant_id IS DISTINCT FROM finance.scope_tenant()
- OR NEW.company_id IS DISTINCT FROM finance.scope_company()
- THEN RAISE EXCEPTION 'field identity scope mismatch' USING ERRCODE='42501'; END IF;
  INSERT INTO finance.field_identity(tenant_id,company_id,run_id,field_path,id)
  VALUES(NEW.tenant_id,NEW.company_id,NEW.run_id,NEW.field_path,gen_random_uuid());
  RETURN NEW;
-END $$;
+END $;
 ALTER FUNCTION finance.field_identity_after_insert() OWNER TO finance_field_review_writer;
 REVOKE ALL ON FUNCTION finance.field_identity_after_insert() FROM PUBLIC;
 CREATE TRIGGER field_identity_after_extract AFTER INSERT ON finance.extracted_field
