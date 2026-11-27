@@ -670,7 +670,11 @@ dependencies = [
 name = "finance-templates"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "finance-shared",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

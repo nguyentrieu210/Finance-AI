@@ -7,3 +7,9 @@ publish.workspace = true
 
 [dependencies]
 finance-shared = { path = "../shared" }
+
+[dev-dependencies]
+base64 = "=0.22.1"
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "=0.10.9"

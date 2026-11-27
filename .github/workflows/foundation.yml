@@ -109,3 +109,10 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Real image quality and deskew synthetic probe
         run: bash scripts/test_ocr_quality.sh
+  office-export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Real isolated office export and Rust manifest probe
+        run: bash scripts/test_office_export.sh
