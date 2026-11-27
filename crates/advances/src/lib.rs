@@ -3,9 +3,53 @@
 use chrono::NaiveDate;
 pub use finance_financial::references::{Reference, list_advances as list_verified};
 use finance_financial::{Error, available};
-use finance_shared::money::Money;
+use finance_shared::{ids::ResourceId, money::Money};
 
 pub mod settlement;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct VerifiedIssue<'a> {
+    pub purpose: &'a str,
+    pub beneficiary: ResourceId,
+    pub amount: Option<Money>,
+    pub due: NaiveDate,
+    pub source_verified: bool,
+}
+
+impl<'a> VerifiedIssue<'a> {
+    pub fn into_advance(
+        self,
+        settled: Money,
+        confirmed_refund: Money,
+        reserved: Money,
+        approved_extension: Option<NaiveDate>,
+    ) -> Result<Advance, Error> {
+        let purpose = self.purpose.trim();
+        let amount = self.amount.ok_or(Error::Unknown)?;
+        if !self.source_verified || purpose.is_empty() || purpose.len() > 512 {
+            return Err(Error::Unknown);
+        }
+        if amount.amount.decimal() <= 0.into() {
+            return Err(Error::Negative);
+        }
+        if [settled, confirmed_refund, reserved]
+            .iter()
+            .any(|value| value.currency != amount.currency)
+        {
+            return Err(Error::Currency);
+        }
+        let _ = self.beneficiary;
+        Ok(Advance {
+            issued: Some(amount),
+            settled,
+            confirmed_refund,
+            reserved,
+            due: self.due,
+            approved_extension,
+        })
+    }
+}
+
 
 pub struct Advance {
     pub issued: Option<Money>,

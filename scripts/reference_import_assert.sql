@@ -9,7 +9,7 @@ BEGIN
  INSERT INTO finance.vendor_ref VALUES(t,c,s,v,'VENDOR1','Synthetic vendor');
  INSERT INTO finance.contract_ref VALUES(t,c,s,k,'CONTRACT1',v,'VND',100,20,d,d+365);
  INSERT INTO finance.invoice_ref VALUES(t,c,s,i,v,'SERIES','000001','VND',90,10,d);
- INSERT INTO finance.advance_ref VALUES(t,c,s,a,'ADVANCE1',maker,'VND',100,20,10,d+30);
+ INSERT INTO finance.advance_ref(tenant_id,company_id,snapshot_id,id,external_key,beneficiary_id,currency,issued,settled,refunded,due_date,purpose) VALUES(t,c,s,a,'ADVANCE1',maker,'VND',100,20,10,d+30,'Synthetic verified advance purpose');
  INSERT INTO finance.budget_ref VALUES(t,c,s,b,'CC1','ACC1','VND',200,100,d,d+365);
  INSERT INTO finance.source_coverage VALUES(t,c,s,'CONTRACT',true,'W1'),(t,c,s,'INVOICE',true,'W1'),(t,c,s,'ADVANCE',false,'W1'),(t,c,s,'BUDGET',true,'W1');
  BEGIN
