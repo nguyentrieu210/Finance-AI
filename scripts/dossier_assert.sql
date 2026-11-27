@@ -125,3 +125,22 @@ BEGIN
  END IF;
 END $$;
 SELECT 'PASS: document metadata authorization, quota, version replay and audit/outbox';
+
+-- Regression: approver sees only case-related parents, not arbitrary dossiers.
+BEGIN;
+SET LOCAL ROLE finance_runtime;
+SELECT set_config('finance.tenant_id','00000000-0000-0000-0000-000000000001',true),
+ set_config('finance.company_id','00000000-0000-0000-0000-00000000000a',true),
+ set_config('finance.actor_id','00000000-0000-0000-0000-0000000003f1',true);
+DO $$
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM finance.dossier WHERE id='00000000-0000-0000-0000-000000002120')
+ OR EXISTS(SELECT 1 FROM finance.dossier WHERE id='00000000-0000-0000-0000-000000001800')
+ OR NOT EXISTS(SELECT 1 FROM finance.handoff WHERE id='00000000-0000-0000-0000-000000002315')
+ OR EXISTS(SELECT 1 FROM finance.handoff h JOIN finance.dossier_snapshot s
+   ON (s.tenant_id,s.company_id,s.id)=(h.tenant_id,h.company_id,h.snapshot_id)
+   WHERE s.dossier_id='00000000-0000-0000-0000-000000002300')
+ THEN RAISE EXCEPTION 'case-parent visibility failed'; END IF;
+END $$;
+ROLLBACK;
+SELECT 'PASS: case-bound approver parent visibility';
