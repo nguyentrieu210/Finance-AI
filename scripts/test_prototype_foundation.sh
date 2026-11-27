@@ -71,6 +71,8 @@ fi
 bash scripts/test_document_metadata.sh "$cid"
 bash scripts/test_financial_reservation.sh "$cid"
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/financial_lifecycle_assert.sql
+docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/dossier_fixture.sql
 FINANCE_PROTOTYPE_TEST_DATABASE_URL="$runtime_url" FINANCE_IDENTITY_TEST_DATABASE_URL="$identity_url" cargo test --locked -p finance-api --test organizations_db -- --ignored --exact scoped_organization_http_real_database
+docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/dossier_assert.sql
 unset url runtime_url worker_url identity_url
 echo 'PASS: real PostgreSQL synthetic prototype atomic command, replay, RLS and scoped FK'
