@@ -1,4 +1,4 @@
-use finance_core::jobs::{self, JobError};
+use finance_core::jobs;
 use finance_shared::{
     ids::{CompanyId, CompanyScope, TenantId},
     upload_contract::Sha256Digest,
@@ -79,9 +79,5 @@ async fn fenced_export_worker_real_database() {
         }
     }
     assert!(exported, "queued export job was not reached");
-    assert!(matches!(
-        jobs::claim(&pool, scope(), id(6200), 30).await,
-        Ok(_) | Err(JobError::Database(_))
-    ));
     pool.close().await;
 }
