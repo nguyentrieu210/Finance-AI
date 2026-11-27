@@ -13,6 +13,19 @@ BEGIN
   PERFORM finance.prototype_review_candidate(t,c,d,0,r,'invoice.total',unassigned,review,'CONFIRMED_CANDIDATE','Unassigned review');
   RAISE EXCEPTION 'unassigned review accepted';
  EXCEPTION WHEN check_violation THEN NULL; END;
+ -- A trusted synthetic caller must bind transaction scope; the audit trigger
+ -- must reject unscoped or mismatched actor writes, even for the fixture.
+ PERFORM set_config('finance.tenant_id',t::text,true);
+ PERFORM set_config('finance.company_id',c::text,true);
+ PERFORM set_config('finance.actor_id',a::text,true);
+ BEGIN
+  PERFORM finance.prototype_preflight(t,c,d,0,owner_id,check1,day);
+  RAISE EXCEPTION 'mismatched audit actor accepted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ IF EXISTS(SELECT 1 FROM finance.check_run WHERE id=check1) THEN
+  RAISE EXCEPTION 'failed audit left a check run';
+ END IF;
+ PERFORM set_config('finance.actor_id',owner_id::text,true);
  PERFORM finance.prototype_preflight(t,c,d,0,owner_id,check1,day);
  BEGIN
   PERFORM finance.prototype_review_candidate(t,c,d,0,r,'invoice.total',owner_id,review,'CONFIRMED_CANDIDATE','Self review');
@@ -22,6 +35,7 @@ BEGIN
   PERFORM finance.prototype_review_candidate(t,c,d,0,r,'invoice.tax',a,review,'CONFIRMED_CANDIDATE','Unknown tax');
   RAISE EXCEPTION 'unknown candidate confirmed';
  EXCEPTION WHEN check_violation THEN NULL; END;
+ PERFORM set_config('finance.actor_id',a::text,true);
  PERFORM finance.prototype_review_candidate(t,c,d,0,r,'invoice.total',a,review,'CONFIRMED_CANDIDATE','Checked synthetic OCR candidate');
  IF (SELECT normalized_value FROM finance.field_decision WHERE id=review) IS DISTINCT FROM '125000' THEN RAISE EXCEPTION 'confirmed value differs from OCR'; END IF;
  IF finance.prototype_review_candidate(t,c,d,0,r,'invoice.total',a,review,'CONFIRMED_CANDIDATE','Checked synthetic OCR candidate') IS DISTINCT FROM review
@@ -30,6 +44,7 @@ BEGIN
   PERFORM finance.prototype_preflight(t,c,d,0,owner_id,gen_random_uuid(),day);
   RAISE EXCEPTION 'stale preflight accepted';
  EXCEPTION WHEN check_violation THEN NULL; END;
+ PERFORM set_config('finance.actor_id',owner_id::text,true);
  PERFORM finance.prototype_preflight(t,c,d,1,owner_id,check2,day);
  SELECT input_hash INTO hash1 FROM finance.check_run WHERE id=check1;
  SELECT input_hash INTO hash2 FROM finance.check_run WHERE id=check2;
