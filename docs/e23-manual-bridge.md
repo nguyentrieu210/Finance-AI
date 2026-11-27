@@ -1,0 +1,4 @@
+# E23 manual bridge and reconciliation
+The pilot bridge supports MANUAL handoff only. A handoff requires the authenticated dossier owner, an EXPORTED current dossier version, and a READY package bound to the current sealed snapshot. Recording a manual external receipt moves the dossier to HANDED_OFF and stores the handoff as ACKNOWLEDGED; it never implies APPROVED. DO_API is rejected until X01 provides approved external documentation, sandbox, credentials and mapping.
+
+Reconciliation cases are immutable in their source binding. Requesters can read their own cases; a current FinanceApprover can resolve an OPEN case with a reason/evidence and optimistic version. Resolution is audited/outboxed and does not release reservations, alter payments, or manufacture an authoritative external status. Live DO/ERP connectors remain disabled.

@@ -410,6 +410,19 @@ async fn scoped_organization_http_real_database() {
     let (decision_status,decision,_)=decide_waiver(&app,&approver,waiver_dossier,&waiver_id,"waiver-approve",&waiver_version,"APPROVED",Some("2035-12-01T00:00:00Z")).await;
     assert_eq!(decision_status,StatusCode::OK);assert_eq!(decision["state"],"APPROVED");
     assert_eq!(request(&app,&format!("/v1/dossiers/{waiver_dossier}/waivers"),Some(&requester)).await.1["items"].as_array().unwrap().len(),1);
+    let handoff_dossier="00000000-0000-0000-0000-000000002300";
+    let handoff_version=format!("\"v1:dossier:{handoff_dossier}:0\"");
+    let (handoff_status,handoff,handoff_receipt)=create_handoff(&app,&requester,handoff_dossier,"handoff-one",&handoff_version,"00000000-0000-0000-0000-000000002304","MANUAL",Some("MANUAL-RECEIPT-1")).await;
+    assert_eq!(handoff_status,StatusCode::CREATED);assert_eq!(handoff["state"],"ACKNOWLEDGED");assert_ne!(handoff["state"],"APPROVED");assert!(handoff_receipt.as_deref().unwrap().ends_with(":1\""));
+    assert_eq!(create_handoff(&app,&requester,handoff_dossier,"handoff-do",&handoff_version,"00000000-0000-0000-0000-000000002304","DO_API",None).await.0,StatusCode::CONFLICT);
+    assert_eq!(request(&app,&format!("/v1/dossiers/{handoff_dossier}/handoffs"),Some(&requester)).await.1["items"].as_array().unwrap().len(),1);
+    let recon_id="00000000-0000-0000-0000-000000002316";
+    let (recon_status,recon,recon_token)=request_with_headers(&app,&format!("/v1/reconciliation/{recon_id}"),Some(&requester)).await;
+    assert_eq!(recon_status,StatusCode::OK);assert_eq!(recon["state"],"OPEN");assert!(recon_token.as_deref().unwrap().ends_with(":0\""));
+    let approver=mint("form-checker");
+    assert_eq!(resolve_reconciliation(&app,&requester,recon_id,"recon-denied",recon_token.as_deref().unwrap()).await.0,StatusCode::FORBIDDEN);
+    let (resolve_status,resolved,_)=resolve_reconciliation(&app,&approver,recon_id,"recon-resolve",recon_token.as_deref().unwrap()).await;
+    assert_eq!(resolve_status,StatusCode::OK);assert_eq!(resolved["state"],"RESOLVED");
     let ready_id = "00000000-0000-0000-0000-000000001800";
     let check_id = "00000000-0000-0000-0000-000000001802";
     let ready_version = format!("\"v1:dossier:{ready_id}:0\"");
@@ -1106,4 +1119,15 @@ async fn request_waiver(app:&Router,token:&str,dossier:&str,key:&str,version:&st
 async fn decide_waiver(app:&Router,token:&str,dossier:&str,waiver:&str,key:&str,version:&str,decision:&str,expires:Option<&str>)->(StatusCode,serde_json::Value,Option<String>){
  let response=app.clone().oneshot(Request::builder().method("POST").uri(format!("/v1/dossiers/{dossier}/waivers/{waiver}/decision")).header(header::AUTHORIZATION,format!("Bearer {token}")).header("idempotency-key",key).header("if-finance-version",version).header(header::CONTENT_TYPE,"application/json").body(Body::from(json!({"decision":decision,"expires_at":expires,"reason":"Synthetic independent decision","evidence_ids":[]}).to_string())).unwrap()).await.unwrap();
  let status=response.status();let receipt=response.headers().get("finance-version").and_then(|v|v.to_str().ok()).map(str::to_owned);let bytes=response.into_body().collect().await.unwrap().to_bytes();(status,serde_json::from_slice(&bytes).unwrap_or_else(|_|json!({})),receipt)
+}
+
+async fn request_with_headers(app:&Router,uri:&str,token:Option<&str>)->(StatusCode,serde_json::Value,Option<String>){
+ let mut builder=Request::builder().uri(uri);if let Some(token)=token{builder=builder.header(header::AUTHORIZATION,format!("Bearer {token}"));}
+ let response=app.clone().oneshot(builder.body(Body::empty()).unwrap()).await.unwrap();let status=response.status();let version=response.headers().get("finance-version").and_then(|x|x.to_str().ok()).map(str::to_owned);let bytes=to_bytes(response.into_body(),1024*1024).await.unwrap();(status,serde_json::from_slice(&bytes).unwrap_or_else(|_|json!({})),version)
+}
+async fn create_handoff(app:&Router,token:&str,dossier:&str,key:&str,version:&str,package:&str,channel:&str,external:Option<&str>)->(StatusCode,serde_json::Value,Option<String>){
+ let response=app.clone().oneshot(Request::builder().method("POST").uri(format!("/v1/dossiers/{dossier}/handoffs")).header(header::AUTHORIZATION,format!("Bearer {token}")).header("idempotency-key",key).header("if-finance-version",version).header(header::CONTENT_TYPE,"application/json").body(Body::from(json!({"package_id":package,"channel":channel,"external_ref":external,"evidence_ids":[]}).to_string())).unwrap()).await.unwrap();let status=response.status();let receipt=response.headers().get("finance-version").and_then(|x|x.to_str().ok()).map(str::to_owned);let bytes=to_bytes(response.into_body(),1024*1024).await.unwrap();(status,serde_json::from_slice(&bytes).unwrap_or_else(|_|json!({})),receipt)
+}
+async fn resolve_reconciliation(app:&Router,token:&str,id:&str,key:&str,version:&str)->(StatusCode,serde_json::Value,Option<String>){
+ let response=app.clone().oneshot(Request::builder().method("POST").uri(format!("/v1/reconciliation/{id}/resolve")).header(header::AUTHORIZATION,format!("Bearer {token}")).header("idempotency-key",key).header("if-finance-version",version).header(header::CONTENT_TYPE,"application/json").body(Body::from(json!({"reason":"Authoritative manual reconciliation completed","evidence_ids":[]}).to_string())).unwrap()).await.unwrap();let status=response.status();let receipt=response.headers().get("finance-version").and_then(|x|x.to_str().ok()).map(str::to_owned);let bytes=to_bytes(response.into_body(),1024*1024).await.unwrap();(status,serde_json::from_slice(&bytes).unwrap_or_else(|_|json!({})),receipt)
 }
