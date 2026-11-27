@@ -438,14 +438,14 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(snapshot_status, StatusCode::OK);
     assert_eq!(sealed["dossier_id"], ready_id);
     assert_eq!(sealed["check_run_id"], check_id);
-    assert_eq!(sealed["policy_version_id"], "00000000-0000-0000-0000-000000001600");
+    assert_eq!(
+        sealed["policy_version_id"],
+        "00000000-0000-0000-0000-000000001600"
+    );
     assert_eq!(sealed["revision"], 0);
     assert_eq!(sealed["input_hash"].as_str().unwrap().len(), 64);
     assert!(ready_receipt.as_deref().unwrap().ends_with(":1\""));
-    assert_ne!(
-        ready_receipt.as_deref().unwrap(),
-        ready_version
-    );
+    assert_ne!(ready_receipt.as_deref().unwrap(), ready_version);
     assert_eq!(
         request(
             &app,

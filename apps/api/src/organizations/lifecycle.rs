@@ -2,10 +2,7 @@
 use super::{OrganizationState, dossiers, error, random_id};
 use axum::{
     Json,
-    extract::{
-        Path, State,
-        rejection::JsonRejection,
-    },
+    extract::{Path, State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };

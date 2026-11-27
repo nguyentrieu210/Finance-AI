@@ -87,8 +87,7 @@ pub(super) async fn create(
         name: &body.name,
         fields: &body.fields,
     };
-    match repository::create(&state.runtime, &proof, &key, draft).await
-    {
+    match repository::create(&state.runtime, &proof, &key, draft).await {
         Ok(form) => receipt(form, StatusCode::CREATED),
         Err(e) => error(dossiers::status(e), correlation),
     }
@@ -130,8 +129,7 @@ pub(super) async fn revise(
         fields: &body.fields,
         reason: &body.reason,
     };
-    match repository::revise(&state.runtime, &proof, &key, draft).await
-    {
+    match repository::revise(&state.runtime, &proof, &key, draft).await {
         Ok(form) => receipt(form, StatusCode::OK),
         Err(e) => error(dossiers::status(e), correlation),
     }

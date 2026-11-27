@@ -295,7 +295,10 @@ pub fn router(state: OrganizationState) -> Router {
             "/v1/forms/{item_id}/revise",
             axum::routing::post(forms::revise),
         )
-        .route("/v1/templates", get(templates::list).post(templates::create))
+        .route(
+            "/v1/templates",
+            get(templates::list).post(templates::create),
+        )
         .route("/v1/templates/{item_id}", get(templates::get))
         .route(
             "/v1/templates/{item_id}/revise",

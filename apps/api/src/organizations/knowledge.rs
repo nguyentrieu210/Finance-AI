@@ -44,8 +44,7 @@ pub(super) async fn search(
         vector: [1.0, 0.0, 0.0],
         limit: query.limit.unwrap_or(10),
     };
-    match finance_knowledge::repository::retrieve(&state.runtime, &proof, request).await
-    {
+    match finance_knowledge::repository::retrieve(&state.runtime, &proof, request).await {
         Ok(items) => {
             let mut response = Json(items).into_response();
             response

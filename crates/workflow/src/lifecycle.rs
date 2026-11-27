@@ -118,26 +118,25 @@ pub async fn ready(
         tx.commit().await?;
         return Ok(receipt);
     }
-    let result: Uuid = sqlx::query_scalar(
-        "SELECT finance.workflow_ready($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-    )
-    .bind(tenant)
-    .bind(company)
-    .bind(request.dossier)
-    .bind(version)
-    .bind(actor)
-    .bind(request.check_run)
-    .bind(request.snapshot)
-    .bind(command)
-    .bind(correlation)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(|error| match &error {
-        sqlx::Error::Database(database) if database.code().as_deref() == Some("23514") => {
-            Error::Conflict
-        }
-        _ => Error::Database(error),
-    })?;
+    let result: Uuid =
+        sqlx::query_scalar("SELECT finance.workflow_ready($1,$2,$3,$4,$5,$6,$7,$8,$9)")
+            .bind(tenant)
+            .bind(company)
+            .bind(request.dossier)
+            .bind(version)
+            .bind(actor)
+            .bind(request.check_run)
+            .bind(request.snapshot)
+            .bind(command)
+            .bind(correlation)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|error| match &error {
+                sqlx::Error::Database(database) if database.code().as_deref() == Some("23514") => {
+                    Error::Conflict
+                }
+                _ => Error::Database(error),
+            })?;
     if result != request.snapshot {
         return Err(Error::Conflict);
     }

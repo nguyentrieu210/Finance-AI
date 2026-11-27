@@ -117,7 +117,8 @@ pub(super) async fn revise(
         return error(StatusCode::BAD_REQUEST, correlation);
     }
     let proof =
-        match dossiers::authenticate_version(&state, &headers, correlation, Some(token.version)).await
+        match dossiers::authenticate_version(&state, &headers, correlation, Some(token.version))
+            .await
         {
             Ok(proof) => proof,
             Err(status) => return error(status, correlation),
