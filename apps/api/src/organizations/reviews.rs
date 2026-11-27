@@ -153,10 +153,11 @@ pub(super) async fn decide(
     let Some(expected) = token(&headers, dossier) else {
         return error(StatusCode::BAD_REQUEST, correlation);
     };
-    let proof = match dossiers::authenticate_version(&state, &headers, correlation, Some(expected)).await {
-        Ok(proof) => proof,
-        Err(status) => return error(status, correlation),
-    };
+    let proof =
+        match dossiers::authenticate_version(&state, &headers, correlation, Some(expected)).await {
+            Ok(proof) => proof,
+            Err(status) => return error(status, correlation),
+        };
     let Some(key) = key(&headers) else {
         return error(StatusCode::BAD_REQUEST, correlation);
     };

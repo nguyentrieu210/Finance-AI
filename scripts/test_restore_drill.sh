@@ -58,10 +58,10 @@ docker exec -i "$cid" psql -X -U finance_migrator -d finance_restore -v ON_ERROR
 DO $$
 DECLARE head_seq bigint; max_seq bigint;
 BEGIN
- IF (SELECT count(*) FROM public._sqlx_migrations WHERE success)<>40 THEN
+ IF (SELECT count(*) FROM public._sqlx_migrations WHERE success)<>41 THEN
   RAISE EXCEPTION 'restored migration ledger mismatch';
  END IF;
- IF (SELECT count(*) FROM pg_tables WHERE schemaname='finance')<>71 THEN
+ IF (SELECT count(*) FROM pg_tables WHERE schemaname='finance')<>73 THEN
   RAISE EXCEPTION 'restored table inventory mismatch';
  END IF;
  IF NOT EXISTS(
