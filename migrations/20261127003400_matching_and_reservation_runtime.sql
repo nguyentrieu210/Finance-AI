@@ -153,7 +153,7 @@ CREATE FUNCTION finance.runtime_match_receipt(t uuid,c uuid,d uuid,a uuid,target
 RETURNS TABLE(
  id uuid,left_evidence_id uuid,right_evidence_id uuid,state text,reason text,dossier_version bigint
 )
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
 BEGIN
  IF target_result_id IS NULL OR NOT finance.field_access_allowed(t,c,d,a)
  THEN RAISE EXCEPTION 'match receipt forbidden' USING ERRCODE='42501'; END IF;
@@ -167,7 +167,7 @@ BEGIN
  WHERE m.tenant_id=t AND m.company_id=c AND m.dossier_id=d
   AND m.id=target_result_id AND q.actor_id=a
  LIMIT 1;
-END $;
+END $$;
 ALTER FUNCTION finance.runtime_match_receipt(uuid,uuid,uuid,uuid,uuid) OWNER TO finance_matching_writer;
 REVOKE ALL ON FUNCTION finance.runtime_match_receipt(uuid,uuid,uuid,uuid,uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION finance.runtime_match_receipt(uuid,uuid,uuid,uuid,uuid) TO finance_runtime;
