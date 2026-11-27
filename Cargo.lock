@@ -447,6 +447,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "finance-document-intelligence"
+version = "0.1.0"
+dependencies = [
+ "finance-documents",
+ "finance-ocr",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "finance-documents"
 version = "0.1.0"
 dependencies = [
