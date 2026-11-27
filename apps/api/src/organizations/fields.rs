@@ -140,12 +140,14 @@ pub(super) async fn decide(
         &state.runtime,
         &proof,
         &key,
-        dossier,
-        body.field_id,
-        &body.value,
-        &body.reason,
-        &body.evidence_ids,
-        random_id(),
+        finance_validation::repository::FieldDecisionCommand {
+            dossier,
+            field: body.field_id,
+            value: &body.value,
+            reason: &body.reason,
+            evidence: &body.evidence_ids,
+            decision: random_id(),
+        },
     )
     .await
     {

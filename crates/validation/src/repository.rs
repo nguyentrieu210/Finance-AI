@@ -35,6 +35,15 @@ pub struct DecisionReceipt {
     pub dossier_version: i64,
 }
 
+pub struct FieldDecisionCommand<'a> {
+    pub dossier: Uuid,
+    pub field: Uuid,
+    pub value: &'a str,
+    pub reason: &'a str,
+    pub evidence: &'a [Uuid],
+    pub decision: Uuid,
+}
+
 fn binding(proof: &AuthenticatedCommand) -> Result<(Uuid, Uuid, Uuid), Error> {
     let ResourceScope::Company(CompanyScope { tenant, company }) = proof.context().scope else {
         return Err(Error::Forbidden);
@@ -115,13 +124,16 @@ pub async fn decide(
     pool: &PgPool,
     proof: &AuthenticatedCommand,
     key: &IdempotencyKey,
-    dossier: Uuid,
-    field: Uuid,
-    value: &str,
-    reason: &str,
-    evidence: &[Uuid],
-    decision: Uuid,
+    command: FieldDecisionCommand<'_>,
 ) -> Result<DecisionReceipt, Error> {
+    let FieldDecisionCommand {
+        dossier,
+        field,
+        value,
+        reason,
+        evidence,
+        decision,
+    } = command;
     let Some(expected) = proof.context().expected_version else {
         return Err(Error::InvalidInput);
     };

@@ -230,11 +230,13 @@ pub(super) async fn request_waiver(
         &state.runtime,
         &proof,
         &key,
-        dossier,
-        random_id(),
-        b.result_id,
-        &b.reason,
-        &b.evidence_ids,
+        repository::WaiverRequestCommand {
+            dossier,
+            id: random_id(),
+            result: b.result_id,
+            reason: &b.reason,
+            evidence: &b.evidence_ids,
+        },
     )
     .await
     {
@@ -272,12 +274,14 @@ pub(super) async fn decide_waiver(
         &state.runtime,
         &proof,
         &key,
-        dossier,
-        waiver,
-        &b.decision,
-        expires,
-        &b.reason,
-        &b.evidence_ids,
+        repository::WaiverDecisionCommand {
+            dossier,
+            waiver,
+            decision: &b.decision,
+            expires,
+            reason: &b.reason,
+            evidence: &b.evidence_ids,
+        },
     )
     .await
     {

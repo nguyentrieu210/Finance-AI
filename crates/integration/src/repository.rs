@@ -78,6 +78,14 @@ fn validate_evidence(evidence: &[Uuid]) -> Result<Vec<Uuid>, Error> {
 const SELECT_HANDOFF: &str = "SELECT h.id,h.package_id,h.channel,h.state,h.external_ref,h.evidence_ids,s.dossier_id,d.version AS dossier_version FROM finance.handoff h JOIN finance.dossier_snapshot s ON (s.tenant_id,s.company_id,s.id)=(h.tenant_id,h.company_id,h.snapshot_id) JOIN finance.dossier d ON (d.tenant_id,d.company_id,d.id)=(s.tenant_id,s.company_id,s.dossier_id)";
 const SELECT_RECON: &str = "SELECT r.id,r.channel,h.external_ref,r.state,COALESCE(r.resolution_reason,r.reason) AS reason,CASE WHEN cardinality(r.resolution_evidence_ids)>0 THEN r.resolution_evidence_ids ELSE r.evidence_ids END AS evidence_ids,r.version FROM finance.reconciliation_case r JOIN finance.handoff h ON (h.tenant_id,h.company_id,h.id)=(r.tenant_id,r.company_id,r.handoff_id)";
 
+pub struct ManualHandoffCommand<'a> {
+    pub dossier: Uuid,
+    pub handoff: Uuid,
+    pub package: Uuid,
+    pub external_ref: &'a str,
+    pub evidence: &'a [Uuid],
+}
+
 async fn allowed_reconciliation_read(
     tx: &mut Transaction<'_, Postgres>,
     proof: &AuthenticatedCommand,
@@ -125,12 +133,15 @@ pub async fn create_manual_handoff(
     pool: &sqlx::PgPool,
     proof: &AuthenticatedCommand,
     key: &IdempotencyKey,
-    dossier: Uuid,
-    handoff: Uuid,
-    package: Uuid,
-    external_ref: &str,
-    evidence: &[Uuid],
+    command: ManualHandoffCommand<'_>,
 ) -> Result<Handoff, Error> {
+    let ManualHandoffCommand {
+        dossier,
+        handoff,
+        package,
+        external_ref,
+        evidence,
+    } = command;
     let Some(expected) = proof.context().expected_version else {
         return Err(Error::InvalidInput);
     };

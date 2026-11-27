@@ -36,6 +36,15 @@ pub struct MatchReceipt {
     pub dossier_version: i64,
 }
 
+pub struct ConfirmCommand<'a> {
+    pub dossier: Uuid,
+    pub left: Uuid,
+    pub right: Uuid,
+    pub reason: &'a str,
+    pub result_id: Uuid,
+    pub decision_id: Uuid,
+}
+
 fn binding(proof: &AuthenticatedCommand) -> Result<(Uuid, Uuid, Uuid), Error> {
     let ResourceScope::Company(CompanyScope { tenant, company }) = proof.context().scope else {
         return Err(Error::Forbidden);
@@ -126,13 +135,16 @@ pub async fn confirm(
     pool: &PgPool,
     proof: &AuthenticatedCommand,
     key: &IdempotencyKey,
-    dossier: Uuid,
-    left: Uuid,
-    right: Uuid,
-    reason: &str,
-    result_id: Uuid,
-    decision_id: Uuid,
+    command: ConfirmCommand<'_>,
 ) -> Result<MatchReceipt, Error> {
+    let ConfirmCommand {
+        dossier,
+        left,
+        right,
+        reason,
+        result_id,
+        decision_id,
+    } = command;
     let Some(expected) = proof.context().expected_version else {
         return Err(Error::InvalidInput);
     };

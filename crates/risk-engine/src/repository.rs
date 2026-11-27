@@ -37,6 +37,23 @@ pub struct Waiver {
     pub dossier_version: i64,
 }
 
+pub struct WaiverRequestCommand<'a> {
+    pub dossier: Uuid,
+    pub id: Uuid,
+    pub result: Uuid,
+    pub reason: &'a str,
+    pub evidence: &'a [Uuid],
+}
+
+pub struct WaiverDecisionCommand<'a> {
+    pub dossier: Uuid,
+    pub waiver: Uuid,
+    pub decision: &'a str,
+    pub expires: Option<chrono::DateTime<chrono::Utc>>,
+    pub reason: &'a str,
+    pub evidence: &'a [Uuid],
+}
+
 fn binding(proof: &AuthenticatedCommand) -> Result<(Uuid, Uuid, Uuid), Error> {
     let ResourceScope::Company(CompanyScope { tenant, company }) = proof.context().scope else {
         return Err(Error::Forbidden);
@@ -169,12 +186,15 @@ pub async fn request_waiver(
     pool: &sqlx::PgPool,
     proof: &AuthenticatedCommand,
     key: &IdempotencyKey,
-    dossier: Uuid,
-    id: Uuid,
-    result: Uuid,
-    reason: &str,
-    evidence: &[Uuid],
+    command: WaiverRequestCommand<'_>,
 ) -> Result<Waiver, Error> {
+    let WaiverRequestCommand {
+        dossier,
+        id,
+        result,
+        reason,
+        evidence,
+    } = command;
     evidence_reason(reason, evidence)?;
     let Some(expected) = proof.context().expected_version else {
         return Err(Error::InvalidInput);
@@ -264,13 +284,16 @@ pub async fn decide_waiver(
     pool: &sqlx::PgPool,
     proof: &AuthenticatedCommand,
     key: &IdempotencyKey,
-    dossier: Uuid,
-    waiver: Uuid,
-    decision: &str,
-    expires: Option<chrono::DateTime<chrono::Utc>>,
-    reason: &str,
-    evidence: &[Uuid],
+    command: WaiverDecisionCommand<'_>,
 ) -> Result<Waiver, Error> {
+    let WaiverDecisionCommand {
+        dossier,
+        waiver,
+        decision,
+        expires,
+        reason,
+        evidence,
+    } = command;
     evidence_reason(reason, evidence)?;
     if !matches!(decision, "APPROVED" | "REJECTED") {
         return Err(Error::InvalidInput);

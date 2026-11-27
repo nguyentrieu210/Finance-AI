@@ -133,12 +133,14 @@ pub(super) async fn confirm(
         &state.runtime,
         &proof,
         &key,
-        dossier,
-        body.left_evidence_id,
-        body.right_evidence_id,
-        &body.reason,
-        random_id(),
-        random_id(),
+        repository::ConfirmCommand {
+            dossier,
+            left: body.left_evidence_id,
+            right: body.right_evidence_id,
+            reason: &body.reason,
+            result_id: random_id(),
+            decision_id: random_id(),
+        },
     )
     .await
     {

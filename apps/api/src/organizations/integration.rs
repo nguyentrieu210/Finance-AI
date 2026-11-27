@@ -182,11 +182,13 @@ pub(super) async fn create_handoff(
         &state.runtime,
         &proof,
         &key,
-        dossier,
-        random_id(),
-        body.package_id,
-        external,
-        &body.evidence_ids,
+        repository::ManualHandoffCommand {
+            dossier,
+            handoff: random_id(),
+            package: body.package_id,
+            external_ref: external,
+            evidence: &body.evidence_ids,
+        },
     )
     .await
     {
