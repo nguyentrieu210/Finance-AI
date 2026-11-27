@@ -316,6 +316,56 @@ async fn actual_ocr_fields_http_review() {
     evidence.sort_unstable();
     evidence.dedup();
     assert!(evidence.len() >= 2);
+    {
+        let mut tx = runtime.begin().await.unwrap();
+        sqlx::query(
+            "SELECT set_config('finance.tenant_id',$1,true),set_config('finance.company_id',$2,true),set_config('finance.actor_id',$3,true)",
+        )
+        .bind("00000000-0000-0000-0000-000000000001")
+        .bind("00000000-0000-0000-0000-00000000000a")
+        .bind("00000000-0000-0000-0000-000000004001")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        let direct = sqlx::query_scalar::<_, i64>(
+            "SELECT finance.runtime_match_confirm($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+        )
+        .bind(Uuid::from_u128(1))
+        .bind(Uuid::from_u128(10))
+        .bind(Uuid::parse_str(dossier).unwrap())
+        .bind(1_i64)
+        .bind(Uuid::from_u128(0x4001))
+        .bind(Uuid::from_u128(0x5001))
+        .bind(Uuid::from_u128(0x5002))
+        .bind(Uuid::parse_str(evidence[0]).unwrap())
+        .bind(Uuid::parse_str(evidence[1]).unwrap())
+        .bind("Direct rollback match probe")
+        .bind(Uuid::from_u128(0x5003))
+        .bind(Uuid::from_u128(0x5004))
+        .fetch_one(&mut *tx)
+        .await;
+        assert!(
+            direct.is_ok(),
+            "runtime_match_confirm DB boundary failed: {:?}",
+            direct.err()
+        );
+        let receipt = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, i64)>(
+            "SELECT * FROM finance.runtime_match_receipt($1,$2,$3,$4,$5)",
+        )
+        .bind(Uuid::from_u128(1))
+        .bind(Uuid::from_u128(10))
+        .bind(Uuid::parse_str(dossier).unwrap())
+        .bind(Uuid::from_u128(0x4001))
+        .bind(Uuid::from_u128(0x5001))
+        .fetch_one(&mut *tx)
+        .await;
+        assert!(
+            receipt.is_ok(),
+            "runtime_match_receipt DB boundary failed: {:?}",
+            receipt.err()
+        );
+        tx.rollback().await.unwrap();
+    }
     assert_eq!(
         confirm_match(
             &app,
