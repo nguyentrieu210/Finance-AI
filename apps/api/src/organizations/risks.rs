@@ -30,6 +30,13 @@ struct Page<T> {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+pub(super) struct ResolveRisk {
+    reason: String,
+    evidence_ids: Vec<Uuid>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct RequestWaiver {
     result_id: Uuid,
     reason: String,
@@ -145,7 +152,7 @@ pub(super) async fn get_risk(
             let token = VersionToken {
                 target: VersionTarget::Risk,
                 resource_id: ResourceId::try_from(risk.id).expect("stored risk"),
-                version: Version::try_from(0).expect("zero"),
+                version: Version::try_from(risk.version).expect("stored risk version"),
             };
             let mut out = Json(risk).into_response();
             out.headers_mut().insert(
@@ -158,6 +165,72 @@ pub(super) async fn get_risk(
         Err(e) => error(dossiers::status(e), correlation),
     }
 }
+pub(super) async fn resolve_risk(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(risk): Path<Uuid>,
+    body: Result<Json<ResolveRisk>, JsonRejection>,
+) -> Response {
+    let correlation = random_id();
+    let Some(version) = headers
+        .get("if-finance-version")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| VersionToken::parse(value).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    if version.target != VersionTarget::Risk || Uuid::from(version.resource_id) != risk {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let proof = match dossiers::authenticate_version(
+        &state,
+        &headers,
+        correlation,
+        Some(version.version),
+    )
+    .await
+    {
+        Ok(proof) => proof,
+        Err(status) => return error(status, correlation),
+    };
+    let Some(key) = key(&headers) else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    match repository::resolve_risk(
+        &state.runtime,
+        &proof,
+        &key,
+        repository::RiskResolveCommand {
+            risk,
+            reason: &body.reason,
+            evidence: &body.evidence_ids,
+        },
+    )
+    .await
+    {
+        Ok(value) => {
+            let token = VersionToken {
+                target: VersionTarget::Risk,
+                resource_id: ResourceId::try_from(value.id).expect("stored risk"),
+                version: Version::try_from(value.version).expect("stored risk version"),
+            };
+            let mut response = Json(value).into_response();
+            response.headers_mut().insert(
+                "finance-version",
+                HeaderValue::from_str(&token.to_string()).expect("canonical"),
+            );
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Err(value) => error(dossiers::status(value), correlation),
+    }
+}
+
 pub(super) async fn list_waivers(
     State(state): State<Arc<OrganizationState>>,
     headers: HeaderMap,

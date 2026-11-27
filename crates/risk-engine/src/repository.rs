@@ -19,6 +19,8 @@ pub struct Risk {
     pub severity: String,
     pub state: String,
     pub evidence_ids: Vec<Uuid>,
+    #[serde(skip)]
+    pub version: i64,
 }
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, sqlx::FromRow)]
 pub struct Waiver {
@@ -35,6 +37,12 @@ pub struct Waiver {
     pub dossier_id: Uuid,
     #[serde(skip)]
     pub dossier_version: i64,
+}
+
+pub struct RiskResolveCommand<'a> {
+    pub risk: Uuid,
+    pub reason: &'a str,
+    pub evidence: &'a [Uuid],
 }
 
 pub struct WaiverRequestCommand<'a> {
@@ -138,7 +146,7 @@ pub async fn list_risks(
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     risk_read(&mut tx, proof).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let rows=sqlx::query_as::<_,Risk>("SELECT s.id,s.snapshot_id,s.code,s.severity,CASE WHEN d.resolution='ESCALATED' THEN 'ESCALATED' WHEN d.id IS NULL THEN 'OPEN' ELSE 'RESOLVED' END AS state,s.evidence_ids FROM finance.risk_signal s LEFT JOIN finance.risk_decision d ON (d.tenant_id,d.company_id,d.signal_id)=(s.tenant_id,s.company_id,s.id) WHERE s.tenant_id=$1 AND s.company_id=$2 AND s.id>$3 ORDER BY s.id LIMIT $4")
+    let rows=sqlx::query_as::<_,Risk>("SELECT s.id,s.snapshot_id,s.code,s.severity,CASE WHEN d.resolution='ESCALATED' THEN 'ESCALATED' WHEN d.id IS NULL THEN 'OPEN' ELSE 'RESOLVED' END AS state,s.evidence_ids,CASE WHEN d.id IS NULL THEN 0 ELSE 1 END::bigint AS version FROM finance.risk_signal s LEFT JOIN finance.risk_decision d ON (d.tenant_id,d.company_id,d.signal_id)=(s.tenant_id,s.company_id,s.id) WHERE s.tenant_id=$1 AND s.company_id=$2 AND s.id>$3 ORDER BY s.id LIMIT $4")
         .bind(t).bind(c).bind(after).bind(limit).fetch_all(&mut *tx).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
@@ -156,12 +164,111 @@ pub async fn get_risk(
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     risk_read(&mut tx, proof).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let row=sqlx::query_as::<_,Risk>("SELECT s.id,s.snapshot_id,s.code,s.severity,CASE WHEN d.resolution='ESCALATED' THEN 'ESCALATED' WHEN d.id IS NULL THEN 'OPEN' ELSE 'RESOLVED' END AS state,s.evidence_ids FROM finance.risk_signal s LEFT JOIN finance.risk_decision d ON (d.tenant_id,d.company_id,d.signal_id)=(s.tenant_id,s.company_id,s.id) WHERE s.tenant_id=$1 AND s.company_id=$2 AND s.id=$3")
+    let row=sqlx::query_as::<_,Risk>("SELECT s.id,s.snapshot_id,s.code,s.severity,CASE WHEN d.resolution='ESCALATED' THEN 'ESCALATED' WHEN d.id IS NULL THEN 'OPEN' ELSE 'RESOLVED' END AS state,s.evidence_ids,CASE WHEN d.id IS NULL THEN 0 ELSE 1 END::bigint AS version FROM finance.risk_signal s LEFT JOIN finance.risk_decision d ON (d.tenant_id,d.company_id,d.signal_id)=(s.tenant_id,s.company_id,s.id) WHERE s.tenant_id=$1 AND s.company_id=$2 AND s.id=$3")
         .bind(t).bind(c).bind(id).fetch_optional(&mut *tx).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(row)
 }
+pub async fn resolve_risk(
+    pool: &sqlx::PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    command: RiskResolveCommand<'_>,
+) -> Result<Risk, Error> {
+    let RiskResolveCommand {
+        risk,
+        reason,
+        evidence,
+    } = command;
+    let Some(expected) = proof.context().expected_version else {
+        return Err(Error::InvalidInput);
+    };
+    if risk.is_nil()
+        || reason.trim().is_empty()
+        || reason.len() > 4096
+        || reason.chars().any(char::is_control)
+        || evidence.is_empty()
+        || evidence.len() > 64
+    {
+        return Err(Error::InvalidInput);
+    }
+    let (t, c, a) = binding(proof)?;
+    let mut ev = evidence.to_vec();
+    ev.sort();
+    ev.dedup();
+    if ev.len() != evidence.len() {
+        return Err(Error::InvalidInput);
+    }
+    let mut ev_bytes = Vec::with_capacity(ev.len() * 16);
+    for value in &ev {
+        ev_bytes.extend_from_slice(value.as_bytes());
+    }
+    let expected_bytes = i64::from(expected).to_be_bytes();
+    let digest = hash(&[
+        b"risk.resolve",
+        risk.as_bytes(),
+        &expected_bytes,
+        reason.as_bytes(),
+        &ev_bytes,
+    ]);
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::Accountant)
+        .await
+        .map_err(grant)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let command_id: Uuid = proof.context().command.into();
+    let correlation: Uuid = proof.context().correlation.into();
+    let result = sqlx::query_scalar::<_, i64>(
+        "SELECT finance.runtime_resolve_risk($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(risk)
+    .bind(i64::from(expected))
+    .bind(key.as_str())
+    .bind(digest)
+    .bind(reason)
+    .bind(&ev)
+    .bind(command_id)
+    .bind(correlation)
+    .fetch_one(&mut *tx)
+    .await;
+    match result {
+        Ok(1) => {}
+        Ok(_) => return Err(Error::Conflict),
+        Err(sqlx::Error::Database(db)) if db.code().as_deref() == Some("42501") => {
+            return Err(Error::Forbidden);
+        }
+        Err(sqlx::Error::Database(db)) if db.code().as_deref() == Some("22023") => {
+            return Err(Error::InvalidInput);
+        }
+        Err(sqlx::Error::Database(db)) if db.code().as_deref() == Some("23514") => {
+            return Err(Error::Conflict);
+        }
+        Err(error) => return Err(Error::Database(error)),
+    }
+    let row = sqlx::query_as::<_, Risk>(
+        "SELECT s.id,s.snapshot_id,s.code,s.severity,
+         CASE WHEN d.resolution='ESCALATED' THEN 'ESCALATED'
+              WHEN d.id IS NULL THEN 'OPEN' ELSE 'RESOLVED' END AS state,
+         s.evidence_ids,CASE WHEN d.id IS NULL THEN 0 ELSE 1 END::bigint AS version
+         FROM finance.risk_signal s
+         LEFT JOIN finance.risk_decision d
+          ON (d.tenant_id,d.company_id,d.signal_id)=(s.tenant_id,s.company_id,s.id)
+         WHERE s.tenant_id=$1 AND s.company_id=$2 AND s.id=$3",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(risk)
+    .fetch_one(&mut *tx)
+    .await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(row)
+}
+
 pub async fn list_waivers(
     pool: &sqlx::PgPool,
     proof: &AuthenticatedCommand,

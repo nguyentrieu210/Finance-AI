@@ -48,6 +48,45 @@ async fn request(app: &Router, uri: &str, token: Option<&str>) -> (StatusCode, V
     (status, value)
 }
 
+async fn resolve_risk(
+    app: &Router,
+    token: &str,
+    risk: &str,
+    key: &str,
+    version: &str,
+) -> (StatusCode, Value, Option<String>) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1/risks/{risk}/resolve"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("idempotency-key", key)
+                .header("if-finance-version", version)
+                .body(Body::from(
+                    json!({
+                        "reason":"Verified assigned-accountant risk closure",
+                        "evidence_ids":["00000000-0000-0000-0000-000000002333"]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let receipt = response
+        .headers()
+        .get("finance-version")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let value = serde_json::from_slice(&bytes).unwrap();
+    (status, value, receipt)
+}
+
 async fn create_organization(
     app: &Router,
     token: &str,
@@ -767,6 +806,58 @@ async fn scoped_organization_http_real_database() {
 
     let review_dossier = "00000000-0000-0000-0000-000000002320";
     let review_snapshot = "00000000-0000-0000-0000-000000002323";
+    let risk_id = "00000000-0000-0000-0000-000000002334";
+    let risk_v0 = format!("\"v1:risk:{risk_id}:0\"");
+    let (risk_status, open_risk) =
+        request(&app, &format!("/v1/risks/{risk_id}"), Some(&requester)).await;
+    assert_eq!(risk_status, StatusCode::OK);
+    assert_eq!(open_risk["state"], "OPEN");
+    assert_eq!(
+        resolve_risk(&app, &requester, risk_id, "risk-owner-denied", &risk_v0)
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+    let (risk_resolve_status, resolved_risk, risk_receipt) = resolve_risk(
+        &app,
+        &review_accountant,
+        risk_id,
+        "risk-resolve",
+        &risk_v0,
+    )
+    .await;
+    assert_eq!(risk_resolve_status, StatusCode::OK);
+    assert_eq!(resolved_risk["state"], "RESOLVED");
+    assert!(risk_receipt.as_deref().unwrap().ends_with(":1\""));
+    let risk_replay = resolve_risk(
+        &app,
+        &review_accountant,
+        risk_id,
+        "risk-resolve",
+        &risk_v0,
+    )
+    .await;
+    assert_eq!(risk_replay.0, StatusCode::OK);
+    assert_eq!(risk_replay.1, resolved_risk);
+    assert_eq!(risk_replay.2, risk_receipt);
+    assert_eq!(
+        resolve_risk(
+            &app,
+            &review_accountant,
+            risk_id,
+            "risk-stale",
+            &risk_v0,
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        request(&app, &format!("/v1/risks/{risk_id}"), Some(&requester))
+            .await
+            .1["state"],
+        "RESOLVED"
+    );
     let review_v0 = format!("\"v1:dossier:{review_dossier}:0\"");
     let (queue_status, queue) =
         request(&app, "/v1/review/queue?limit=10", Some(&review_accountant)).await;

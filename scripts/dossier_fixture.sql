@@ -160,3 +160,53 @@ INSERT INTO finance.handoff(
 '00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
 '00000000-0000-0000-0000-000000002325','00000000-0000-0000-0000-000000002323',
 '00000000-0000-0000-0000-000000002324','MANUAL','ACKNOWLEDGED','ACCOUNTING-ACK-1',ARRAY[]::uuid[]);
+
+-- E21 assigned risk review evidence. Synthetic bytes only in disposable DB.
+DO $$
+DECLARE t uuid:='00000000-0000-0000-0000-000000000001';
+ c uuid:='00000000-0000-0000-0000-00000000000a';
+ d uuid:='00000000-0000-0000-0000-000000002320';
+ r uuid:='00000000-0000-0000-0000-000000002321';
+ a uuid:='00000000-0000-0000-0000-0000000003e9';
+ doc uuid:='00000000-0000-0000-0000-000000002330';
+ j uuid:='00000000-0000-0000-0000-000000002331';
+ payload bytea:=convert_to('%PDF-1.4'||chr(10)||'synthetic risk evidence','UTF8');
+BEGIN
+ INSERT INTO finance.upload_intent(
+  tenant_id,company_id,id,dossier_id,revision_id,actor_id,filename,declared_bytes,
+  declared_sha256,declared_mime,state,generation,document_kind
+ ) VALUES(t,c,doc,d,r,a,'risk-evidence.pdf',octet_length(payload),sha256(payload),
+  'application/pdf','FINALIZED',1,'RISK_EVIDENCE');
+ INSERT INTO finance.upload_grant(tenant_id,company_id,intent_id,generation,staging_key,issued_at,expires_at)
+ VALUES(t,c,doc,1,'staging/'||doc::text||'/1',statement_timestamp(),statement_timestamp()+interval '5 minutes');
+ INSERT INTO finance.document_blob(
+  tenant_id,company_id,id,generation,byte_count,sha256_digest,mime,synthetic_bytes,
+  scan_state,scan_engine,scan_engine_digest,scanned_at
+ ) VALUES(t,c,doc,1,octet_length(payload),sha256(payload),'application/pdf',payload,
+  'CLEAN','CLAMAV',decode(repeat('44',32),'hex'),clock_timestamp());
+ INSERT INTO finance.document_ref(tenant_id,company_id,id,dossier_id,revision_id)
+ VALUES(t,c,doc,d,r);
+ INSERT INTO finance.outbox(tenant_id,company_id,id,command_id,resource_id,event_type)
+ VALUES(t,c,j,j,doc,'SYNTHETIC_OCR_REQUESTED');
+ INSERT INTO finance.job(tenant_id,company_id,id,state,attempts,fence)
+ VALUES(t,c,j,'SUCCEEDED',1,1);
+ INSERT INTO finance.job_attempt(
+  tenant_id,company_id,job_id,fence,worker_id,state,lease_until,finished_at
+ ) VALUES(t,c,j,1,'00000000-0000-0000-0000-000000006001','SUCCEEDED',clock_timestamp(),clock_timestamp());
+ INSERT INTO finance.ocr_run(
+  tenant_id,company_id,id,document_id,revision_id,source_digest,generation,job_id,fence,
+  engine,model_digest,config_digest,page_count,result_digest
+ ) VALUES(t,c,'00000000-0000-0000-0000-000000002332',doc,r,sha256(payload),1,j,1,
+  'TESSERACT_SYNTHETIC',decode(repeat('45',32),'hex'),decode(repeat('46',32),'hex'),1,
+  decode(repeat('47',32),'hex'));
+ INSERT INTO finance.evidence(
+  tenant_id,company_id,id,ocr_run_id,page,block_index,x0,y0,x1,y1,excerpt,confidence
+ ) VALUES(t,c,'00000000-0000-0000-0000-000000002333',
+  '00000000-0000-0000-0000-000000002332',1,0,1000,1000,500000,50000,
+  'Synthetic bank account change evidence',9900);
+ INSERT INTO finance.risk_signal(
+  tenant_id,company_id,id,snapshot_id,code,severity,evidence_ids
+ ) VALUES(t,c,'00000000-0000-0000-0000-000000002334',
+  '00000000-0000-0000-0000-000000002323','VENDOR_BANK_CHANGE','WARNING',
+  ARRAY['00000000-0000-0000-0000-000000002333'::uuid]);
+END $$;

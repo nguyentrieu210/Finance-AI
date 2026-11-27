@@ -538,6 +538,10 @@ pub fn router(state: OrganizationState) -> Router {
         .route("/v1/risks", get(risks::list_risks))
         .route("/v1/risks/{item_id}", get(risks::get_risk))
         .route(
+            "/v1/risks/{item_id}/resolve",
+            axum::routing::post(risks::resolve_risk),
+        )
+        .route(
             "/v1/dossiers/{dossier_id}/waivers",
             get(risks::list_waivers).post(risks::request_waiver),
         )
