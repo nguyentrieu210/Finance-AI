@@ -178,9 +178,7 @@ async fn scoped_organization_http_real_database() {
     assert!(policies.iter().all(|policy| policy["state"] == "PUBLISHED"));
     let policy_id = policies
         .iter()
-        .find(|policy| {
-            policy["id"] == "00000000-0000-0000-0000-000000001600"
-        })
+        .find(|policy| policy["id"] == "00000000-0000-0000-0000-000000001600")
         .and_then(|policy| policy["id"].as_str())
         .expect("published settlement policy fixture must be visible");
     let (get_status, policy) =
