@@ -87,3 +87,54 @@ fn partial_multi_advance_and_separate_extra_payment() {
         Err(Error::ExceedsCap)
     );
 }
+
+#[test]
+fn e13_at01_draft_advance_is_not_available_for_settlement() {
+    let mut a = advance();
+    a.issued = None;
+    let rows = [Allocation {
+        scope: scope(10),
+        id: id(20),
+        advance: &a,
+        requested: money("1"),
+    }];
+    assert_eq!(
+        plan(scope(10), Some(money("1")), &rows, true),
+        Err(Error::Unknown)
+    );
+}
+
+#[test]
+fn e13_r02_rejects_currency_mismatch_without_approved_fx() {
+    let a = advance();
+    let usd = Money {
+        amount: Amount::parse("1").unwrap(),
+        currency: Currency::parse("USD").unwrap(),
+    };
+    let rows = [Allocation {
+        scope: scope(10),
+        id: id(20),
+        advance: &a,
+        requested: usd,
+    }];
+    assert_eq!(
+        plan(scope(10), Some(money("1")), &rows, true),
+        Err(Error::Currency)
+    );
+}
+
+#[test]
+fn e13_at04_approved_extension_and_business_date_boundary() {
+    let mut a = advance();
+    let original_due = a.due;
+    let extended = original_due.succ_opt().unwrap();
+    a.approved_extension = Some(extended);
+    assert_eq!(a.overdue(original_due), Ok(false));
+    assert_eq!(a.overdue(extended), Ok(false));
+    assert_eq!(a.overdue(extended.succ_opt().unwrap()), Ok(true));
+
+    // Full confirmed settlement clears overdue; a hold alone does not.
+    a.settled = money("90");
+    a.reserved = money("0");
+    assert_eq!(a.overdue(extended.succ_opt().unwrap()), Ok(false));
+}
