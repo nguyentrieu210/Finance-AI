@@ -39,7 +39,7 @@ INSERT INTO finance.audit_event(
 );
 SQL
 
-docker exec "$cid" pg_dump -X -U finance_migrator -d finance_restore_source -Fc --no-owner > "$work/finance.dump"
+docker exec "$cid" pg_dump -U finance_migrator -d finance_restore_source -Fc --no-owner > "$work/finance.dump"
 test -s "$work/finance.dump"
 test "$(stat -c %s "$work/finance.dump")" -lt 67108864
 
