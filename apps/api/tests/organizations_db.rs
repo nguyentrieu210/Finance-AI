@@ -336,6 +336,10 @@ async fn scoped_organization_http_real_database() {
         server.abort();
         assert!(result.success(), "synthetic browser integration failed");
     }
+    // Boot the actual binary separately from the injected test router.
+    let jwks_for_binary=jwks.clone();
+    let requester_for_binary=mint("requester");
+    tokio::task::spawn_blocking(move || binary_probe(&jwks_for_binary,&requester_for_binary)).await.unwrap();
     runtime.close().await;
     lookup.close().await;
 }
@@ -411,4 +415,44 @@ async fn create_document(
         );
     }
     (status, value, receipt)
+}
+
+fn binary_probe(jwks:&str,token:&str){
+    use std::{io::{Read,Write},net::{TcpListener,TcpStream},process::{Child,Command,Stdio},time::Duration};
+    struct Guard(Child);
+    impl Drop for Guard{
+        fn drop(&mut self){let _=self.0.kill();let _=self.0.wait();}
+    }
+    let address=TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
+    let mut process=Command::new(env!("CARGO_BIN_EXE_finance-api"));
+    process.arg("--synthetic")
+        .env("FINANCE_BIND",address.to_string())
+        .env("FINANCE_SYNTHETIC_RUNTIME_DATABASE_URL",std::env::var("FINANCE_PROTOTYPE_TEST_DATABASE_URL").unwrap())
+        .env("FINANCE_SYNTHETIC_LOOKUP_DATABASE_URL",std::env::var("FINANCE_IDENTITY_TEST_DATABASE_URL").unwrap())
+        .env("FINANCE_SYNTHETIC_JWKS",jwks)
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    let mut child=Guard(process.spawn().unwrap());
+    let mut ready=false;
+    for _ in 0..100 {
+        if child.0.try_wait().unwrap().is_some(){panic!("synthetic API exited before readiness");}
+        if let Ok(mut stream)=TcpStream::connect_timeout(&address,Duration::from_millis(100)){
+            stream.set_read_timeout(Some(Duration::from_secs(4))).unwrap();
+            stream.write_all(b"GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").unwrap();
+            let mut response=String::new();
+            stream.take(8192).read_to_string(&mut response).unwrap();
+            if response.starts_with("HTTP/1.1 200 "){ready=true;break;}
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(ready,"synthetic API did not become ready");
+    let mut stream=TcpStream::connect_timeout(&address,Duration::from_secs(2)).unwrap();
+    stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    write!(stream,"GET /v1/dossiers?limit=1 HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {token}\r\nConnection: close\r\n\r\n").unwrap();
+    let mut response=String::new();
+    stream.take(65536).read_to_string(&mut response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 200 "));
+    assert!(response.contains("\"items\"")&&response.contains("\"DRAFT\""));
+    drop(child);
+    let denied=process.env("FINANCE_BIND","0.0.0.0:0").status().unwrap();
+    assert_eq!(denied.code(),Some(78));
 }

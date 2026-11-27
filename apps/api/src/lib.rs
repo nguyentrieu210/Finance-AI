@@ -3,6 +3,7 @@ use axum::{Json, Router, http::StatusCode, routing::get};
 use finance_shared::API_LIVENESS;
 
 pub mod organizations;
+pub mod synthetic;
 
 pub fn router() -> Router {
     Router::new()
