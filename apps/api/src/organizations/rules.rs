@@ -242,3 +242,89 @@ pub(super) async fn revise(
         Err(e) => error(dossiers::status(e), correlation),
     }
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Simulate {
+    corpus_id: Uuid,
+}
+
+pub(super) async fn simulate(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    body: Result<Json<Simulate>, JsonRejection>,
+) -> Response {
+    let correlation = random_id();
+    let Some(token) = headers
+        .get("if-finance-version")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| VersionToken::parse(s).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    if token.target != VersionTarget::Rule || Uuid::from(token.resource_id) != id {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let proof =
+        match dossiers::authenticate_version(&state, &headers, correlation, Some(token.version))
+            .await
+        {
+            Ok(proof) => proof,
+            Err(s) => return error(s, correlation),
+        };
+    let Some(key) = key(&headers) else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let input = repository::SimulationInput {
+        rule: id,
+        corpus: body.corpus_id,
+        id: random_id(),
+    };
+    match repository::simulate(&state.runtime, &proof, &key, input).await {
+        Ok((result, version)) => {
+            let Ok(version) = Version::try_from(version) else {
+                return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+            };
+            let token = VersionToken {
+                target: VersionTarget::Rule,
+                resource_id: ResourceId::try_from(id).expect("stored rule"),
+                version,
+            };
+            let mut out = Json(result).into_response();
+            out.headers_mut().insert(
+                "finance-version",
+                HeaderValue::from_str(&token.to_string()).expect("canonical token"),
+            );
+            out.headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            out
+        }
+        Err(e) => error(dossiers::status(e), correlation),
+    }
+}
+
+pub(super) async fn get_simulation(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match dossiers::authenticate_version(&state, &headers, correlation, None).await {
+        Ok(proof) => proof,
+        Err(s) => return error(s, correlation),
+    };
+    match repository::get_simulation(&state.runtime, &proof, id).await {
+        Ok(Some(result)) => {
+            let mut out = Json(result).into_response();
+            out.headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            out
+        }
+        Ok(None) => error(StatusCode::NOT_FOUND, correlation),
+        Err(e) => error(dossiers::status(e), correlation),
+    }
+}

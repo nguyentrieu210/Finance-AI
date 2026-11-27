@@ -222,3 +222,10 @@ BEGIN
   '00000000-0000-0000-0000-000000002323','VENDOR_BANK_CHANGE','WARNING',
   ARRAY['00000000-0000-0000-0000-000000002333'::uuid]);
 END $$;
+
+-- Explicit synthetic anonymized fixture, approved by independent fixture actors.
+INSERT INTO finance.simulation_corpus(tenant_id,company_id,id,maker_id,checker_id,facts)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000007500','00000000-0000-0000-0000-0000000003f0',
+'00000000-0000-0000-0000-0000000003f1',
+'[{"invoice.total":{"value":"100","verified":true,"fresh":true,"evidence":["00000000-0000-0000-0000-000000007501"]}},{"invoice.total":{"value":"-1","verified":true,"fresh":true,"evidence":["00000000-0000-0000-0000-000000007502"]}},{}]'::jsonb);

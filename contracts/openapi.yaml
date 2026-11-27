@@ -9913,9 +9913,9 @@ components:
         fail_count: *id007
         unknown_count: *id007
         error_count: *id007
+        not_applicable_count: *id007
       required:
       - id
-      - job_id
       - rule_version_id
       - corpus_id
     Risk:

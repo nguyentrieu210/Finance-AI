@@ -1724,7 +1724,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
-            job_id: string;
+            job_id?: string;
             /** Format: uuid */
             rule_version_id: string;
             /** Format: uuid */
@@ -1733,6 +1733,7 @@ export interface components {
             fail_count?: number;
             unknown_count?: number;
             error_count?: number;
+            not_applicable_count?: number;
         };
         Risk: {
             /** Format: uuid */

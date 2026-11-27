@@ -978,6 +978,56 @@ async fn scoped_organization_http_real_database() {
         .await
         .unwrap();
     assert_eq!(stale.status(), StatusCode::CONFLICT);
+    let simulate = |actor: &str, key: &str| {
+        Request::builder()
+            .method("POST")
+            .uri(format!("/v1/rules/{created_rule_id}/simulate"))
+            .header(header::AUTHORIZATION, format!("Bearer {actor}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header("idempotency-key", key)
+            .header(
+                "if-finance-version",
+                format!("\"v1:rule:{created_rule_id}:2\""),
+            )
+            .body(Body::from(
+                json!({"corpus_id":"00000000-0000-0000-0000-000000007500"}).to_string(),
+            ))
+            .unwrap()
+    };
+    let denied = app
+        .clone()
+        .oneshot(simulate(&requester, "simulation-denied"))
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+    let result = app
+        .clone()
+        .oneshot(simulate(&policy_admin, "simulation-one"))
+        .await
+        .unwrap();
+    assert_eq!(result.status(), StatusCode::OK);
+    let bytes = to_bytes(result.into_body(), 1024 * 1024).await.unwrap();
+    let simulation: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(simulation["pass_count"], 1);
+    assert_eq!(simulation["fail_count"], 1);
+    assert_eq!(simulation["unknown_count"], 1);
+    let replay = app
+        .clone()
+        .oneshot(simulate(&policy_admin, "simulation-one"))
+        .await
+        .unwrap();
+    assert_eq!(replay.status(), StatusCode::OK);
+    let bytes = to_bytes(replay.into_body(), 1024 * 1024).await.unwrap();
+    assert_eq!(serde_json::from_slice::<Value>(&bytes).unwrap(), simulation);
+    let simulation_uri = format!("/v1/simulations/{}", simulation["id"].as_str().unwrap());
+    assert_eq!(
+        request(&app, &simulation_uri, Some(&policy_admin)).await.1,
+        simulation
+    );
+    assert_eq!(
+        request(&app, &simulation_uri, Some(&requester)).await.0,
+        StatusCode::FORBIDDEN
+    );
     let maker_rules = request(&app, "/v1/rules", Some(&policy_admin)).await.1;
     assert!(
         maker_rules["items"]

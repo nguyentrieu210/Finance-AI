@@ -587,6 +587,11 @@ pub fn router(state: OrganizationState) -> Router {
         .route("/v1/rules", get(rules::list).post(rules::create))
         .route("/v1/rules/{item_id}", get(rules::get))
         .route(
+            "/v1/rules/{item_id}/simulate",
+            axum::routing::post(rules::simulate),
+        )
+        .route("/v1/simulations/{item_id}", get(rules::get_simulation))
+        .route(
             "/v1/rules/{item_id}/revise",
             axum::routing::post(rules::revise),
         )
