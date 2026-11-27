@@ -184,7 +184,7 @@ async fn scoped_organization_http_real_database() {
             &token,
             "00000000-0000-0000-0000-0000000003e8",
             "membership-self-revoke",
-            ""v1:membership:00000000-0000-0000-0000-0000000003e8:0"",
+            "\"v1:membership:00000000-0000-0000-0000-0000000003e8:0\"",
         )
         .await
         .0,
