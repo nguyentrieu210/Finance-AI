@@ -193,12 +193,22 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(
         request(
             &app,
-            "/v1/organizations/00000000-0000-0000-0000-000000000401",
+            "/v1/organizations/00000000-0000-0000-0000-000000000065",
             Some(&token)
         )
         .await
         .0,
         StatusCode::OK
+    );
+    assert_eq!(
+        request(
+            &app,
+            "/v1/organizations/00000000-0000-0000-0000-000000000401",
+            Some(&token)
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
     );
     for (uri, kind) in [
         ("/v1/contracts?limit=10", "CONTRACT"),
