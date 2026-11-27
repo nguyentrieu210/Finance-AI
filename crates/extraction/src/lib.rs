@@ -10,6 +10,7 @@ use finance_ocr::PageResult;
 use finance_shared::money::Amount;
 use unicode_normalization::UnicodeNormalization;
 
+pub mod evaluation;
 pub mod gateway;
 pub mod repository;
 pub mod rows;
