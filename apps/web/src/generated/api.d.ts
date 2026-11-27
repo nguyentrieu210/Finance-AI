@@ -6651,6 +6651,24 @@ export interface operations {
                     /** Format: uuid */
                     company_id: string;
                     name: string;
+                    /** @enum {string} */
+                    dossier_kind: "PAYMENT" | "ADVANCE" | "SETTLEMENT";
+                    /** Format: date-time */
+                    effective_from: string;
+                    /** Format: date-time */
+                    effective_to: string;
+                    /** Format: uuid */
+                    source_document_id: string;
+                    clauses: {
+                        key: string;
+                        /** Format: uuid */
+                        evidence_id: string;
+                    }[];
+                    checklist: {
+                        clause_key: string;
+                        document_kind: string;
+                        mandatory: boolean;
+                    }[];
                 };
             };
         };

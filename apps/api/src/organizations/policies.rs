@@ -28,13 +28,13 @@ struct Page {
     #[serde(skip_serializing_if = "Option::is_none")]
     next_cursor: Option<String>,
 }
-fn receipt(policy: PublishedPolicy) -> Response {
+fn receipt(policy: PublishedPolicy, status: StatusCode) -> Response {
     let token = VersionToken {
         target: VersionTarget::Policy,
         resource_id: ResourceId::try_from(policy.id).expect("stored nonnil policy"),
         version: Version::try_from(policy.version).expect("stored policy version"),
     };
-    let mut response = Json(policy).into_response();
+    let mut response = (status, Json(policy)).into_response();
     response.headers_mut().insert(
         "finance-version",
         HeaderValue::from_str(&token.to_string()).expect("canonical header"),
@@ -105,7 +105,7 @@ pub(super) async fn get(
         Err(s) => return error(s, correlation),
     };
     match repository::get(&state.runtime, &proof, id).await {
-        Ok(Some(policy)) => receipt(policy),
+        Ok(Some(policy)) => receipt(policy, StatusCode::OK),
         Ok(None) => error(StatusCode::NOT_FOUND, correlation),
         Err(e) => error(dossiers::status(e), correlation),
     }
@@ -175,7 +175,7 @@ async fn change(
         effective,
     };
     match repository::change(&state.runtime, &proof, &key, input).await {
-        Ok(row) => receipt(row),
+        Ok(row) => receipt(row, StatusCode::OK),
         Err(e) => error(dossiers::status(e), correlation),
     }
 }
@@ -283,4 +283,77 @@ pub(super) async fn revise(
         Some(body.effective_from),
     )
     .await
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Clause {
+    key: String,
+    evidence_id: Uuid,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Requirement {
+    clause_key: String,
+    document_kind: String,
+    mandatory: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Create {
+    company_id: Uuid,
+    name: String,
+    dossier_kind: String,
+    effective_from: chrono::DateTime<chrono::Utc>,
+    effective_to: chrono::DateTime<chrono::Utc>,
+    source_document_id: Uuid,
+    clauses: Vec<Clause>,
+    checklist: Vec<Requirement>,
+}
+
+pub(super) async fn create(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    body: Result<Json<Create>, JsonRejection>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match dossiers::authenticate_version(&state, &headers, correlation, None).await {
+        Ok(proof) => proof,
+        Err(s) => return error(s, correlation),
+    };
+    let Some(key) = headers
+        .get("idempotency-key")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| IdempotencyKey::parse(s).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let clause_keys: Vec<_> = body.clauses.iter().map(|cl| cl.key.clone()).collect();
+    let evidence: Vec<_> = body.clauses.iter().map(|cl| cl.evidence_id).collect();
+    let checklist_keys: Vec<_> = body.checklist.iter().map(|r| r.clause_key.clone()).collect();
+    let document_kinds: Vec<_> = body.checklist.iter().map(|r| r.document_kind.clone()).collect();
+    let mandatory: Vec<_> = body.checklist.iter().map(|r| r.mandatory).collect();
+    let draft = repository::CreateDraft {
+        id: random_id(),
+        company: body.company_id,
+        name: &body.name,
+        kind: &body.dossier_kind,
+        from: body.effective_from,
+        to: body.effective_to,
+        source: body.source_document_id,
+        clause_keys: &clause_keys,
+        evidence: &evidence,
+        checklist_keys: &checklist_keys,
+        document_kinds: &document_kinds,
+        mandatory: &mandatory,
+    };
+    match repository::create(&state.runtime, &proof, &key, draft).await {
+        Ok(row) => receipt(row, StatusCode::CREATED),
+        Err(e) => error(dossiers::status(e), correlation),
+    }
 }

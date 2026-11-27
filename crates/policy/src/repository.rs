@@ -243,3 +243,86 @@ pub async fn change(
     tx.commit().await?;
     Ok(row)
 }
+
+pub struct CreateDraft<'a> {
+    pub id: Uuid,
+    pub company: Uuid,
+    pub name: &'a str,
+    pub kind: &'a str,
+    pub from: chrono::DateTime<chrono::Utc>,
+    pub to: chrono::DateTime<chrono::Utc>,
+    pub source: Uuid,
+    pub clause_keys: &'a [String],
+    pub evidence: &'a [Uuid],
+    pub checklist_keys: &'a [String],
+    pub document_kinds: &'a [String],
+    pub mandatory: &'a [bool],
+}
+
+pub async fn create(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    input: CreateDraft<'_>,
+) -> Result<PublishedPolicy, AppError> {
+    let (t, c, a) = binding(proof)?;
+    if input.company != c {
+        return Err(AppError::Forbidden);
+    }
+    if input.id.is_nil()
+        || input.source.is_nil()
+        || input.name.trim().is_empty()
+        || input.name.len() > 200
+        || input.name.chars().any(char::is_control)
+        || !matches!(input.kind, "PAYMENT" | "ADVANCE" | "SETTLEMENT")
+        || input.from.time() != chrono::NaiveTime::MIN
+        || input.to.time() != chrono::NaiveTime::MIN
+        || input.from >= input.to
+        || !(1..=200).contains(&input.clause_keys.len())
+        || input.clause_keys.len() != input.evidence.len()
+        || !(1..=200).contains(&input.checklist_keys.len())
+        || input.checklist_keys.len() != input.document_kinds.len()
+        || input.checklist_keys.len() != input.mandatory.len()
+        || !input.mandatory.iter().any(|value| *value)
+    {
+        return Err(AppError::InvalidInput);
+    }
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::PolicyAdmin)
+        .await
+        .map_err(grant)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let command: Uuid = proof.context().command.into();
+    let correlation: Uuid = proof.context().correlation.into();
+    let row = sqlx::query_as::<_, PublishedPolicy>(
+        "SELECT * FROM finance.runtime_policy_create($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(input.id)
+    .bind(key.as_str())
+    .bind(input.name)
+    .bind(input.kind)
+    .bind(input.from.date_naive())
+    .bind(input.to.date_naive())
+    .bind(input.source)
+    .bind(input.clause_keys)
+    .bind(input.evidence)
+    .bind(input.checklist_keys)
+    .bind(input.document_kinds)
+    .bind(input.mandatory)
+    .bind(command)
+    .bind(correlation)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| match e.as_database_error().and_then(|db| db.code()).as_deref() {
+        Some("42501") => AppError::Forbidden,
+        Some("22023") => AppError::InvalidInput,
+        Some("23514" | "23505") => AppError::Conflict,
+        _ => AppError::Database(e),
+    })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(row)
+}

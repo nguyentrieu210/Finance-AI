@@ -462,6 +462,30 @@ async fn scoped_organization_http_real_database() {
         request(&app, &format!("/v1/policies/{policy_id}"), Some(&requester)).await;
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(policy["state"], "PUBLISHED");
+    let invalid_policy = Request::builder()
+        .method("POST")
+        .uri("/v1/policies")
+        .header(header::AUTHORIZATION, format!("Bearer {policy_admin}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("idempotency-key", "policy-missing-source")
+        .body(Body::from(
+            json!({
+                "company_id":"00000000-0000-0000-0000-00000000000a",
+                "name":"Synthetic source test",
+                "dossier_kind":"PAYMENT",
+                "effective_from":"2033-01-01T00:00:00Z",
+                "effective_to":"2034-01-01T00:00:00Z",
+                "source_document_id":"ffffffff-ffff-ffff-ffff-ffffffffffff",
+                "clauses":[{"key":"source","evidence_id":"ffffffff-ffff-ffff-ffff-ffffffffffff"}],
+                "checklist":[{"clause_key":"source","document_kind":"INVOICE","mandatory":true}]
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(invalid_policy).await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
     let policy_action = |op: &str, actor: &str, key: &str| {
         Request::builder()
             .method("POST")
