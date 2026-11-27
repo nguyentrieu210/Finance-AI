@@ -13,5 +13,10 @@ finance-shared = { path = "../shared" }
 unicode-normalization = "=0.1.26"
 
 [dev-dependencies]
+finance-core = { path = "../core" }
+serde_json.workspace = true
+sha2 = "=0.10.9"
+sqlx.workspace = true
+tokio.workspace = true
 uuid.workspace = true
 finance-documents = { path = "../documents" }

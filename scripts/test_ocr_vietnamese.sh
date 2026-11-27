@@ -46,3 +46,5 @@ PY
 )
 FINANCE_OCR_ROWS_TSV="$work/rows.tsv" cargo test --locked -p finance-extraction --test real_rows -- --ignored --exact real_word_rows_to_financial_candidates
 echo 'PASS: real Vietnamese OCR word rows -> exact financial candidates, with original block indexes'
+
+FINANCE_OCR_ROWS_IMAGE="$work/rows.png" FINANCE_OCR_ROWS_TSV="$work/rows.tsv" bash scripts/test_ocr_persistence.sh

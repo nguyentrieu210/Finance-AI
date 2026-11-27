@@ -79,7 +79,7 @@ jobs:
           bash scripts/test_s3_provider.sh
   ocr-vietnamese-baseline:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install synthetic OCR test dependencies

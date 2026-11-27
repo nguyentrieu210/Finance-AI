@@ -526,10 +526,15 @@ name = "finance-extraction"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "finance-core",
  "finance-document-intelligence",
  "finance-documents",
  "finance-ocr",
  "finance-shared",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tokio",
  "unicode-normalization",
  "uuid",
 ]
