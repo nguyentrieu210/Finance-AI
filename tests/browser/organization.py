@@ -37,6 +37,12 @@ with sync_playwright() as p:
     expect(page.get_by_role("status")).to_have_text("Đã tải 4 hồ sơ từ API.")
     expect(page.get_by_role("heading", name="Chi tiết hồ sơ")).to_be_visible()
     assert page.locator("tbody tr").count() == 4
+    docs = page.get_by_role("region",name="Metadata chứng từ")
+    docs.get_by_label("File tổng hợp").set_input_files({"name":"browser-synthetic.pdf","mimeType":"application/pdf","buffer":b"%PDF-1.7 synthetic browser metadata"})
+    expect(docs.locator(".document-status")).to_contain_text("Đã tính SHA-256")
+    docs.get_by_role("button",name="Tạo metadata chứng từ").click()
+    expect(docs.locator(".document-status")).to_have_text("Đã tải 1 chứng từ metadata.")
+    expect(docs.get_by_text("PENDING_UPLOAD")).to_be_visible()
     page.get_by_role("button", name="Ngắt kết nối", exact=True).click()
     assert page.locator("tbody tr").count() == 0
     page.get_by_role("button", name="E19 Biểu mẫu").click()

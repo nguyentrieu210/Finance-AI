@@ -1,0 +1,2 @@
+# Synthetic metadata screen
+A selected synthetic PDF/JPEG/PNG is hashed in Chromium; only bounded name/type/size/hash and document kind are sent to createDocument. Actual bytes are never sent. Versioned requests and an in-memory retry key, list refresh and cursor, explicit pending state. No production intake or scan release. Closing/navigating can discard pending state; durable retry recovery remains open. Browser fixture exercises real metadata creation through authenticated API/PostgreSQL.
