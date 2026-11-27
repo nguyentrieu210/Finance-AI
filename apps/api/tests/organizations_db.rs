@@ -270,9 +270,7 @@ async fn scoped_organization_http_real_database() {
         &form_id,
         "form-revise",
         form_token.as_deref().unwrap(),
-        "Synthetic payment form v2",
-        fields.clone(),
-        "Add stable source mapping",
+        ("Synthetic payment form v2", fields.clone(), "Add stable source mapping"),
     )
     .await;
     assert_eq!(revise_status, StatusCode::OK);
@@ -286,9 +284,7 @@ async fn scoped_organization_http_real_database() {
             &form_id,
             "form-stale",
             form_token.as_deref().unwrap(),
-            "stale",
-            fields.clone(),
-            "stale attempt"
+            ("stale", fields.clone(), "stale attempt")
         )
         .await
         .0,
@@ -473,8 +469,7 @@ async fn scoped_organization_http_real_database() {
             &waiver_id,
             "waiver-self",
             &waiver_version,
-            "APPROVED",
-            Some("2035-12-01T00:00:00Z")
+            ("APPROVED", Some("2035-12-01T00:00:00Z"))
         )
         .await
         .0,
@@ -487,8 +482,7 @@ async fn scoped_organization_http_real_database() {
         &waiver_id,
         "waiver-approve",
         &waiver_version,
-        "APPROVED",
-        Some("2035-12-01T00:00:00Z"),
+        ("APPROVED", Some("2035-12-01T00:00:00Z")),
     )
     .await;
     assert_eq!(decision_status, StatusCode::OK);
@@ -515,8 +509,7 @@ async fn scoped_organization_http_real_database() {
         "handoff-one",
         &handoff_version,
         "00000000-0000-0000-0000-000000002304",
-        "MANUAL",
-        Some("MANUAL-RECEIPT-1"),
+        ("MANUAL", Some("MANUAL-RECEIPT-1")),
     )
     .await;
     assert_eq!(handoff_status, StatusCode::CREATED);
@@ -531,8 +524,7 @@ async fn scoped_organization_http_real_database() {
             "handoff-do",
             &handoff_version,
             "00000000-0000-0000-0000-000000002304",
-            "DO_API",
-            None
+            ("DO_API", None)
         )
         .await
         .0,
@@ -999,10 +991,9 @@ async fn revise_form(
     form: &str,
     key: &str,
     version: &str,
-    name: &str,
-    fields: Value,
-    reason: &str,
+    revision: (&str, Value, &str),
 ) -> (StatusCode, Value, Option<String>) {
+    let (name, fields, reason) = revision;
     let body = json!({"name":name,"fields":fields,"reason":reason});
     let response = app
         .clone()
@@ -1372,9 +1363,9 @@ async fn decide_waiver(
     waiver: &str,
     key: &str,
     version: &str,
-    decision: &str,
-    expires: Option<&str>,
+    outcome: (&str, Option<&str>),
 ) -> (StatusCode, serde_json::Value, Option<String>) {
+    let (decision, expires) = outcome;
     let response = app
         .clone()
         .oneshot(
@@ -1447,9 +1438,9 @@ async fn create_handoff(
     key: &str,
     version: &str,
     package: &str,
-    channel: &str,
-    external: Option<&str>,
+    channel_receipt: (&str, Option<&str>),
 ) -> (StatusCode, serde_json::Value, Option<String>) {
+    let (channel, external) = channel_receipt;
     let response = app
         .clone()
         .oneshot(
