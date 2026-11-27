@@ -72,8 +72,12 @@ BEGIN
   RAISE EXCEPTION 'expired grant accepted';
  EXCEPTION WHEN check_violation THEN NULL; END;
  IF EXISTS(SELECT 1 FROM finance.document_blob WHERE id=j) THEN RAISE EXCEPTION 'expired finalize persisted'; END IF;
- IF has_table_privilege('finance_runtime','finance.document_blob','SELECT') OR has_table_privilege('finance_job_worker','finance.document_blob','SELECT')
- OR has_table_privilege('finance_runtime','finance.document_ref','INSERT') OR has_function_privilege('finance_runtime','finance.prototype_finalize_synthetic_upload(uuid,uuid,uuid,uuid,uuid,bigint,bytea)','EXECUTE') THEN
-  RAISE EXCEPTION 'quarantine exposed';
+ IF has_table_privilege('finance_runtime','finance.document_blob','SELECT')
+ OR NOT has_table_privilege('finance_job_worker','finance.document_blob','SELECT')
+ OR has_table_privilege('finance_job_worker','finance.document_blob','INSERT')
+ OR has_table_privilege('finance_job_worker','finance.document_blob','DELETE')
+ OR has_table_privilege('finance_runtime','finance.document_ref','INSERT')
+ OR has_function_privilege('finance_runtime','finance.prototype_finalize_synthetic_upload(uuid,uuid,uuid,uuid,uuid,bigint,bytea)','EXECUTE') THEN
+  RAISE EXCEPTION 'quarantine privilege boundary mismatch';
  END IF;
 END $$;
