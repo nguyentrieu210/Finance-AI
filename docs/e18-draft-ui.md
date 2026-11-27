@@ -1,0 +1,2 @@
+# E18 draft screen
+Synthetic-only React view with real authenticated create/list/get, three dossier kinds, owner scope, in-memory credentials, pagination, detail, bounded input and same idempotency key on uncertain result while mounted. No durable browser retry queue; navigation/reload can lose pending key, so production must implement durable recovery. API remains injected only. Actual Chromium test extended to create and inspect drafts from the restricted DB. No uploads, review or ready/accept claims. CI pending.

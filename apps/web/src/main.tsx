@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { components } from './generated/api';
 import './style.css';
+import { Drafts } from './features/workflow/Drafts';
 
 type Organization = components['schemas']['Organization'];
 type Page = { items: Organization[]; next_cursor?: string };
@@ -108,7 +109,7 @@ function App() {
           <div className="table-wrap"><table><thead><tr><th>Mã đơn vị</th><th>Tên đơn vị</th><th>Loại</th><th>Trạng thái</th></tr></thead>
           <tbody>{items.map(row => <tr key={row.id}><td>{row.code}</td><td>{row.name}</td><td>{row.kind}</td><td>{row.active ? 'Hoạt động' : 'Ngừng hoạt động'}</td></tr>)}</tbody></table></div>
           <div className="actions"><button disabled={!connected || busy} onClick={() => void load()}>Trang đầu</button><button disabled={!cursor || busy} onClick={() => void load(cursor)}>Trang tiếp</button></div>
-        </section> : <section aria-labelledby="gate-title"><h2 id="gate-title">Chưa mở nghiệp vụ</h2><p>Phân hệ {selected} chưa vượt qua toàn bộ điều kiện nghiệm thu và phân quyền. Không hiển thị số liệu giả, không cho phép gửi hồ sơ hoặc thay đổi dữ liệu.</p><p role="status">Chưa tiếp nhận chứng từ thực tế — chế độ kỹ thuật.</p></section>}
+        </section> : selected === 'E18' && sandbox ? <Drafts /> : <section aria-labelledby="gate-title"><h2 id="gate-title">Chưa mở nghiệp vụ</h2><p>Phân hệ {selected} chưa vượt qua toàn bộ điều kiện nghiệm thu và phân quyền. Không hiển thị số liệu giả, không cho phép gửi hồ sơ hoặc thay đổi dữ liệu.</p><p role="status">Chưa tiếp nhận chứng từ thực tế — chế độ kỹ thuật.</p></section>}
       </main>
     </div>
   </div>;

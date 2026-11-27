@@ -6,6 +6,7 @@ origin = os.environ["FINANCE_TEST_ORIGIN"]
 assert origin.startswith("http://127.0.0.1:")
 token = os.environ.pop("FINANCE_TEST_TOKEN")
 auditor = os.environ.pop("FINANCE_TEST_AUDITOR")
+requester = os.environ.pop("FINANCE_TEST_REQUESTER")
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     context = browser.new_context()
@@ -26,6 +27,19 @@ with sync_playwright() as p:
     expect(page.get_by_role("status")).to_contain_text("(403)")
     assert page.locator("tbody tr").count() == 0
     page.get_by_role("button", name="E18 Quy trình").click()
+    expect(page.get_by_role("heading", name="Hồ sơ tài chính nháp")).to_be_visible()
+    page.get_by_label("Token sandbox").fill(requester)
+    page.get_by_role("button", name="Kết nối", exact=True).click()
+    expect(page.get_by_role("status")).to_have_text("Đã tải 3 hồ sơ từ API.")
+    page.get_by_label("UUID đơn vị sandbox").fill("00000000-0000-0000-0000-00000000000a")
+    page.get_by_label("Loại hồ sơ").select_option("SETTLEMENT")
+    page.get_by_role("button", name="Tạo hồ sơ nháp").click()
+    expect(page.get_by_role("status")).to_have_text("Đã tải 4 hồ sơ từ API.")
+    expect(page.get_by_role("heading", name="Chi tiết hồ sơ")).to_be_visible()
+    assert page.locator("tbody tr").count() == 4
+    page.get_by_role("button", name="Ngắt kết nối", exact=True).click()
+    assert page.locator("tbody tr").count() == 0
+    page.get_by_role("button", name="E19 Biểu mẫu").click()
     expect(page.get_by_role("heading", name="Chưa mở nghiệp vụ")).to_be_visible()
     assert page.get_by_label("Token sandbox").count() == 0
     assert page.evaluate("Object.keys(localStorage).length + Object.keys(sessionStorage).length") == 0
