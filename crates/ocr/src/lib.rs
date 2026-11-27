@@ -4,6 +4,7 @@
 use finance_documents::{Binding, Original, evidence::Rect};
 use finance_shared::{ids::CompanyScope, upload_contract::Sha256Digest};
 
+pub mod paddle;
 pub mod tsv;
 
 const MAX_PAGES: u32 = 200;
