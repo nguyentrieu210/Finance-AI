@@ -39,17 +39,21 @@ impl VerifiedIssue<'_> {
             return Err(Error::Currency);
         }
         let _ = self.beneficiary;
-        Ok(Advance {
+        let advance = Advance {
             issued: Some(amount),
             settled,
             confirmed_refund,
             reserved,
             due: self.due,
             approved_extension,
-        })
+        };
+        // Reject impossible balances at the verified-input boundary.
+        advance.remaining()?;
+        Ok(advance)
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Advance {
     pub issued: Option<Money>,
     pub settled: Money,
@@ -121,5 +125,28 @@ mod tests {
         a.reserved = m("70");
         assert_eq!(a.remaining(), Ok(m("0")));
         assert_eq!(a.overdue(due.succ_opt().unwrap()), Ok(true));
+    }
+
+    #[test]
+    fn verified_issue_rejects_invalid_initial_balances() {
+        let m = |n| Money {
+            amount: Amount::parse(n).unwrap(),
+            currency: Currency::parse("VND").unwrap(),
+        };
+        let issue = VerifiedIssue {
+            purpose: "Project expenses",
+            beneficiary: ResourceId::try_from(uuid::Uuid::from_u128(7)).unwrap(),
+            amount: Some(m("100")),
+            due: NaiveDate::from_ymd_opt(2027, 1, 31).unwrap(),
+            source_verified: true,
+        };
+        assert_eq!(
+            issue.into_advance(m("80"), m("10"), m("20"), None),
+            Err(Error::Negative)
+        );
+        assert_eq!(
+            issue.into_advance(m("-1"), m("0"), m("0"), None),
+            Err(Error::Negative)
+        );
     }
 }
