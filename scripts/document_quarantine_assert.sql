@@ -76,8 +76,18 @@ BEGIN
  OR NOT has_table_privilege('finance_job_worker','finance.document_blob','SELECT')
  OR has_table_privilege('finance_job_worker','finance.document_blob','INSERT')
  OR has_table_privilege('finance_job_worker','finance.document_blob','DELETE')
+ OR has_column_privilege('finance_job_worker','finance.document_blob','synthetic_bytes','UPDATE')
  OR has_table_privilege('finance_runtime','finance.document_ref','INSERT')
- OR has_function_privilege('finance_runtime','finance.prototype_finalize_synthetic_upload(uuid,uuid,uuid,uuid,uuid,bigint,bytea)','EXECUTE') THEN
+ OR has_function_privilege('finance_runtime','finance.prototype_finalize_synthetic_upload(uuid,uuid,uuid,uuid,uuid,bigint,bytea)','EXECUTE')
+ OR EXISTS(SELECT 1 FROM pg_roles WHERE rolname='finance_job_worker'
+           AND (rolsuper OR rolbypassrls OR rolcanlogin OR rolcreaterole))
+ OR NOT EXISTS(SELECT 1 FROM pg_policies
+               WHERE schemaname='finance' AND tablename='document_blob'
+                 AND policyname='document_blob_worker_read')
+ OR NOT EXISTS(SELECT 1 FROM pg_class cl
+               JOIN pg_namespace ns ON ns.oid=cl.relnamespace
+               WHERE ns.nspname='finance' AND cl.relname='document_blob'
+                 AND cl.relforcerowsecurity) THEN
   RAISE EXCEPTION 'quarantine privilege boundary mismatch';
  END IF;
 END $$;
