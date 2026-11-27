@@ -11,7 +11,8 @@
         "job_attempt",
         "outbox",
         "inbox",
-        "idempotency_record"
+        "idempotency_record",
+        "worker_scope"
       ],
       "invariants": "Job fence, bounded retries, dedupe and receipt immutable; same transaction as mutation."
     },

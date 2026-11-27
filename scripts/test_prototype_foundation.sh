@@ -29,5 +29,15 @@ else
  FINANCE_PROTOTYPE_TEST_DATABASE_URL="$runtime_url" cargo test --locked -p finance-core --test prototype_db -- --ignored --exact real_database_transaction_and_scope
 fi
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/prototype_assert.sql
-unset url runtime_url
+worker_pw="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
+printf "CREATE ROLE finance_job_test_login LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD '%s';\nGRANT finance_job_worker TO finance_job_test_login;\nINSERT INTO finance.worker_scope(login_name,tenant_id,company_id) VALUES ('finance_job_test_login','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a');\n" "$worker_pw" | docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 >/dev/null
+worker_url="postgresql://finance_job_test_login:$worker_pw@$port/finance_prototype?sslmode=disable"
+unset worker_pw
+if [[ -n "${FINANCE_JOBS_TEST_BIN:-}" ]]; then
+ FINANCE_JOB_TEST_DATABASE_URL="$worker_url" "$FINANCE_JOBS_TEST_BIN" --ignored --exact durable_jobs_real_database
+else
+ FINANCE_JOB_TEST_DATABASE_URL="$worker_url" cargo test --locked -p finance-core --test jobs_db -- --ignored --exact durable_jobs_real_database
+fi
+docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/jobs_assert.sql
+unset url runtime_url worker_url
 echo 'PASS: real PostgreSQL synthetic prototype atomic command, replay, RLS and scoped FK'
