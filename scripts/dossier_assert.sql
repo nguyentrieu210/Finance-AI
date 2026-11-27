@@ -137,9 +137,7 @@ BEGIN
  IF NOT EXISTS(SELECT 1 FROM finance.dossier WHERE id='00000000-0000-0000-0000-000000002120')
  OR EXISTS(SELECT 1 FROM finance.dossier WHERE id='00000000-0000-0000-0000-000000001800')
  OR NOT EXISTS(SELECT 1 FROM finance.handoff WHERE id='00000000-0000-0000-0000-000000002315')
- OR EXISTS(SELECT 1 FROM finance.handoff h JOIN finance.dossier_snapshot s
-   ON (s.tenant_id,s.company_id,s.id)=(h.tenant_id,h.company_id,h.snapshot_id)
-   WHERE s.dossier_id='00000000-0000-0000-0000-000000002300')
+ OR EXISTS(SELECT 1 FROM finance.handoff WHERE external_ref='MANUAL-RECEIPT-1')
  THEN RAISE EXCEPTION 'case-parent visibility failed'; END IF;
 END $$;
 ROLLBACK;
