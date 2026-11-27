@@ -1,0 +1,2 @@
+# E22 scoped audit HTTP/UI slice
+The existing append-only tenant hash chain and real PostgreSQL integrity tests are now exposed through an Auditor-only GET /v1/audit route. Cursor payloads are HMAC-bound to actor/scope and expire after five minutes. The repository records AUDIT_READ in the same transaction before returning events; those access events are excluded from the page to prevent pagination feedback. The React view keeps the bearer token in memory only and renders redacted identifiers/digest prefixes.

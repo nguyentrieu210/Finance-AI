@@ -156,6 +156,14 @@ async fn scoped_organization_http_real_database() {
         assert_eq!(request(&app, uri, Some(&auditor)).await.0, StatusCode::FORBIDDEN);
         assert_eq!(request(&app, uri, None).await.0, StatusCode::UNAUTHORIZED);
     }
+    let (audit_status, audit_page) = request(&app, "/v1/audit?limit=2", Some(&auditor)).await;
+    assert_eq!(audit_status, StatusCode::OK);
+    assert!(audit_page["items"].is_array());
+    assert_eq!(
+        request(&app, "/v1/audit", Some(&requester)).await.0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(request(&app, "/v1/audit", None).await.0, StatusCode::UNAUTHORIZED);
     let uri = "/v1/organizations?limit=1";
     assert_eq!(request(&app, uri, None).await.0, StatusCode::UNAUTHORIZED);
     assert_eq!(
