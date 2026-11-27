@@ -30,7 +30,7 @@ struct Page {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Confirm {
+pub(super) struct Confirm {
     left_evidence_id: Uuid,
     right_evidence_id: Uuid,
     reason: String,

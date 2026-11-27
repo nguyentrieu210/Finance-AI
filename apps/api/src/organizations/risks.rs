@@ -11,7 +11,7 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use finance_risk_engine::repository::{self, Risk, Waiver};
+use finance_risk_engine::repository::{self, Waiver};
 use finance_shared::{
     contracts::{Principal, Version},
     http_contract::{IdempotencyKey, VersionTarget, VersionToken},
@@ -30,14 +30,14 @@ struct Page<T> {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RequestWaiver {
+pub(super) struct RequestWaiver {
     result_id: Uuid,
     reason: String,
     evidence_ids: Vec<Uuid>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct DecideWaiver {
+pub(super) struct DecideWaiver {
     decision: String,
     expires_at: Option<String>,
     reason: String,

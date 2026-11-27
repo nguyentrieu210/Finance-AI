@@ -30,7 +30,7 @@ struct Page {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Decision {
+pub(super) struct Decision {
     field_id: Uuid,
     value: String,
     reason: String,

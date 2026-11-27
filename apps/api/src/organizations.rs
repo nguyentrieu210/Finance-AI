@@ -306,6 +306,10 @@ pub fn router(state: OrganizationState) -> Router {
             "/v1/dossiers/{dossier_id}/snapshot",
             get(lifecycle::snapshot),
         )
+        .route(
+            "/v1/dossiers/{dossier_id}/exports",
+            axum::routing::post(exports::create),
+        )
         .route("/v1/audit", get(audit::list))
         .route("/v1/dashboard", get(dashboard::get))
         .route("/__diagnostics/knowledge", get(knowledge::search))

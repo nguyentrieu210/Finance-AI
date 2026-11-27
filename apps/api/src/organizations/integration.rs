@@ -30,7 +30,7 @@ struct Page<T> {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct HandoffBody {
+pub(super) struct HandoffBody {
     package_id: Uuid,
     channel: String,
     external_ref: Option<String>,
@@ -38,7 +38,7 @@ struct HandoffBody {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ResolveBody {
+pub(super) struct ResolveBody {
     reason: String,
     evidence_ids: Vec<Uuid>,
 }

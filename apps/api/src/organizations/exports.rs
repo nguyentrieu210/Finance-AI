@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ExportBody {
+pub(super) struct ExportBody {
     snapshot_id: Uuid,
     template_ids: Vec<Uuid>,
 }
