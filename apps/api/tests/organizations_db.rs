@@ -1380,9 +1380,7 @@ async fn decide_waiver(
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!(
-                    "/v1/dossiers/{dossier}/waivers/{waiver}/decision"
-                ))
+                .uri(format!("/v1/dossiers/{dossier}/waivers/{waiver}/decision"))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header("idempotency-key", key)
                 .header("if-finance-version", version)
