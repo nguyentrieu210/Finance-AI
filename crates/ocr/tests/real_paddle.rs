@@ -84,8 +84,14 @@ fn real_paddle_vietnamese() {
         .collect::<Vec<_>>()
         .join(" ");
     assert!(text.contains("125000"), "synthetic amount not recognized");
-    assert!(text.contains("Tổng"), "synthetic Vietnamese text not recognized");
-    assert!(text.contains("thanh toán"), "synthetic phrase not recognized");
+    assert!(
+        text.contains("Tổng"),
+        "synthetic Vietnamese text not recognized"
+    );
+    assert!(
+        text.contains("thanh toán"),
+        "synthetic phrase not recognized"
+    );
     assert!(page.blocks().iter().all(|block| {
         let [x0, y0, x1, y1] = block.rect().coordinates();
         x0 < x1 && y0 < y1 && x1 <= 1_000_000 && y1 <= 1_000_000
