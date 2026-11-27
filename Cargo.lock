@@ -447,6 +447,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "finance-documents"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "finance-shared",
+ "sha2",
+ "uuid",
+]
+
+[[package]]
 name = "finance-identity"
 version = "0.1.0"
 dependencies = [
