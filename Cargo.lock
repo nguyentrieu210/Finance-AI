@@ -449,6 +449,7 @@ dependencies = [
  "finance-knowledge",
  "finance-matching",
  "finance-organization",
+ "finance-permissions",
  "finance-policy",
  "finance-risk-engine",
  "finance-rule-engine",

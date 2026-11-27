@@ -27,6 +27,7 @@ finance-documents = { path = "../../crates/documents" }
 finance-workflow = { path = "../../crates/workflow" }
 base64 = "=0.22.1"
 finance-core = { path = "../../crates/core" }
+finance-permissions = { path = "../../crates/permissions" }
 finance-identity = { path = "../../crates/identity" }
 finance-organization = { path = "../../crates/organization" }
 hmac = "=0.12.1"
