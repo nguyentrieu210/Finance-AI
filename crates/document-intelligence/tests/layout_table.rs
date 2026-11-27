@@ -44,7 +44,11 @@ fn overlapping_blocks_are_not_deduplicated() {
     .unwrap();
     let result = layout::analyze(&page);
     assert_eq!(result.rows[0].block_indexes, vec![0, 1]);
-    assert!(result.warnings.contains(&layout::Warning::OverlappingBlocks));
+    assert!(
+        result
+            .warnings
+            .contains(&layout::Warning::OverlappingBlocks)
+    );
 }
 
 fn grid_page() -> PageResult {
