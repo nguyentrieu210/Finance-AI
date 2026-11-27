@@ -80,17 +80,18 @@ pub async fn list(
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     require_reader(&mut tx, proof).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let rows =
-        sqlx::query_as::<_, Field>("SELECT * FROM finance.runtime_fields($1,$2,$3,$4,$5,NULL,$6::integer)")
-            .bind(tenant)
-            .bind(company)
-            .bind(dossier)
-            .bind(actor)
-            .bind(after)
-            .bind(limit)
-            .fetch_all(&mut *tx)
-            .await
-            .map_err(map_database)?;
+    let rows = sqlx::query_as::<_, Field>(
+        "SELECT * FROM finance.runtime_fields($1,$2,$3,$4,$5,NULL,$6::integer)",
+    )
+    .bind(tenant)
+    .bind(company)
+    .bind(dossier)
+    .bind(actor)
+    .bind(after)
+    .bind(limit)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(map_database)?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(rows)
