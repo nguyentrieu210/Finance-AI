@@ -63,7 +63,7 @@ pub async fn list(
         })?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     let rows = sqlx::query_as::<_, ReservationRow>(
-        "SELECT * FROM finance.runtime_reservations($1,$2,$3,$4,$5,$6)",
+        "SELECT * FROM finance.runtime_reservations($1,$2,$3,$4,$5,$6::integer)",
     )
     .bind(tenant)
     .bind(company)

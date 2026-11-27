@@ -81,7 +81,7 @@ pub async fn list(
     require_reader(&mut tx, proof).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     let rows =
-        sqlx::query_as::<_, Field>("SELECT * FROM finance.runtime_fields($1,$2,$3,$4,$5,NULL,$6)")
+        sqlx::query_as::<_, Field>("SELECT * FROM finance.runtime_fields($1,$2,$3,$4,$5,NULL,$6::integer)")
             .bind(tenant)
             .bind(company)
             .bind(dossier)

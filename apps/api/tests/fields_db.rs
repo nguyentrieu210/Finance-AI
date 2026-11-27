@@ -165,7 +165,7 @@ async fn actual_ocr_fields_http_review() {
         .await
         .unwrap();
         let mapped = sqlx::query_as::<_, finance_extraction::repository::Field>(
-            "SELECT * FROM finance.runtime_fields($1,$2,$3,$4,$5,NULL,$6)",
+            "SELECT * FROM finance.runtime_fields($1,$2,$3,$4,$5,NULL,$6::integer)",
         )
         .bind(Uuid::from_u128(1))
         .bind(Uuid::from_u128(10))
