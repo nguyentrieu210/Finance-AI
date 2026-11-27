@@ -153,6 +153,35 @@ async fn actual_ocr_fields_http_review() {
         [89; 32],
     ));
     let dossier = "00000000-0000-0000-0000-000000001f41";
+    {
+        let mut tx = runtime.begin().await.unwrap();
+        sqlx::query(
+            "SELECT set_config('finance.tenant_id',$1,true),set_config('finance.company_id',$2,true),set_config('finance.actor_id',$3,true)",
+        )
+        .bind("00000000-0000-0000-0000-000000000001")
+        .bind("00000000-0000-0000-0000-00000000000a")
+        .bind("00000000-0000-0000-0000-0000000003e9")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        let mapped = sqlx::query_as::<_, finance_extraction::repository::Field>(
+            "SELECT * FROM finance.runtime_fields($1,$2,$3,$4,$5,NULL,$6)",
+        )
+        .bind(Uuid::from_u128(1))
+        .bind(Uuid::from_u128(10))
+        .bind(Uuid::parse_str(dossier).unwrap())
+        .bind(Uuid::from_u128(1001))
+        .bind(Uuid::nil())
+        .bind(100_i64)
+        .fetch_all(&mut *tx)
+        .await;
+        assert!(
+            mapped.is_ok(),
+            "runtime_fields SQLx mapping failed: {:?}",
+            mapped.err()
+        );
+        tx.rollback().await.unwrap();
+    }
     let (dossier_status, dossier_body) =
         get(&app, &format!("/v1/dossiers/{dossier}"), &requester).await;
     assert_eq!(
