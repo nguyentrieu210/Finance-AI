@@ -143,7 +143,16 @@ pub async fn decide_waiver(
     require_role(&mut tx,proof.context(),Role::FinanceApprover).await.map_err(grant)?;recheck_authenticated(&mut tx,Some(proof)).await?;
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))").bind(format!("{t}/{c}/{a}/waiver.decide/{}",key.as_str())).execute(&mut *tx).await?;
     let mut ev=evidence.to_vec();ev.sort();ev.dedup();if ev.len()!=evidence.len(){return Err(Error::InvalidInput)}
-    let expiry=match(decision,expires){("APPROVED",Some(x)) if x>chrono::Utc::now() && x<=chrono::Utc::now()+chrono::Duration::days(365)=>x,("REJECTED",None)=>chrono::Utc::now(),_=>return Err(Error::InvalidInput)};
+    let now = proof.context().occurred_at;
+    let expiry = match (decision, expires) {
+        ("APPROVED", Some(x))
+            if x > now && x <= now + chrono::Duration::days(365) =>
+        {
+            x
+        }
+        ("REJECTED", None) => now,
+        _ => return Err(Error::InvalidInput),
+    };
     let exp=expiry.to_rfc3339();let expected_bytes=expected.to_be_bytes();let mut ev_bytes=Vec::new();for e in &ev{ev_bytes.extend_from_slice(e.as_bytes())}
     let digest=hash(&[dossier.as_bytes(),waiver.as_bytes(),decision.as_bytes(),exp.as_bytes(),&expected_bytes,reason.as_bytes(),&ev_bytes]);
     let prior:Option<(Vec<u8>,Uuid)>=sqlx::query_as("SELECT request_hash,result_id FROM finance.idempotency_record WHERE tenant_id=$1 AND company_id=$2 AND actor_id=$3 AND operation_id='waiver.decide' AND key=$4")
