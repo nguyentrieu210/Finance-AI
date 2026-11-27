@@ -476,6 +476,7 @@ pub fn router(state: OrganizationState) -> Router {
             "/v1/dossiers/{dossier_id}/documents",
             get(documents::list).post(documents::create),
         )
+        .route("/v1/evidence/{evidence_id}", get(documents::evidence))
         .route("/v1/dossiers/{dossier_id}/checks", get(checks::list))
         .route("/v1/dossiers/{dossier_id}/checklist", get(checklist::get))
         .route("/v1/dossiers/{dossier_id}/fields", get(fields::list))

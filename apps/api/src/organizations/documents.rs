@@ -163,3 +163,26 @@ pub async fn list(
         Err(e) => error(status(e), correlation),
     }
 }
+
+pub(super) async fn evidence(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match authenticate_version(&state, &headers, correlation, None).await {
+        Ok(proof) => proof,
+        Err(value) => return error(value, correlation),
+    };
+    match repository::get_evidence(&state.runtime, &proof, id).await {
+        Ok(Some(evidence)) => {
+            let mut response = Json(evidence).into_response();
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Ok(None) => error(StatusCode::NOT_FOUND, correlation),
+        Err(value) => error(status(value), correlation),
+    }
+}

@@ -11,12 +11,12 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use finance_workflow::repository::{self, Transition, Workflow};
 use finance_shared::{
     contracts::{Principal, Version},
     http_contract::{IdempotencyKey, VersionTarget, VersionToken},
     ids::ResourceId,
 };
+use finance_workflow::repository::{self, Transition, Workflow};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -174,7 +174,8 @@ pub(super) async fn list(
         return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
     };
     let cursor_key: [u8; 32] =
-        Sha256::digest([b"finance.workflow.cursor/v1".as_slice(), &state.cursor_key].concat()).into();
+        Sha256::digest([b"finance.workflow.cursor/v1".as_slice(), &state.cursor_key].concat())
+            .into();
     let after = match query.cursor {
         None => Uuid::nil(),
         Some(value) => match decode_cursor(&cursor_key, state.scope, actor, &value, time) {

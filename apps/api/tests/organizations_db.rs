@@ -392,6 +392,27 @@ async fn scoped_organization_http_real_database() {
         request(&app, "/v1/references", None).await.0,
         StatusCode::UNAUTHORIZED
     );
+    let evidence_uri = "/v1/evidence/00000000-0000-0000-0000-000000002333";
+    for reader in [&requester, &review_accountant] {
+        let (evidence_status, evidence) = request(&app, evidence_uri, Some(reader)).await;
+        assert_eq!(evidence_status, StatusCode::OK);
+        assert_eq!(evidence["page"], 1);
+        assert_eq!(evidence["sha256"].as_str().unwrap().len(), 64);
+        assert_eq!(evidence["excerpt"], "Synthetic bank account change evidence");
+        assert_eq!(evidence["locator"], "rect:1000,1000,500000,50000");
+    }
+    assert_eq!(
+        request(&app, evidence_uri, Some(&other_requester)).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        request(&app, evidence_uri, Some(&auditor)).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        request(&app, evidence_uri, None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
     let (audit_status, audit_page) = request(&app, "/v1/audit?limit=2", Some(&auditor)).await;
     assert_eq!(audit_status, StatusCode::OK);
     assert!(audit_page["items"].is_array());
