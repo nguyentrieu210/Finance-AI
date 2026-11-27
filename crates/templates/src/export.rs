@@ -258,19 +258,18 @@ pub async fn complete(
     if !allowed {
         return Err(WorkerError::Forbidden);
     }
-    let result = sqlx::query_scalar::<_, i64>(
-        "SELECT finance.complete_export_job($1,$2,$3,$4,$5,$6,$7,$8)",
-    )
-    .bind(tenant)
-    .bind(company)
-    .bind(lease.job_id)
-    .bind(lease.fence)
-    .bind(lease.worker_id())
-    .bind(manifest.as_slice())
-    .bind(i32::try_from(artifacts.len()).map_err(|_| WorkerError::InvalidManifest)?)
-    .bind(total_bytes)
-    .fetch_one(&mut *tx)
-    .await;
+    let result =
+        sqlx::query_scalar::<_, i64>("SELECT finance.complete_export_job($1,$2,$3,$4,$5,$6,$7,$8)")
+            .bind(tenant)
+            .bind(company)
+            .bind(lease.job_id)
+            .bind(lease.fence)
+            .bind(lease.worker_id())
+            .bind(manifest.as_slice())
+            .bind(i32::try_from(artifacts.len()).map_err(|_| WorkerError::InvalidManifest)?)
+            .bind(total_bytes)
+            .fetch_one(&mut *tx)
+            .await;
     let version = match result {
         Ok(version) => version,
         Err(sqlx::Error::Database(database)) if database.code().as_deref() == Some("P0002") => {
