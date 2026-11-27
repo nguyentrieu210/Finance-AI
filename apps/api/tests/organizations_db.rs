@@ -132,6 +132,7 @@ async fn scoped_organization_http_real_database() {
     let requester = mint("requester");
     let other_requester = mint("second-requester");
     let policy_admin = mint("policy-admin");
+    let review_accountant = mint("review-accountant");
     let scope = CompanyScope {
         tenant: TenantId::try_from(id(1)).unwrap(),
         company: CompanyId::try_from(id(10)).unwrap(),
@@ -614,6 +615,97 @@ async fn scoped_organization_http_real_database() {
     .await;
     assert_eq!(resolve_status, StatusCode::OK);
     assert_eq!(resolved["state"], "RESOLVED");
+
+    let review_dossier = "00000000-0000-0000-0000-000000002320";
+    let review_snapshot = "00000000-0000-0000-0000-000000002323";
+    let review_v0 = format!("\"v1:dossier:{review_dossier}:0\"");
+    let (queue_status, queue) = request(&app, "/v1/review/queue?limit=10", Some(&review_accountant)).await;
+    assert_eq!(queue_status, StatusCode::OK);
+    assert!(queue["items"].as_array().unwrap().iter().any(|item| item["id"] == review_dossier));
+    assert_eq!(
+        begin_review(
+            &app,
+            &requester,
+            review_dossier,
+            "review-owner-denied",
+            &review_v0,
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let (begin_status, begun, begin_token) = begin_review(
+        &app,
+        &review_accountant,
+        review_dossier,
+        "review-begin",
+        &review_v0,
+    )
+    .await;
+    assert_eq!(begin_status, StatusCode::OK);
+    assert_eq!(begun["status"], "ACCOUNTING_REVIEW");
+    assert_eq!(begun["version"], 1);
+    assert!(begin_token.as_deref().unwrap().ends_with(":1\""));
+    let (read_status, pending) =
+        request(&app, &format!("/v1/dossiers/{review_dossier}/review"), Some(&requester)).await;
+    assert_eq!(read_status, StatusCode::OK);
+    assert_eq!(pending["decision"], "PENDING");
+    assert_eq!(pending["snapshot_id"], review_snapshot);
+    assert_eq!(
+        request(
+            &app,
+            &format!("/v1/dossiers/{review_dossier}/review"),
+            Some(&other_requester)
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    let (accept_status, accepted, accept_token) = decide_review(
+        &app,
+        &review_accountant,
+        review_dossier,
+        "review-accept",
+        begin_token.as_deref().unwrap(),
+        review_snapshot,
+        "ACCEPTED",
+    )
+    .await;
+    assert_eq!(accept_status, StatusCode::OK);
+    assert_eq!(accepted["decision"], "ACCEPTED");
+    assert_eq!(accepted["confirmed_field_ids"], json!([]));
+    assert!(accept_token.as_deref().unwrap().ends_with(":2\""));
+    assert_eq!(
+        decide_review(
+            &app,
+            &review_accountant,
+            review_dossier,
+            "review-accept",
+            begin_token.as_deref().unwrap(),
+            review_snapshot,
+            "ACCEPTED",
+        )
+        .await
+        .1,
+        accepted
+    );
+    assert_eq!(
+        decide_review(
+            &app,
+            &review_accountant,
+            review_dossier,
+            "review-stale",
+            begin_token.as_deref().unwrap(),
+            review_snapshot,
+            "ACCEPTED",
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let queue_after = request(&app, "/v1/review/queue?limit=10", Some(&review_accountant)).await.1;
+    assert!(!queue_after["items"].as_array().unwrap().iter().any(|item| item["id"] == review_dossier));
+
     let ready_id = "00000000-0000-0000-0000-000000001800";
     let check_id = "00000000-0000-0000-0000-000000001802";
     let ready_version = format!("\"v1:dossier:{ready_id}:0\"");
@@ -1607,6 +1699,91 @@ async fn create_export(
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     json!({"snapshot_id":snapshot,"template_ids":[template]}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let receipt = response
+        .headers()
+        .get("finance-version")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({})),
+        receipt,
+    )
+}
+
+
+async fn begin_review(
+    app: &Router,
+    token: &str,
+    dossier: &str,
+    key: &str,
+    version: &str,
+) -> (StatusCode, Value, Option<String>) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1/dossiers/{dossier}/begin-review"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("idempotency-key", key)
+                .header("if-finance-version", version)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({"reason":"Independent accounting review","evidence_ids":[]}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let receipt = response
+        .headers()
+        .get("finance-version")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({})),
+        receipt,
+    )
+}
+
+async fn decide_review(
+    app: &Router,
+    token: &str,
+    dossier: &str,
+    key: &str,
+    version: &str,
+    snapshot: &str,
+    decision: &str,
+) -> (StatusCode, Value, Option<String>) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1/dossiers/{dossier}/review"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("idempotency-key", key)
+                .header("if-finance-version", version)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "snapshot_id":snapshot,
+                        "decision":decision,
+                        "confirmed_field_ids":[],
+                        "reason":"All configured accounting review controls satisfied"
+                    })
+                    .to_string(),
                 ))
                 .unwrap(),
         )
