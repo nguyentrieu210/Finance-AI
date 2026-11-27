@@ -1,7 +1,4 @@
-use finance_document_intelligence::{
-    Kind,
-    normalize::Format,
-};
+use finance_document_intelligence::{Kind, normalize::Format};
 use finance_documents::evidence::Rect;
 use finance_extraction::{
     Field, State,
