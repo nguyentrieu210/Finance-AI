@@ -50,3 +50,5 @@ jobs:
         run: docker compose -f infra/compose.yaml config --quiet
       - name: Real database baseline
         run: bash scripts/test_migration_baseline.sh
+      - name: Prototype database integration
+        run: bash scripts/test_prototype_foundation.sh
