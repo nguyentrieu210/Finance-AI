@@ -532,6 +532,7 @@ pub fn router(state: OrganizationState) -> Router {
         )
         .route("/v1/policies", get(policies::list))
         .route("/v1/policies/{item_id}", get(policies::get))
+        .route("/v1/references", get(references::all))
         .route("/v1/contracts", get(references::contracts))
         .route("/v1/advances", get(references::advances))
         .route("/v1/budgets", get(references::budgets))

@@ -349,6 +349,47 @@ async fn scoped_organization_http_real_database() {
         );
         assert_eq!(request(&app, uri, None).await.0, StatusCode::UNAUTHORIZED);
     }
+    let (reference_status, reference_page) =
+        request(&app, "/v1/references?limit=100", Some(&requester)).await;
+    assert_eq!(reference_status, StatusCode::OK);
+    let reference_items = reference_page["items"].as_array().unwrap();
+    for kind in ["CONTRACT", "ADVANCE", "BUDGET"] {
+        assert!(reference_items.iter().any(|item| item["kind"] == kind));
+    }
+    assert!(reference_items.iter().all(|item| {
+        item["state"] == "VERIFIED" && item["coverage"] == "COMPLETE"
+    }));
+    let (_, first_reference) = request(&app, "/v1/references?limit=1", Some(&requester)).await;
+    let reference_cursor = first_reference["next_cursor"].as_str().unwrap();
+    let (next_reference_status, next_reference) = request(
+        &app,
+        &format!("/v1/references?limit=1&cursor={reference_cursor}"),
+        Some(&requester),
+    )
+    .await;
+    assert_eq!(next_reference_status, StatusCode::OK);
+    assert_ne!(
+        first_reference["items"][0]["id"],
+        next_reference["items"][0]["id"]
+    );
+    assert_eq!(
+        request(
+            &app,
+            &format!("/v1/contracts?limit=1&cursor={reference_cursor}"),
+            Some(&requester),
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        request(&app, "/v1/references", Some(&auditor)).await.0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        request(&app, "/v1/references", None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
     let (audit_status, audit_page) = request(&app, "/v1/audit?limit=2", Some(&auditor)).await;
     assert_eq!(audit_status, StatusCode::OK);
     assert!(audit_page["items"].is_array());

@@ -44,6 +44,26 @@ pub async fn list(
     after: Uuid,
     limit: i64,
 ) -> Result<Vec<Reference>, Error> {
+    list_filtered(pool, proof, Some(kind), after, limit).await
+}
+
+/// List verified, fresh financial reference resources in the authorized company.
+pub async fn list_all(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    after: Uuid,
+    limit: i64,
+) -> Result<Vec<Reference>, Error> {
+    list_filtered(pool, proof, None, after, limit).await
+}
+
+async fn list_filtered(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    kind: Option<ReferenceKind>,
+    after: Uuid,
+    limit: i64,
+) -> Result<Vec<Reference>, Error> {
     if !(1..=100).contains(&limit) {
         return Err(Error::InvalidInput);
     }
@@ -63,11 +83,11 @@ pub async fn list(
         })?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     let rows = sqlx::query_as::<_, Reference>(
-        "SELECT f.id,f.resource_kind AS kind,f.source_key,to_char(r.as_of AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS as_of,'COMPLETE'::text AS coverage,'VERIFIED'::text AS state,ARRAY[]::uuid[] AS evidence_ids FROM finance.financial_resource f JOIN finance.reference_snapshot r ON (r.tenant_id,r.company_id,r.id)=(f.tenant_id,f.company_id,f.snapshot_id) WHERE f.tenant_id=$1 AND f.company_id=$2 AND f.resource_kind=$3 AND f.id>$4 AND f.coverage_complete AND f.fresh_until>statement_timestamp() AND r.state='APPROVED' AND r.fresh_until>statement_timestamp() ORDER BY f.id LIMIT $5",
+        "SELECT f.id,f.resource_kind AS kind,f.source_key,to_char(r.as_of AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS as_of,'COMPLETE'::text AS coverage,'VERIFIED'::text AS state,ARRAY[]::uuid[] AS evidence_ids FROM finance.financial_resource f JOIN finance.reference_snapshot r ON (r.tenant_id,r.company_id,r.id)=(f.tenant_id,f.company_id,f.snapshot_id) WHERE f.tenant_id=$1 AND f.company_id=$2 AND ($3::text IS NULL OR f.resource_kind=$3) AND f.resource_kind IN ('CONTRACT','ADVANCE','BUDGET','INVOICE') AND f.id>$4 AND f.coverage_complete AND f.fresh_until>statement_timestamp() AND r.state='APPROVED' AND r.fresh_until>statement_timestamp() ORDER BY f.id LIMIT $5",
     )
     .bind(t)
     .bind(c)
-    .bind(kind.as_str())
+    .bind(kind.map(ReferenceKind::as_str))
     .bind(after)
     .bind(limit)
     .fetch_all(&mut *tx)

@@ -24,6 +24,7 @@ struct Page {
 
 #[derive(Clone, Copy)]
 pub(super) enum Kind {
+    All,
     Contract,
     Advance,
     Budget,
@@ -31,6 +32,7 @@ pub(super) enum Kind {
 impl Kind {
     fn key(self) -> &'static [u8] {
         match self {
+            Self::All => b"all",
             Self::Contract => b"contract",
             Self::Advance => b"advance",
             Self::Budget => b"budget",
@@ -79,6 +81,9 @@ async fn list_kind(
         },
     };
     let result = match kind {
+        Kind::All => {
+            finance_financial::references::list_all(&state.runtime, &proof, after, limit).await
+        }
         Kind::Contract => {
             finance_contracts::list_verified(&state.runtime, &proof, after, limit).await
         }
@@ -126,4 +131,12 @@ pub(super) async fn budgets(
     query: Result<Query<PageQuery>, QueryRejection>,
 ) -> Response {
     list_kind(state, headers, query, Kind::Budget).await
+}
+
+pub(super) async fn all(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    query: Result<Query<PageQuery>, QueryRejection>,
+) -> Response {
+    list_kind(state, headers, query, Kind::All).await
 }
