@@ -132,3 +132,48 @@ jobs:
         env:
           FINANCE_PADDLE_RECOGNIZER: latin_PP-OCRv3_mobile_rec
         run: bash scripts/test_paddle_probe.sh
+
+  restore-drill:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Rust migrator toolchain
+        run: |
+          rustup toolchain install 1.85.1 --profile minimal
+          rustup override set 1.85.1
+          cargo build --locked -p finance-migrate
+      - name: Real PostgreSQL synthetic backup and restore drill
+        run: bash scripts/test_restore_drill.sh
+
+  system-gates:
+    if: ${{ always() }}
+    needs:
+      - verify
+      - restore-drill
+      - s3-capability
+      - ocr-vietnamese-baseline
+      - pdf-renderer
+      - paddle-ocr
+      - ocr-quality
+      - office-export
+      - paddle-ocr-v3-candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      VERIFY_RESULT: ${{ needs.verify.result }}
+      RESTORE_RESULT: ${{ needs['restore-drill'].result }}
+      S3_RESULT: ${{ needs['s3-capability'].result }}
+      OCR_RESULT: ${{ needs['ocr-vietnamese-baseline'].result }}
+      PDF_RESULT: ${{ needs['pdf-renderer'].result }}
+      PADDLE_RESULT: ${{ needs['paddle-ocr'].result }}
+      QUALITY_RESULT: ${{ needs['ocr-quality'].result }}
+      OFFICE_RESULT: ${{ needs['office-export'].result }}
+      PADDLE_V3_RESULT: ${{ needs['paddle-ocr-v3-candidate'].result }}
+    steps:
+      - name: Require every pilot technical gate on this commit
+        run: |
+          for result in "$VERIFY_RESULT" "$RESTORE_RESULT" "$S3_RESULT" "$OCR_RESULT" "$PDF_RESULT" "$PADDLE_RESULT" "$QUALITY_RESULT" "$OFFICE_RESULT" "$PADDLE_V3_RESULT"; do
+            test "$result" = success
+          done
+          echo 'PASS: same-commit foundation, DB/browser, restore, storage, OCR, PDF and office technical gates'
