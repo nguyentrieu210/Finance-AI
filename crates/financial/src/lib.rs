@@ -5,7 +5,6 @@ use finance_shared::money::Money;
 pub mod payment;
 pub mod references;
 pub mod reservations;
-pub mod repository;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
