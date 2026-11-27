@@ -450,8 +450,10 @@ dependencies = [
 name = "finance-document-intelligence"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "finance-documents",
  "finance-ocr",
+ "finance-shared",
  "unicode-normalization",
 ]
 

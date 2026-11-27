@@ -40,6 +40,8 @@ pub struct Table {
     columns: usize,
     cells: Vec<CellProposal>,
     slots: Vec<Slot>,
+    column_edges: Vec<u32>,
+    header: Option<Vec<String>>,
 }
 
 impl Table {
@@ -143,11 +145,59 @@ pub fn validate(
             }
         }
     }
+    // Only complete, unmerged first-row cells may support continuation.
+    // Keep the normalized comparison text private; never synthesize missing headers.
+    let header = (0..columns)
+        .map(|column| match slots[column] {
+            Slot::Anchor(index) => {
+                let cell = &cells[index];
+                if cell.row_span != 1 || cell.column_span != 1 {
+                    return None;
+                }
+                let mut indexes = cell.block_indexes.clone();
+                indexes.sort_by_key(|&i| {
+                    let [x, y, _, _] = page.blocks()[i].rect().coordinates();
+                    (y, x, i)
+                });
+                let text = indexes
+                    .iter()
+                    .map(|&i| page.blocks()[i].text())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                Some(super::normalize(&text))
+            }
+            Slot::Unknown | Slot::Covered(_) => None,
+        })
+        .collect::<Option<Vec<_>>>();
     Ok(Table {
         page: page.page(),
         rows,
         columns,
         cells,
         slots,
+        column_edges: column_edges.to_vec(),
+        header,
     })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Continuation {
+    Unknown,
+    Candidate,
+}
+
+/// Caller must establish same immutable source/revision before using this
+/// suggestion. Equal headers are not evidence of a shared business table.
+pub fn continuation(first: &Table, next: &Table) -> Continuation {
+    if first.page.checked_add(1) == Some(next.page)
+        && first.rows >= 2
+        && next.rows >= 2
+        && first.column_edges == next.column_edges
+        && first.header.is_some()
+        && first.header == next.header
+    {
+        Continuation::Candidate
+    } else {
+        Continuation::Unknown
+    }
 }

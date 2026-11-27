@@ -6,6 +6,8 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+chrono.workspace = true
+finance-shared = { path = "../shared" }
 finance-ocr = { path = "../ocr" }
 unicode-normalization = "=0.1.26"
 
