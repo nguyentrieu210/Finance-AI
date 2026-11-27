@@ -681,18 +681,17 @@ async fn scoped_organization_http_real_database() {
         .execute(&mut *checklist_tx)
         .await
         .unwrap();
-    let count: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM finance.runtime_checklist($1,$2,$3,$4,$5,$6)",
-    )
-    .bind(id(1))
-    .bind(id(10))
-    .bind(id(1001))
-    .bind(Uuid::parse_str(waiver_dossier).unwrap())
-    .bind(Uuid::nil())
-    .bind(10_i32)
-    .fetch_one(&mut *checklist_tx)
-    .await
-    .unwrap();
+    let count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM finance.runtime_checklist($1,$2,$3,$4,$5,$6)")
+            .bind(id(1))
+            .bind(id(10))
+            .bind(id(1001))
+            .bind(Uuid::parse_str(waiver_dossier).unwrap())
+            .bind(Uuid::nil())
+            .bind(10_i32)
+            .fetch_one(&mut *checklist_tx)
+            .await
+            .unwrap();
     assert_eq!(count, 0);
     checklist_tx.rollback().await.unwrap();
     let (checklist_status, checklist) = request(
@@ -1000,6 +999,19 @@ async fn scoped_organization_http_real_database() {
     let ready_id = "00000000-0000-0000-0000-000000001800";
     let check_id = "00000000-0000-0000-0000-000000001802";
     let ready_version = format!("\"v1:dossier:{ready_id}:0\"");
+    assert_eq!(
+        ready_dossier(
+            &app,
+            &requester,
+            ready_id,
+            "ready-old-check",
+            &ready_version,
+            "00000000-0000-0000-0000-000000001810",
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
     let (ready_status, ready_body, ready_receipt) = ready_dossier(
         &app,
         &requester,
