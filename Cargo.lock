@@ -650,6 +650,9 @@ name = "finance-rule-engine"
 version = "0.1.0"
 dependencies = [
  "finance-shared",
+ "serde",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]
