@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { components } from '../../generated/api';
 import { DocumentIntents } from './DocumentIntents';
+import { Checks } from './Checks';
 
 type Dossier = components['schemas']['Dossier'];
 type Kind = Dossier['kind'];
@@ -130,6 +131,6 @@ export function Drafts() {
     <div className="table-wrap"><table><thead><tr><th>Mã hồ sơ</th><th>Loại</th><th>Trạng thái</th><th>Phiên bản</th><th>Chi tiết</th></tr></thead>
       <tbody>{items.map(row=><tr key={row.id}><td>{row.code}</td><td>{kinds[row.kind]}</td><td>{row.status}</td><td>{row.version}</td><td><button disabled={busy} onClick={()=>void view(row.id)}>Xem</button></td></tr>)}</tbody></table></div>
     <div className="actions"><button disabled={!connected||busy} onClick={()=>void list()}>Trang đầu</button><button disabled={!cursor||busy} onClick={()=>void list(cursor)}>Trang tiếp</button></div>
-    {detail&&<div className="draft-detail"><h3>Chi tiết hồ sơ</h3><dl><dt>Mã hồ sơ</dt><dd>{detail.code}</dd><dt>Loại hồ sơ</dt><dd>{kinds[detail.kind]}</dd><dt>Trạng thái</dt><dd>{detail.status}</dd><dt>Ngày cập nhật UTC</dt><dd>{detail.updated_at}</dd></dl>{connected&&<DocumentIntents key={detail.id} dossier={detail} token={credential.current}/>}</div>}
+    {detail&&<div className="draft-detail"><h3>Chi tiết hồ sơ</h3><dl><dt>Mã hồ sơ</dt><dd>{detail.code}</dd><dt>Loại hồ sơ</dt><dd>{kinds[detail.kind]}</dd><dt>Trạng thái</dt><dd>{detail.status}</dd><dt>Ngày cập nhật UTC</dt><dd>{detail.updated_at}</dd></dl>{connected&&<><DocumentIntents key={detail.id} dossier={detail} token={credential.current}/><Checks key={detail.id+':'+detail.version} dossierId={detail.id} token={credential.current}/></>}</div>}
   </section>;
 }

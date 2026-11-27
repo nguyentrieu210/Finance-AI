@@ -25,6 +25,7 @@ use std::{
 };
 use uuid::Uuid;
 
+mod checks;
 mod documents;
 mod dossiers;
 
@@ -268,6 +269,7 @@ pub fn router(state: OrganizationState) -> Router {
             "/v1/dossiers/{dossier_id}/documents",
             get(documents::list).post(documents::create),
         )
+        .route("/v1/dossiers/{dossier_id}/checks", get(checks::list))
         .layer(axum::extract::DefaultBodyLimit::max(8192))
         .with_state(Arc::new(state))
 }

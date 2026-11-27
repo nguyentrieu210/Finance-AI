@@ -30,5 +30,6 @@ trained="$(find /usr/share/tesseract-ocr -name vie.traineddata -type f -print -q
 test -f "$trained"
 FINANCE_OCR_DB_URL="$url" FINANCE_OCR_WORKER_URL="$worker" FINANCE_OCR_TRAINEDDATA="$trained" cargo test --locked -p finance-extraction --test real_persist -- --ignored --exact real_candidate_persistence
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_ocr -v ON_ERROR_STOP=1 -f - < scripts/ocr_review_preflight_assert.sql
+docker exec -i "$cid" psql -X -U finance_migrator -d finance_ocr -v ON_ERROR_STOP=1 -f - < scripts/check_read_assert.sql
 unset url worker
 echo 'PASS: actual OCR row candidates, immutable evidence, source digest and fenced job transaction in PostgreSQL'

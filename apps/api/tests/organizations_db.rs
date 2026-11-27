@@ -297,6 +297,22 @@ async fn scoped_organization_http_real_database() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
 
+    let checks_uri = format!("{dossier_uri}/checks");
+    let (status, page) = request(&app, &checks_uri, Some(&requester)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(page["items"], json!([]));
+    assert_eq!(
+        request(&app, &checks_uri, Some(&other_requester)).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        request(&app, &checks_uri, None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        request(&app, &checks_uri, Some(&auditor)).await.0,
+        StatusCode::FORBIDDEN
+    );
     let doc_uri = format!("{dossier_uri}/documents");
     let draft_id = left.1["id"].as_str().unwrap();
     let create = |key: &'static str, version, size| {
