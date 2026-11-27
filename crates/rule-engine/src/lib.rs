@@ -32,7 +32,11 @@ pub fn evaluate(expr: &Expr) -> Outcome {
             Expr::Known(Some(false)) => Fail,
             Expr::Known(None) => Unknown,
             Expr::AtMost(Some(a), Some(b)) if a.currency == b.currency => {
-                if a.amount.decimal() <= b.amount.decimal() { Pass } else { Fail }
+                if a.amount.decimal() <= b.amount.decimal() {
+                    Pass
+                } else {
+                    Fail
+                }
             }
             Expr::AtMost(Some(_), Some(_)) => Error,
             Expr::AtMost(_, _) => Unknown,
@@ -57,8 +61,20 @@ pub fn evaluate(expr: &Expr) -> Outcome {
                     }
                 }
                 if matches!(expr, Expr::And(_)) {
-                    if fail { Fail } else if unknown { Unknown } else { Pass }
-                } else if pass { Pass } else if unknown { Unknown } else { Fail }
+                    if fail {
+                        Fail
+                    } else if unknown {
+                        Unknown
+                    } else {
+                        Pass
+                    }
+                } else if pass {
+                    Pass
+                } else if unknown {
+                    Unknown
+                } else {
+                    Fail
+                }
             }
         }
     }
@@ -82,9 +98,21 @@ mod tests {
     use super::*;
     #[test]
     fn unknown_and_error_propagation() {
-        assert_eq!(evaluate(&Expr::Not(Box::new(Expr::Known(None)))), Outcome::Unknown);
-        assert_eq!(evaluate(&Expr::And(vec![Expr::Known(None), Expr::Known(Some(false))])), Outcome::Fail);
-        assert_eq!(evaluate(&Expr::Or(vec![Expr::Known(Some(true)), Expr::And(vec![])])), Outcome::Error);
+        assert_eq!(
+            evaluate(&Expr::Not(Box::new(Expr::Known(None)))),
+            Outcome::Unknown
+        );
+        assert_eq!(
+            evaluate(&Expr::And(vec![
+                Expr::Known(None),
+                Expr::Known(Some(false))
+            ])),
+            Outcome::Fail
+        );
+        assert_eq!(
+            evaluate(&Expr::Or(vec![Expr::Known(Some(true)), Expr::And(vec![])])),
+            Outcome::Error
+        );
         assert!(blocks(Outcome::Unknown, true));
         assert!(!blocks(Outcome::NotApplicable, true));
     }

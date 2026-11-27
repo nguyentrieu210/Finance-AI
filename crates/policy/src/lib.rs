@@ -30,9 +30,20 @@ pub enum Error {
     Invalid,
 }
 
-pub fn resolve(policies: &[Policy], scope: CompanyScope, kind: u8, day: NaiveDate) -> Result<&Policy, Error> {
+pub fn resolve(
+    policies: &[Policy],
+    scope: CompanyScope,
+    kind: u8,
+    day: NaiveDate,
+) -> Result<&Policy, Error> {
     let mut found = None;
-    for p in policies.iter().filter(|p| p.scope == scope && p.kind == kind && p.status == Status::Published && p.start <= day && day < p.end_exclusive) {
+    for p in policies.iter().filter(|p| {
+        p.scope == scope
+            && p.kind == kind
+            && p.status == Status::Published
+            && p.start <= day
+            && day < p.end_exclusive
+    }) {
         if p.checker.is_none() || p.checker == Some(p.author) || !p.clauses_mapped {
             return Err(Error::Invalid);
         }

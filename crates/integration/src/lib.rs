@@ -41,9 +41,18 @@ mod tests {
     use super::*;
     #[test]
     fn lost_ack_holds_reservation() {
-        assert_eq!(observe(External::DispatchPending, Observation::Timeout, false), Some(External::Unknown));
+        assert_eq!(
+            observe(External::DispatchPending, Observation::Timeout, false),
+            Some(External::Unknown)
+        );
         assert!(!may_release(External::Unknown, true));
-        assert_eq!(observe(External::Unknown, Observation::ManualReceipt, false), Some(External::Acknowledged));
-        assert_eq!(observe(External::Unknown, Observation::VerifiedApproval, false), None);
+        assert_eq!(
+            observe(External::Unknown, Observation::ManualReceipt, false),
+            Some(External::Acknowledged)
+        );
+        assert_eq!(
+            observe(External::Unknown, Observation::VerifiedApproval, false),
+            None
+        );
     }
 }

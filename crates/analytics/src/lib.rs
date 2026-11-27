@@ -29,14 +29,20 @@ pub fn counts(scope: CompanyScope, rows: &[Case]) -> Counts {
     Counts {
         cases: cases.len(),
         accepted: cases.values().filter(|(accepted, _)| *accepted).count(),
-        first_pass: cases.values().filter(|(accepted, returned)| *accepted && !*returned).count(),
+        first_pass: cases
+            .values()
+            .filter(|(accepted, returned)| *accepted && !*returned)
+            .count(),
     }
 }
 
 /// CSV export defensive cell quoting. Prefix dangerous leading characters
 /// after whitespace as well; authorization is outside this encoder.
 pub fn csv_cell(value: &str) -> String {
-    let dangerous = value.trim_start_matches(|c: char| c.is_whitespace()).starts_with(['=', '+', '-', '@']) || value.starts_with(['\t', '\r', '\n']);
+    let dangerous = value
+        .trim_start_matches(|c: char| c.is_whitespace())
+        .starts_with(['=', '+', '-', '@'])
+        || value.starts_with(['\t', '\r', '\n']);
     let prefix = if dangerous { "'" } else { "" };
     format!("\"{}{}\"", prefix, value.replace('"', "\"\""))
 }

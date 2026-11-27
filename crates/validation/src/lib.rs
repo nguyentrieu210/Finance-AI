@@ -16,7 +16,10 @@ pub fn invoice_total(net: Option<Money>, tax: Option<Money>, gross: Option<Money
     let (Some(net), Some(tax), Some(gross)) = (net, tax, gross) else {
         return Outcome::Unknown;
     };
-    if [net, tax, gross].iter().any(|m| m.amount.decimal().is_sign_negative()) {
+    if [net, tax, gross]
+        .iter()
+        .any(|m| m.amount.decimal().is_sign_negative())
+    {
         return Outcome::Fail;
     }
     match net.checked_add(tax) {
@@ -48,9 +51,18 @@ mod tests {
 
     #[test]
     fn invoice_and_missing_evidence() {
-        assert_eq!(invoice_total(Some(money("100")), Some(money("10")), Some(money("110"))), Outcome::Pass);
-        assert_eq!(invoice_total(Some(money("100")), Some(money("10")), Some(money("111"))), Outcome::Fail);
-        assert_eq!(invoice_total(None, Some(money("10")), Some(money("110"))), Outcome::Unknown);
+        assert_eq!(
+            invoice_total(Some(money("100")), Some(money("10")), Some(money("110"))),
+            Outcome::Pass
+        );
+        assert_eq!(
+            invoice_total(Some(money("100")), Some(money("10")), Some(money("111"))),
+            Outcome::Fail
+        );
+        assert_eq!(
+            invoice_total(None, Some(money("10")), Some(money("110"))),
+            Outcome::Unknown
+        );
         assert_eq!(critical_fields(&[true, false], true), Outcome::Unknown);
         assert_eq!(critical_fields(&[true], false), Outcome::Unknown);
     }

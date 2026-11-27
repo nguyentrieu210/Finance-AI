@@ -16,15 +16,22 @@ pub struct Advance {
 impl Advance {
     pub fn remaining(&self) -> Result<Money, Error> {
         let issued = self.issued.ok_or(Error::Unknown)?;
-        if self.settled.amount.decimal().is_sign_negative() || self.confirmed_refund.amount.decimal().is_sign_negative() {
+        if self.settled.amount.decimal().is_sign_negative()
+            || self.confirmed_refund.amount.decimal().is_sign_negative()
+        {
             return Err(Error::Negative);
         }
-        let consumed = self.settled.checked_add(self.confirmed_refund).map_err(|_| Error::Currency)?;
+        let consumed = self
+            .settled
+            .checked_add(self.confirmed_refund)
+            .map_err(|_| Error::Currency)?;
         available(issued, consumed, self.reserved, true)
     }
 
     pub fn overdue(&self, as_of: NaiveDate) -> Result<bool, Error> {
-        let due = self.approved_extension.map_or(self.due, |d| d.max(self.due));
+        let due = self
+            .approved_extension
+            .map_or(self.due, |d| d.max(self.due));
         Ok(as_of > due && self.remaining()?.amount.decimal() > 0.into())
     }
 }
@@ -36,9 +43,19 @@ mod tests {
 
     #[test]
     fn unissued_and_confirmed_refund() {
-        let m = |n| Money { amount: Amount::parse(n).unwrap(), currency: Currency::parse("VND").unwrap() };
+        let m = |n| Money {
+            amount: Amount::parse(n).unwrap(),
+            currency: Currency::parse("VND").unwrap(),
+        };
         let due = NaiveDate::from_ymd_opt(2026, 11, 27).unwrap();
-        let mut a = Advance { issued: None, settled: m("20"), confirmed_refund: m("10"), reserved: m("5"), due, approved_extension: None };
+        let mut a = Advance {
+            issued: None,
+            settled: m("20"),
+            confirmed_refund: m("10"),
+            reserved: m("5"),
+            due,
+            approved_extension: None,
+        };
         assert_eq!(a.remaining(), Err(Error::Unknown));
         a.issued = Some(m("100"));
         assert_eq!(a.remaining(), Ok(m("65")));

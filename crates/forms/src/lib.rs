@@ -15,7 +15,14 @@ pub fn validate(fields: &[Field<'_>]) -> bool {
     }
     let mut by_key = BTreeMap::new();
     for field in fields {
-        if field.key.is_empty() || field.key.len() > 64 || !field.key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') || by_key.insert(field.key, field).is_some() {
+        if field.key.is_empty()
+            || field.key.len() > 64
+            || !field
+                .key
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            || by_key.insert(field.key, field).is_some()
+        {
             return false;
         }
     }
@@ -40,8 +47,20 @@ mod tests {
     use super::*;
     #[test]
     fn rejects_cycles_and_missing_dependencies() {
-        assert!(!validate(&[Field { key: "a", required: true, depends_on: Some("a") }]));
-        assert!(!validate(&[Field { key: "a", required: false, depends_on: Some("b") }]));
-        assert!(validate(&[Field { key: "a", required: true, depends_on: None }]));
+        assert!(!validate(&[Field {
+            key: "a",
+            required: true,
+            depends_on: Some("a")
+        }]));
+        assert!(!validate(&[Field {
+            key: "a",
+            required: false,
+            depends_on: Some("b")
+        }]));
+        assert!(validate(&[Field {
+            key: "a",
+            required: true,
+            depends_on: None
+        }]));
     }
 }

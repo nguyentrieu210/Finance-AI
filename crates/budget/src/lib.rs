@@ -18,7 +18,12 @@ impl Budget {
         if day < self.start || day >= self.end_exclusive || self.start >= self.end_exclusive {
             return Err(Error::Unknown);
         }
-        available(self.cap, self.confirmed_actual, self.unmatched_hold, self.reconciled)
+        available(
+            self.cap,
+            self.confirmed_actual,
+            self.unmatched_hold,
+            self.reconciled,
+        )
     }
 }
 
@@ -29,10 +34,20 @@ mod tests {
 
     #[test]
     fn no_stale_or_unreconciled_budget() {
-        let m = |n| Money { amount: Amount::parse(n).unwrap(), currency: Currency::parse("VND").unwrap() };
+        let m = |n| Money {
+            amount: Amount::parse(n).unwrap(),
+            currency: Currency::parse("VND").unwrap(),
+        };
         let start = NaiveDate::from_ymd_opt(2026, 11, 1).unwrap();
         let end = NaiveDate::from_ymd_opt(2026, 12, 1).unwrap();
-        let mut b = Budget { start, end_exclusive: end, cap: m("100"), confirmed_actual: m("60"), unmatched_hold: m("20"), reconciled: false };
+        let mut b = Budget {
+            start,
+            end_exclusive: end,
+            cap: m("100"),
+            confirmed_actual: m("60"),
+            unmatched_hold: m("20"),
+            reconciled: false,
+        };
         assert_eq!(b.available_on(start), Err(Error::Unknown));
         b.reconciled = true;
         assert_eq!(b.available_on(start), Ok(m("20")));

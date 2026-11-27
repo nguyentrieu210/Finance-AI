@@ -17,7 +17,18 @@ pub fn verified_manifest(artifacts: &[Artifact<'_>]) -> bool {
         return false;
     }
     let mut names = BTreeSet::new();
-    artifacts.iter().all(|a| a.bytes > 0 && a.bytes <= 100 * 1024 * 1024 && a.observed == Some(a.expected) && !a.name.is_empty() && a.name.len() <= 128 && !a.name.starts_with('.') && a.name.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b)) && names.insert(a.name))
+    artifacts.iter().all(|a| {
+        a.bytes > 0
+            && a.bytes <= 100 * 1024 * 1024
+            && a.observed == Some(a.expected)
+            && !a.name.is_empty()
+            && a.name.len() <= 128
+            && !a.name.starts_with('.')
+            && a.name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+            && names.insert(a.name)
+    })
 }
 
 #[cfg(test)]
@@ -27,8 +38,23 @@ mod tests {
     fn missing_or_mismatched_readback_denied() {
         let d = Sha256Digest::parse(&"a".repeat(64)).unwrap();
         assert!(!verified_manifest(&[]));
-        assert!(!verified_manifest(&[Artifact { name: "a.pdf", expected: d, observed: None, bytes: 1 }]));
-        assert!(verified_manifest(&[Artifact { name: "a.pdf", expected: d, observed: Some(d), bytes: 1 }]));
-        assert!(!verified_manifest(&[Artifact { name: "../a.pdf", expected: d, observed: Some(d), bytes: 1 }]));
+        assert!(!verified_manifest(&[Artifact {
+            name: "a.pdf",
+            expected: d,
+            observed: None,
+            bytes: 1
+        }]));
+        assert!(verified_manifest(&[Artifact {
+            name: "a.pdf",
+            expected: d,
+            observed: Some(d),
+            bytes: 1
+        }]));
+        assert!(!verified_manifest(&[Artifact {
+            name: "../a.pdf",
+            expected: d,
+            observed: Some(d),
+            bytes: 1
+        }]));
     }
 }

@@ -12,10 +12,25 @@ pub struct Clause<'a> {
 
 /// Caller supplies the effective approved policy version. No cross-scope
 /// retrieval or model execution. Return references, never fabricated citations.
-pub fn retrieve<'a>(clauses: &'a [Clause<'a>], scope: CompanyScope, version: ResourceId, query: &str) -> Vec<&'a Clause<'a>> {
+pub fn retrieve<'a>(
+    clauses: &'a [Clause<'a>],
+    scope: CompanyScope,
+    version: ResourceId,
+    query: &str,
+) -> Vec<&'a Clause<'a>> {
     if query.trim().is_empty() || query.len() > 256 || clauses.len() > 10_000 {
         return vec![];
     }
     let query = query.to_lowercase();
-    clauses.iter().filter(|c| c.scope == scope && c.version == version && c.approved_current && c.text.len() <= 8192 && c.text.to_lowercase().contains(&query)).take(20).collect()
+    clauses
+        .iter()
+        .filter(|c| {
+            c.scope == scope
+                && c.version == version
+                && c.approved_current
+                && c.text.len() <= 8192
+                && c.text.to_lowercase().contains(&query)
+        })
+        .take(20)
+        .collect()
 }

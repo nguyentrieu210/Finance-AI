@@ -10,12 +10,22 @@ pub struct Amendment {
     pub delta: Money,
 }
 
-pub fn outstanding(base: Money, amendments: &[Amendment], date: NaiveDate, paid: Money, held: Money, complete: bool) -> Result<Money, Error> {
+pub fn outstanding(
+    base: Money,
+    amendments: &[Amendment],
+    date: NaiveDate,
+    paid: Money,
+    held: Money,
+    complete: bool,
+) -> Result<Money, Error> {
     if !complete {
         return Err(Error::Unknown);
     }
     let mut cap = base;
-    for item in amendments.iter().filter(|a| a.approved && a.effective <= date) {
+    for item in amendments
+        .iter()
+        .filter(|a| a.approved && a.effective <= date)
+    {
         if item.delta.currency != base.currency {
             return Err(Error::Currency);
         }
@@ -31,11 +41,31 @@ mod tests {
 
     #[test]
     fn future_and_draft_amendments_excluded() {
-        let m = |n| Money { amount: Amount::parse(n).unwrap(), currency: Currency::parse("VND").unwrap() };
+        let m = |n| Money {
+            amount: Amount::parse(n).unwrap(),
+            currency: Currency::parse("VND").unwrap(),
+        };
         let today = NaiveDate::from_ymd_opt(2026, 11, 27).unwrap();
         let tomorrow = today.succ_opt().unwrap();
-        let changes = [Amendment { effective: tomorrow, approved: true, delta: m("100") }, Amendment { effective: today, approved: false, delta: m("100") }];
-        assert_eq!(outstanding(m("100"), &changes, today, m("20"), m("10"), true), Ok(m("70")));
-        assert_eq!(outstanding(m("100"), &changes, today, m("20"), m("10"), false), Err(Error::Unknown));
+        let changes = [
+            Amendment {
+                effective: tomorrow,
+                approved: true,
+                delta: m("100"),
+            },
+            Amendment {
+                effective: today,
+                approved: false,
+                delta: m("100"),
+            },
+        ];
+        assert_eq!(
+            outstanding(m("100"), &changes, today, m("20"), m("10"), true),
+            Ok(m("70"))
+        );
+        assert_eq!(
+            outstanding(m("100"), &changes, today, m("20"), m("10"), false),
+            Err(Error::Unknown)
+        );
     }
 }

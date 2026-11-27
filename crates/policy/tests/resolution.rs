@@ -29,10 +29,19 @@ fn only_independently_checked_effective_version_can_resolve() {
     let mut policies = vec![p, fixture(6, Status::Draft)];
     assert_eq!(resolve(&policies, scope, 1, day).unwrap().id, id);
     policies[1].status = Status::Published;
-    assert_eq!(resolve(&policies, scope, 1, day).err(), Some(Error::Conflict));
+    assert_eq!(
+        resolve(&policies, scope, 1, day).err(),
+        Some(Error::Conflict)
+    );
     policies[1].status = Status::Revoked;
     policies[0].checker = Some(policies[0].author);
-    assert_eq!(resolve(&policies, scope, 1, day).err(), Some(Error::Invalid));
+    assert_eq!(
+        resolve(&policies, scope, 1, day).err(),
+        Some(Error::Invalid)
+    );
     policies[0].status = Status::Retired;
-    assert_eq!(resolve(&policies, scope, 1, day).err(), Some(Error::Missing));
+    assert_eq!(
+        resolve(&policies, scope, 1, day).err(),
+        Some(Error::Missing)
+    );
 }
