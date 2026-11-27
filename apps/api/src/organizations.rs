@@ -50,7 +50,7 @@ type Hmac256 = Hmac<Sha256>;
 pub struct OrganizationState {
     runtime: PgPool,
     lookup: PgPool,
-    verifier: VerifierStore,
+    verifier: Arc<VerifierStore>,
     scope: CompanyScope,
     cursor_key: [u8; 32],
 }
@@ -61,6 +61,16 @@ impl OrganizationState {
         runtime: PgPool,
         lookup: PgPool,
         verifier: VerifierStore,
+        scope: CompanyScope,
+        cursor_key: [u8; 32],
+    ) -> Self {
+        Self::configured(runtime, lookup, Arc::new(verifier), scope, cursor_key)
+    }
+
+    pub(crate) fn configured(
+        runtime: PgPool,
+        lookup: PgPool,
+        verifier: Arc<VerifierStore>,
         scope: CompanyScope,
         cursor_key: [u8; 32],
     ) -> Self {

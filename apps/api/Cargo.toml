@@ -38,7 +38,7 @@ sha2 = "=0.10.9"
 sqlx.workspace = true
 uuid.workspace = true
 axum.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["time"] }
 finance-shared = { path = "../../crates/shared" }
 
 [dev-dependencies]

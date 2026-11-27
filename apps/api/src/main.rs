@@ -21,6 +21,15 @@ async fn run() -> Result<(), &'static str> {
             let address = bind.parse().map_err(|_| "invalid foundation bind")?;
             (finance_api::router(), address, "foundation")
         }
+        [arg] if arg == "--pilot" => {
+            let address = bind.parse().map_err(|_| "invalid pilot bind")?;
+            let config = finance_api::pilot::Config::from_env()
+                .map_err(|_| "pilot configuration rejected")?;
+            let app = finance_api::pilot::build(config)
+                .await
+                .map_err(|_| "pilot dependencies rejected")?;
+            (app, address, "pilot")
+        }
         [arg] if arg == "--synthetic" => {
             let address = finance_api::synthetic::bind_address(&bind)
                 .map_err(|_| "synthetic mode requires loopback")?;
