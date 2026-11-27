@@ -25,8 +25,8 @@ use std::{
 };
 use uuid::Uuid;
 
-mod dossiers;
 mod documents;
+mod dossiers;
 
 type Hmac256 = Hmac<Sha256>;
 
@@ -264,7 +264,10 @@ pub fn router(state: OrganizationState) -> Router {
         .route("/v1/organizations", get(list))
         .route("/v1/dossiers", get(dossiers::list).post(dossiers::create))
         .route("/v1/dossiers/{dossier_id}", get(dossiers::get))
-        .route("/v1/dossiers/{dossier_id}/documents", get(documents::list).post(documents::create))
+        .route(
+            "/v1/dossiers/{dossier_id}/documents",
+            get(documents::list).post(documents::create),
+        )
         .layer(axum::extract::DefaultBodyLimit::max(8192))
         .with_state(Arc::new(state))
 }

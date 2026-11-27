@@ -1,9 +1,12 @@
 //! Metadata-only document routes in the injected synthetic router.
-use super::{OrganizationState, decode_cursor, encode_cursor, error, now, random_id};
 use super::dossiers::{authenticate_version, status};
+use super::{OrganizationState, decode_cursor, encode_cursor, error, now, random_id};
 use axum::{
     Json,
-    extract::{Path, Query, State, rejection::{JsonRejection, QueryRejection}},
+    extract::{
+        Path, Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -49,20 +52,29 @@ pub async fn create(
     body: Result<Json<Create>, JsonRejection>,
 ) -> Response {
     let correlation = random_id();
-    let Some(token) = headers.get("if-finance-version").and_then(|h| h.to_str().ok()).and_then(|s| VersionToken::parse(s).ok()) else {
+    let Some(token) = headers
+        .get("if-finance-version")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| VersionToken::parse(s).ok())
+    else {
         return error(StatusCode::BAD_REQUEST, correlation);
     };
     if token.target != VersionTarget::Dossier || Uuid::from(token.resource_id) != dossier {
         return error(StatusCode::BAD_REQUEST, correlation);
     }
-    let proof = match authenticate_version(&state, &headers, correlation, Some(token.version)).await {
+    let proof = match authenticate_version(&state, &headers, correlation, Some(token.version)).await
+    {
         Ok(p) => p,
         Err(s) => return error(s, correlation),
     };
     let Ok(Json(body)) = body else {
         return error(StatusCode::BAD_REQUEST, correlation);
     };
-    let Some(key) = headers.get("idempotency-key").and_then(|h| h.to_str().ok()).and_then(|s| IdempotencyKey::parse(s).ok()) else {
+    let Some(key) = headers
+        .get("idempotency-key")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| IdempotencyKey::parse(s).ok())
+    else {
         return error(StatusCode::BAD_REQUEST, correlation);
     };
     let input = Metadata {
@@ -80,8 +92,13 @@ pub async fn create(
                 version: Version::try_from(receipt.version).expect("stored version"),
             };
             let mut response = (StatusCode::CREATED, Json(receipt)).into_response();
-            response.headers_mut().insert("finance-version", HeaderValue::from_str(&token.to_string()).expect("canonical header"));
-            response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response.headers_mut().insert(
+                "finance-version",
+                HeaderValue::from_str(&token.to_string()).expect("canonical header"),
+            );
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
             response
         }
         Err(e) => error(status(e), correlation),
@@ -112,7 +129,15 @@ pub async fn list(
     let Some(time) = now() else {
         return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
     };
-    let key: [u8;32] = Sha256::digest([b"finance.document.cursor/v1".as_slice(), &state.cursor_key, dossier.as_bytes()].concat()).into();
+    let key: [u8; 32] = Sha256::digest(
+        [
+            b"finance.document.cursor/v1".as_slice(),
+            &state.cursor_key,
+            dossier.as_bytes(),
+        ]
+        .concat(),
+    )
+    .into();
     let after = match query.cursor {
         None => Uuid::nil(),
         Some(cursor) => match decode_cursor(&key, state.scope, actor, &cursor, time) {
@@ -123,10 +148,16 @@ pub async fn list(
     match repository::list(&state.runtime, &proof, dossier, after, limit).await {
         Ok(items) => {
             let next_cursor = if items.len() == limit as usize {
-                items.last().map(|d| encode_cursor(&key, state.scope, actor, d.id, time + 300))
-            } else { None };
+                items
+                    .last()
+                    .map(|d| encode_cursor(&key, state.scope, actor, d.id, time + 300))
+            } else {
+                None
+            };
             let mut response = Json(Page { items, next_cursor }).into_response();
-            response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
             response
         }
         Err(e) => error(status(e), correlation),

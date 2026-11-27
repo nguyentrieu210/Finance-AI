@@ -7,7 +7,10 @@ use finance_shared::{
     contracts::Principal,
     http_contract::IdempotencyKey,
     ids::ResourceScope,
-    upload_contract::{DeclaredMime, Sha256Digest, UploadMetadata, DEFAULT_MAX_FILE_BYTES, DEFAULT_MAX_DOSSIER_BYTES},
+    upload_contract::{
+        DEFAULT_MAX_DOSSIER_BYTES, DEFAULT_MAX_FILE_BYTES, DeclaredMime, Sha256Digest,
+        UploadMetadata,
+    },
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -86,7 +89,10 @@ pub async fn create(
         || input.kind.is_empty()
         || input.kind.len() > 64
         || !input.kind.as_bytes()[0].is_ascii_uppercase()
-        || !input.kind.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+        || !input
+            .kind
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
     {
         return Err(Error::InvalidInput);
     }
@@ -97,16 +103,24 @@ pub async fn create(
     let digest = Sha256Digest::parse(input.sha256).map_err(|_| Error::InvalidInput)?;
     let metadata = UploadMetadata::new(input.bytes, digest, mime, DEFAULT_MAX_FILE_BYTES)
         .map_err(|_| Error::InvalidInput)?;
-    let expected = i64::from(proof.context().expected_version.ok_or(Error::InvalidInput)?);
+    let expected = i64::from(
+        proof
+            .context()
+            .expected_version
+            .ok_or(Error::InvalidInput)?,
+    );
     let (t, c, a) = binding(proof)?;
     let command: Uuid = proof.context().command.into();
     let correlation: Uuid = proof.context().correlation.into();
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     let lock = format!("{t}/{c}/{a}/prototype.createDocument/{}", key.as_str());
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
-        .bind(lock).execute(&mut *tx).await?;
+        .bind(lock)
+        .execute(&mut *tx)
+        .await?;
     require_role(&mut tx, proof.context(), Role::Requester)
-        .await.map_err(grant_error)?;
+        .await
+        .map_err(grant_error)?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     let (revision, version): (Uuid, i64) = sqlx::query_as("SELECT r.id,d.version FROM finance.dossier d JOIN finance.dossier_revision r ON (r.tenant_id,r.company_id,r.dossier_id,r.number)=(d.tenant_id,d.company_id,d.id,d.revision) WHERE d.tenant_id=$1 AND d.company_id=$2 AND d.owner_id=$3 AND d.id=$4 AND d.status='DRAFT' FOR UPDATE OF d")
         .bind(t).bind(c).bind(a).bind(dossier).fetch_optional(&mut *tx).await?.ok_or(Error::Forbidden)?;
@@ -114,7 +128,7 @@ pub async fn create(
     let hash = request_hash(dossier, expected, input);
     let prior: Option<(Vec<u8>,Uuid,i64)> = sqlx::query_as("SELECT request_hash,result_id,result_version FROM finance.idempotency_record WHERE tenant_id=$1 AND company_id=$2 AND actor_id=$3 AND operation_id='prototype.createDocument' AND key=$4")
         .bind(t).bind(c).bind(a).bind(key.as_str()).fetch_optional(&mut *tx).await?;
-    if let Some((old,id,receipt_version)) = prior {
+    if let Some((old, id, receipt_version)) = prior {
         if old != hash {
             return Err(Error::Conflict);
         }
@@ -134,11 +148,17 @@ pub async fn create(
     }
     let quota_lock = format!("finance.upload.quota/v1/{t}/{c}/{dossier}");
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
-        .bind(quota_lock).execute(&mut *tx).await?;
+        .bind(quota_lock)
+        .execute(&mut *tx)
+        .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     let used: i64 = sqlx::query_scalar("SELECT COALESCE(sum(declared_bytes),0)::bigint FROM finance.upload_intent WHERE tenant_id=$1 AND company_id=$2 AND dossier_id=$3 AND state IN ('PENDING_UPLOAD','FINALIZED')")
         .bind(t).bind(c).bind(dossier).fetch_one(&mut *tx).await?;
-    metadata.check_quota(u64::try_from(used).map_err(|_| Error::Conflict)?, DEFAULT_MAX_DOSSIER_BYTES)
+    metadata
+        .check_quota(
+            u64::try_from(used).map_err(|_| Error::Conflict)?,
+            DEFAULT_MAX_DOSSIER_BYTES,
+        )
         .map_err(|_| Error::Conflict)?;
     sqlx::query("INSERT INTO finance.upload_intent(tenant_id,company_id,id,dossier_id,revision_id,actor_id,filename,declared_bytes,declared_sha256,declared_mime,document_kind) VALUES($1,$2,$3,$4,$5,$6,$7,$8,decode($9,'hex'),$10,$11)")
         .bind(t).bind(c).bind(document).bind(dossier).bind(revision).bind(a).bind(input.filename).bind(input.bytes as i64).bind(input.sha256).bind(input.mime).bind(input.kind).execute(&mut *tx).await?;
@@ -170,9 +190,11 @@ pub async fn list(
     if !(1..=100).contains(&limit) {
         return Err(Error::InvalidInput);
     }
-    let (t,c,a) = binding(proof)?;
+    let (t, c, a) = binding(proof)?;
     let mut tx = scoped_transaction(pool, proof.context()).await?;
-    require_role(&mut tx, proof.context(), Role::Requester).await.map_err(grant_error)?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(grant_error)?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     let owned: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM finance.dossier WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id=$4)")
         .bind(t).bind(c).bind(a).bind(dossier).fetch_one(&mut *tx).await?;

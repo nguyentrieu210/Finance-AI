@@ -255,28 +255,57 @@ async fn scoped_organization_http_real_database() {
 
     let doc_uri = format!("{dossier_uri}/documents");
     let draft_id = left.1["id"].as_str().unwrap();
-    let create = |key: &'static str, version, size| create_document(&app, &requester, &doc_uri, draft_id, key, version, size);
-    let (a, b) = tokio::join!(create("doc-one", 0, 26214400), create("doc-one", 0, 26214400));
+    let create = |key: &'static str, version, size| {
+        create_document(&app, &requester, &doc_uri, draft_id, key, version, size)
+    };
+    let (a, b) = tokio::join!(
+        create("doc-one", 0, 26214400),
+        create("doc-one", 0, 26214400)
+    );
     assert_eq!(a.0, StatusCode::CREATED);
     assert_eq!(a, b);
     assert_eq!(create("doc-one", 0, 1).await.0, StatusCode::CONFLICT);
     assert_eq!(create("stale", 0, 1).await.0, StatusCode::CONFLICT);
-    assert_eq!(create("oversize", 1, 26214401).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        create("oversize", 1, 26214401).await.0,
+        StatusCode::BAD_REQUEST
+    );
     for version in 1..4 {
         let key = format!("doc-{version}");
-        assert_eq!(create_document(&app, &requester, &doc_uri, draft_id, &key, version, 26214400).await.0, StatusCode::CREATED);
+        assert_eq!(
+            create_document(
+                &app, &requester, &doc_uri, draft_id, &key, version, 26214400
+            )
+            .await
+            .0,
+            StatusCode::CREATED
+        );
     }
     assert_eq!(create("overquota", 4, 1).await.0, StatusCode::CONFLICT);
     assert_eq!(create("doc-one", 0, 26214400).await, a);
-    assert_eq!(create_dossier(&app, &requester, "pay-one", "PAYMENT").await, left);
+    assert_eq!(
+        create_dossier(&app, &requester, "pay-one", "PAYMENT").await,
+        left
+    );
     let (_, updated) = request(&app, &dossier_uri, Some(&requester)).await;
     assert_eq!(updated["version"], 4);
     let (_, documents) = request(&app, &doc_uri, Some(&requester)).await;
     assert_eq!(documents["items"].as_array().unwrap().len(), 4);
     assert_eq!(documents["items"][0]["state"], "PENDING_UPLOAD");
-    assert_eq!(request(&app, &doc_uri, Some(&other_requester)).await.0, StatusCode::FORBIDDEN);
-    assert_eq!(create_document(&app, &other_requester, &doc_uri, draft_id, "other", 4, 1).await.0, StatusCode::FORBIDDEN);
-    assert_eq!(request(&app, &doc_uri, Some(&auditor)).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(
+        request(&app, &doc_uri, Some(&other_requester)).await.0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        create_document(&app, &other_requester, &doc_uri, draft_id, "other", 4, 1)
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        request(&app, &doc_uri, Some(&auditor)).await.0,
+        StatusCode::FORBIDDEN
+    );
 
     if let Ok(python) = std::env::var("FINANCE_BROWSER_PYTHON") {
         let root = PathBuf::from(std::env::var("FINANCE_BROWSER_DIST").unwrap());
@@ -340,20 +369,46 @@ async fn create_dossier(app: &Router, token: &str, key: &str, kind: &str) -> (St
     (status, value)
 }
 
-async fn create_document(app:&Router,token:&str,uri:&str,dossier:&str,key:&str,version:i64,size:u64)->(StatusCode,Value,Option<String>){
-    let body=json!({"file_name":"synthetic.pdf","mime":"application/pdf","bytes":size,"sha256":"a".repeat(64),"kind":"INVOICE"});
-    let response=app.clone().oneshot(Request::builder().method("POST").uri(uri)
-        .header(header::AUTHORIZATION,format!("Bearer {token}"))
-        .header(header::CONTENT_TYPE,"application/json")
-        .header("idempotency-key",key)
-        .header("if-finance-version",format!("\"v1:dossier:{dossier}:{version}\""))
-        .body(Body::from(body.to_string())).unwrap()).await.unwrap();
-    let status=response.status();
-    let receipt=response.headers().get("finance-version").map(|v|v.to_str().unwrap().to_owned());
-    let bytes=to_bytes(response.into_body(),1024*1024).await.unwrap();
-    let value:Value=serde_json::from_slice(&bytes).unwrap();
-    if status==StatusCode::CREATED {
-        assert_eq!(receipt.as_deref(),Some(format!("\"v1:dossier:{dossier}:{}\"",version+1).as_str()));
+async fn create_document(
+    app: &Router,
+    token: &str,
+    uri: &str,
+    dossier: &str,
+    key: &str,
+    version: i64,
+    size: u64,
+) -> (StatusCode, Value, Option<String>) {
+    let body = json!({"file_name":"synthetic.pdf","mime":"application/pdf","bytes":size,"sha256":"a".repeat(64),"kind":"INVOICE"});
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header(header::AUTHORIZATION,format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("idempotency-key", key)
+                .header(
+                    "if-finance-version",
+                    format!("\"v1:dossier:{dossier}:{version}\""),
+                )
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let receipt = response
+        .headers()
+        .get("finance-version")
+        .map(|v| v.to_str().unwrap().to_owned());
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let value: Value = serde_json::from_slice(&bytes).unwrap();
+    if status == StatusCode::CREATED {
+        assert_eq!(
+            receipt.as_deref(),
+            Some(format!("\"v1:dossier:{dossier}:{}\"", version + 1).as_str())
+        );
     }
-    (status,value,receipt)
+    (status, value, receipt)
 }
