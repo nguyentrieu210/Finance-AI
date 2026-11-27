@@ -945,6 +945,26 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(export_job["attempt"], 0);
     assert_eq!(export_job["progress"], 0);
     assert_eq!(export_receipt, ready_receipt);
+    let (packages_status, packages) = request(
+        &app,
+        &format!("/v1/dossiers/{ready_id}/exports?limit=10"),
+        Some(&requester),
+    )
+    .await;
+    assert_eq!(packages_status, StatusCode::OK);
+    assert_eq!(packages["items"].as_array().unwrap().len(), 1);
+    assert_eq!(packages["items"][0]["state"], "QUEUED");
+    assert_eq!(packages["items"][0]["snapshot_id"], snapshot_id);
+    assert_eq!(
+        request(
+            &app,
+            &format!("/v1/dossiers/{ready_id}/exports?limit=10"),
+            Some(&other_requester),
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
     let job_uri = format!("/v1/jobs/{}", export_job["id"].as_str().unwrap());
     assert_eq!(
         request(&app, &job_uri, Some(&requester)).await,

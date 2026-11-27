@@ -26,6 +26,16 @@ pub struct Job {
     #[serde(skip)]
     pub dossier_version: i64,
 }
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, sqlx::FromRow)]
+pub struct Package {
+    pub id: Uuid,
+    pub snapshot_id: Uuid,
+    pub state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manifest_hash: Option<String>,
+    pub created_at: String,
+}
+
 #[derive(Debug)]
 pub enum WorkerError {
     InvalidManifest,
@@ -221,6 +231,61 @@ pub async fn request(
         error_code: None,
         dossier_version: version,
     })
+}
+
+pub async fn list(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    dossier: Uuid,
+    after: Uuid,
+    limit: i64,
+) -> Result<Option<Vec<Package>>, Error> {
+    if dossier.is_nil() || !(1..=100).contains(&limit) {
+        return Err(Error::InvalidInput);
+    }
+    let (tenant, company, actor) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(|error| match error {
+            GrantError::Forbidden => Error::Forbidden,
+            GrantError::Database(error) => Error::Database(error),
+        })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let owned: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM finance.dossier WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id=$4)",
+    )
+    .bind(tenant)
+    .bind(company)
+    .bind(actor)
+    .bind(dossier)
+    .fetch_one(&mut *tx)
+    .await?;
+    if !owned {
+        recheck_authenticated(&mut tx, Some(proof)).await?;
+        tx.commit().await?;
+        return Ok(None);
+    }
+    let rows = sqlx::query_as::<_, Package>(
+        "SELECT p.id,p.snapshot_id,p.state,
+         CASE WHEN p.manifest_hash IS NULL THEN NULL ELSE encode(p.manifest_hash,'hex') END AS manifest_hash,
+         to_char(p.created_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS created_at
+         FROM finance.package p
+         JOIN finance.dossier_snapshot s
+           ON (s.tenant_id,s.company_id,s.id)=(p.tenant_id,p.company_id,p.snapshot_id)
+         WHERE p.tenant_id=$1 AND p.company_id=$2 AND s.dossier_id=$3 AND p.id>$4
+         ORDER BY p.id LIMIT $5",
+    )
+    .bind(tenant)
+    .bind(company)
+    .bind(dossier)
+    .bind(after)
+    .bind(limit)
+    .fetch_all(&mut *tx)
+    .await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(Some(rows))
 }
 
 pub async fn complete(

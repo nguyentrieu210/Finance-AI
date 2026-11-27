@@ -502,7 +502,7 @@ pub fn router(state: OrganizationState) -> Router {
         )
         .route(
             "/v1/dossiers/{dossier_id}/exports",
-            axum::routing::post(exports::create),
+            get(exports::list).post(exports::create),
         )
         .route(
             "/v1/dossiers/{dossier_id}/begin-review",
