@@ -670,6 +670,31 @@ async fn scoped_organization_http_real_database() {
             .all(|item| item["id"].as_str() != Some(created_rule_id.as_str()))
     );
     let waiver_dossier = "00000000-0000-0000-0000-000000002120";
+    let (checklist_status, checklist) = request(
+        &app,
+        &format!("/v1/dossiers/{waiver_dossier}/checklist?limit=10"),
+        Some(&requester),
+    )
+    .await;
+    assert_eq!(checklist_status, StatusCode::OK);
+    assert_eq!(checklist["items"].as_array().unwrap().len(), 1);
+    assert_eq!(checklist["items"][0]["requirement"], "INVOICE");
+    assert_eq!(checklist["items"][0]["state"], "MISSING");
+    assert_eq!(
+        checklist["items"][0]["clause_id"],
+        "00000000-0000-0000-0000-000000002101"
+    );
+    assert_eq!(checklist["items"][0]["evidence_ids"], json!([]));
+    assert_eq!(
+        request(
+            &app,
+            &format!("/v1/dossiers/{waiver_dossier}/checklist?limit=10"),
+            Some(&other_requester),
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
     let waiver_version = format!("\"v1:dossier:{waiver_dossier}:0\"");
     let (waiver_status, waiver, waiver_receipt) = request_waiver(
         &app,
