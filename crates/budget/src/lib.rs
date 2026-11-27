@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 //! Synthetic-only domain prototype. No authorization, durable mutation or production claim.
-pub use finance_financial::references::{Reference, list_budgets as list_verified};
 use chrono::NaiveDate;
+pub use finance_financial::references::{Reference, list_budgets as list_verified};
 use finance_financial::{Error, available};
 use finance_shared::money::Money;
 

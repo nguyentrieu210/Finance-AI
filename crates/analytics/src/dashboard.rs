@@ -45,8 +45,23 @@ mod tests {
     use super::*;
     #[test]
     fn no_first_pass_metric_without_history() {
-        let metrics = from_state_counts(StateCounts { total: 3, accepted: 1, returned: 1, ..Default::default() }, "2026-11-27T00:00:00Z");
+        let metrics = from_state_counts(
+            StateCounts {
+                total: 3,
+                accepted: 1,
+                returned: 1,
+                ..Default::default()
+            },
+            "2026-11-27T00:00:00Z",
+        );
         assert!(metrics.iter().all(|m| !m.name.contains("first_pass")));
-        assert_eq!(metrics.iter().find(|m| m.name=="dossiers.total").unwrap().value, "3");
+        assert_eq!(
+            metrics
+                .iter()
+                .find(|m| m.name == "dossiers.total")
+                .unwrap()
+                .value,
+            "3"
+        );
     }
 }
