@@ -37,6 +37,7 @@ runtime_url="postgresql://finance_ocr_runtime_login:$runtime_pw@$port/finance_oc
 identity_url="postgresql://finance_ocr_identity_login:$identity_pw@$port/finance_ocr?sslmode=disable"
 docker exec -e PGPASSWORD="$runtime_pw" -i "$cid" psql -X -h 127.0.0.1 -U finance_ocr_runtime_login -d finance_ocr -v ON_ERROR_STOP=1 -f - <<'SQL'
 BEGIN;
+SET ROLE finance_runtime;
 SELECT current_user,session_user;
 SELECT set_config('finance.tenant_id','00000000-0000-0000-0000-000000000001',true);
 SELECT set_config('finance.company_id','00000000-0000-0000-0000-00000000000a',true);
