@@ -11,6 +11,7 @@ SQLx root: `migrations/`. A00 allocates globally unique monotonically increasing
 | 20261127000600 | A00/A03 | Synthetic scoped current-grant row locks | 20261127000500 | Transaction rollback; isolated test DB only |
 | 20261127000700 | A00/A04 | Synthetic organization version, tree invariants and receipts | 20261127000600 | Transaction rollback; isolated test DB only |
 | 20261127000800 | A00/A05 | Isolated upload intent/grant schema, owner-only reservation/fence functions | 20261127000700 | Transaction rollback; isolated test DB only |
+| 20261127000900 | A00/A05 | Synthetic-only immutable blob/ref transaction and finalized quota | 20261127000800 | Transaction rollback; isolated test DB only |
 
 A synthetic-only G02 prototype adds restricted runtime role, company-scoped RLS and eight initial tables. Production login provisioning, full financial/job schema and audit chain remain unimplemented. Run only against a new test database until engineering and security review. Application roles must not own schema/tables, inherit admin, or possess BYPASSRLS. The separate finance-migrate binary embeds SQLx migrations and requires explicit --apply plus FINANCE_MIGRATION_DATABASE_URL. Never run it automatically from API/worker. The isolated integration script verifies SQLx ledger replay and checksum drift rejection. G02 is partial; see docs/g02-prototype.md.
 

@@ -21,3 +21,6 @@ else echo "quota race unexpected exits: $ra / $rb" >&2; exit 1; fi
 count="$(psql_ci -c "SELECT count(*) FROM finance.upload_intent WHERE dossier_id='00000000-0000-0000-0000-000000009010' AND state='PENDING_UPLOAD';")"
 [[ "$count" == 4 ]]
 echo 'PASS: persisted upload metadata, generation fencing, TTL, quota release, concurrent quota reservation and denied runtime access'
+
+psql_ci -f - < scripts/document_quarantine_assert.sql
+echo 'PASS: synthetic quarantine transaction, immutable original, grant fencing and finalized quota'
