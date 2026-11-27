@@ -16,7 +16,7 @@ pub struct VerifiedIssue<'a> {
     pub source_verified: bool,
 }
 
-impl<'a> VerifiedIssue<'a> {
+impl VerifiedIssue<'_> {
     pub fn into_advance(
         self,
         settled: Money,
