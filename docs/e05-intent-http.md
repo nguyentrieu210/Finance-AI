@@ -1,0 +1,2 @@
+# Synthetic document metadata HTTP
+Existing createDocument/listDocuments operations on the injected sandbox router. Mandatory version token and idempotency key, authenticated requester, owner-bound draft/revision, quota, atomic version increment, exact historical receipt, bounded list/cursor tied to dossier+actor+scope. No signed URL, file upload or real data. CI tests cover cross-owner denial, stale version, same-key retry after version changes, mismatched key, quota and immutable initial receipt. No VPS or production mount.

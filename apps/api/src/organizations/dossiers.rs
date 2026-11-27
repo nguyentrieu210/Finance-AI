@@ -51,10 +51,11 @@ struct Page {
     next_cursor: Option<String>,
 }
 
-async fn authenticate(
+pub(super) async fn authenticate_version(
     state: &OrganizationState,
     headers: &HeaderMap,
     correlation: Uuid,
+    version: Option<Version>,
 ) -> Result<AuthenticatedCommand, StatusCode> {
     let token = headers
         .get(header::AUTHORIZATION)
@@ -70,7 +71,7 @@ async fn authenticate(
             state.scope,
             CommandId::try_from(random_id()).expect("random command"),
             CorrelationId::try_from(correlation).expect("random correlation"),
-            None,
+            version,
         )
         .await
         .map_err(|e| match e {
@@ -80,7 +81,7 @@ async fn authenticate(
         })
 }
 
-fn status(e: Error) -> StatusCode {
+pub(super) fn status(e: Error) -> StatusCode {
     match e {
         Error::Forbidden => StatusCode::FORBIDDEN,
         Error::InvalidInput => StatusCode::BAD_REQUEST,
@@ -112,7 +113,7 @@ pub async fn create(
     body: Result<Json<Create>, JsonRejection>,
 ) -> Response {
     let correlation = random_id();
-    let proof = match authenticate(&state, &headers, correlation).await {
+    let proof = match authenticate_version(&state, &headers, correlation, None).await {
         Ok(p) => p,
         Err(s) => return error(s, correlation),
     };
@@ -146,7 +147,7 @@ pub async fn get(
     Path(id): Path<Uuid>,
 ) -> Response {
     let correlation = random_id();
-    let proof = match authenticate(&state, &headers, correlation).await {
+    let proof = match authenticate_version(&state, &headers, correlation, None).await {
         Ok(p) => p,
         Err(s) => return error(s, correlation),
     };
@@ -163,7 +164,7 @@ pub async fn list(
     query: Result<Query<List>, QueryRejection>,
 ) -> Response {
     let correlation = random_id();
-    let proof = match authenticate(&state, &headers, correlation).await {
+    let proof = match authenticate_version(&state, &headers, correlation, None).await {
         Ok(p) => p,
         Err(s) => return error(s, correlation),
     };
