@@ -228,14 +228,13 @@ pub async fn get_evidence(
     let (t, c, a) = binding(proof)?;
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let row =
-        sqlx::query_as::<_, Evidence>("SELECT * FROM finance.runtime_evidence($1,$2,$3,$4)")
-            .bind(t)
-            .bind(c)
-            .bind(a)
-            .bind(id)
-            .fetch_optional(&mut *tx)
-            .await?;
+    let row = sqlx::query_as::<_, Evidence>("SELECT * FROM finance.runtime_evidence($1,$2,$3,$4)")
+        .bind(t)
+        .bind(c)
+        .bind(a)
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(row)

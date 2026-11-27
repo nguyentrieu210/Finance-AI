@@ -398,7 +398,10 @@ async fn scoped_organization_http_real_database() {
         assert_eq!(evidence_status, StatusCode::OK);
         assert_eq!(evidence["page"], 1);
         assert_eq!(evidence["sha256"].as_str().unwrap().len(), 64);
-        assert_eq!(evidence["excerpt"], "Synthetic bank account change evidence");
+        assert_eq!(
+            evidence["excerpt"],
+            "Synthetic bank account change evidence"
+        );
         assert_eq!(evidence["locator"], "rect:1000,1000,500000,50000");
     }
     assert_eq!(

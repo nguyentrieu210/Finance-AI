@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { EvidenceViewer } from './EvidenceViewer';
 import type { components } from '../../generated/api';
 
 type Check = components['schemas']['CheckResult'];
@@ -11,6 +12,7 @@ export function Checks({ dossierId, token }: { dossierId: string; token: string 
   const [generation, setGeneration] = useState(0);
   const [message, setMessage] = useState('Chưa tải kết quả kiểm tra.');
   const [busy, setBusy] = useState(false);
+  const [selectedEvidence, setSelectedEvidence] = useState<string>();
 
   useEffect(() => {
     if (!generation) return;
@@ -40,7 +42,7 @@ export function Checks({ dossierId, token }: { dossierId: string; token: string 
   }, [dossierId, token, generation, requested]);
 
   function load(next?: string) {
-    setRequested(next); setGeneration(n => n + 1);
+    setSelectedEvidence(undefined); setRequested(next); setGeneration(n => n + 1);
   }
 
   return <section aria-label="Kết quả kiểm tra hồ sơ">
@@ -50,8 +52,9 @@ export function Checks({ dossierId, token }: { dossierId: string; token: string 
       <button disabled={busy || !cursor} onClick={() => load(cursor)}>Trang kiểm tra tiếp</button></div>
     <p role="status">{message}</p>
     {items.length > 0 && <div className="table-wrap"><table>
-      <thead><tr><th>Quy tắc</th><th>Kết quả</th><th>Mức độ</th><th>Mã lý do</th></tr></thead>
-      <tbody>{items.map(row => <tr key={row.id}><td>{row.rule_id}</td><td>{row.outcome}</td><td>{row.severity}</td><td>{row.reason_code}</td></tr>)}</tbody>
+      <thead><tr><th>Quy tắc</th><th>Kết quả</th><th>Mức độ</th><th>Mã lý do</th><th>Bằng chứng</th></tr></thead>
+      <tbody>{items.map(row => <tr key={row.id}><td>{row.rule_id}</td><td>{row.outcome}</td><td>{row.severity}</td><td>{row.reason_code}</td><td>{row.evidence_ids.map((id, index) => <button type="button" key={id} onClick={() => setSelectedEvidence(id)}>Xem {index + 1}</button>)}</td></tr>)}</tbody>
     </table></div>}
+    {selectedEvidence && <EvidenceViewer key={selectedEvidence} id={selectedEvidence} token={token} onClose={() => setSelectedEvidence(undefined)}/>}
   </section>;
 }
