@@ -215,6 +215,6 @@ export function Drafts() {
       <button type="button" disabled={busy||uncertain||(!changeUncertain&&(!changeOp||!changeReason.trim()))} onClick={()=>void changeDossier()}>{changeUncertain?'Thử lại yêu cầu thay đổi':changeOp?changeLabels[changeOp]:'Thực hiện'}</button>
       {changeOp==='cancel'&&<p>Hủy là thao tác kết thúc hồ sơ; các bằng chứng cũ vẫn được lưu.</p>}
     </section>}
-    {connected&&!changeUncertain&&detail.status!=='CANCELLED'&&<><DocumentIntents key={detail.id+':'+detail.version} dossier={detail} token={credential.current}/><Checks key={detail.id+':'+detail.version} dossierId={detail.id} token={credential.current}/><Checklist key={detail.id+':checklist:'+detail.version} dossierId={detail.id} token={credential.current}/><Fields key={detail.id+':fields:'+detail.version} dossierId={detail.id} token={credential.current}/></>}</div>}
+    {connected&&!changeUncertain&&detail.status!=='CANCELLED'&&<><DocumentIntents key={detail.id+':'+detail.version} dossier={detail} token={credential.current}/><Checks key={detail.id+':'+detail.version} dossierId={detail.id} version={detail.version} token={credential.current}/><Checklist key={detail.id+':checklist:'+detail.version} dossierId={detail.id} token={credential.current}/><Fields key={detail.id+':fields:'+detail.version} dossierId={detail.id} token={credential.current}/></>}</div>}
   </section>;
 }

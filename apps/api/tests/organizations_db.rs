@@ -1315,6 +1315,19 @@ async fn scoped_organization_http_real_database() {
         .await
         .unwrap();
     assert_eq!(refused.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        ready_dossier(
+            &app,
+            &requester,
+            ready_id,
+            "ready-unacknowledged-warning",
+            &ready_version,
+            check_id,
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
     let acknowledged = app
         .clone()
         .oneshot(ack_request(&requester, "ack-warning", &warning["id"]))
@@ -1581,7 +1594,10 @@ async fn scoped_organization_http_real_database() {
             .header(header::AUTHORIZATION, format!("Bearer {actor}"))
             .header(header::CONTENT_TYPE, "application/json")
             .header("idempotency-key", key)
-            .header("if-finance-version", format!("\"v1:dossier:{change_id}:{version}\""))
+            .header(
+                "if-finance-version",
+                format!("\"v1:dossier:{change_id}:{version}\""),
+            )
             .body(Body::from(
                 json!({"reason":"Synthetic lifecycle test","evidence_ids":[]}).to_string(),
             ))
@@ -1589,7 +1605,12 @@ async fn scoped_organization_http_real_database() {
     };
     let denied = app
         .clone()
-        .oneshot(change_request("revise", "revise-denied", 0, &other_requester))
+        .oneshot(change_request(
+            "revise",
+            "revise-denied",
+            0,
+            &other_requester,
+        ))
         .await
         .unwrap();
     assert_eq!(denied.status(), StatusCode::FORBIDDEN);
