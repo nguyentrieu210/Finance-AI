@@ -211,7 +211,6 @@ async fn list_units_inner(
         .collect())
 }
 
-
 pub async fn get_unit_authenticated(
     pool: &PgPool,
     proof: &finance_identity::AuthenticatedCommand,
@@ -243,13 +242,15 @@ pub async fn get_unit_authenticated(
     .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
-    Ok(row.map(|(id, parent, code, name, kind, active, version)| Unit {
-        id,
-        parent,
-        code,
-        name,
-        kind,
-        active,
-        version,
-    }))
+    Ok(
+        row.map(|(id, parent, code, name, kind, active, version)| Unit {
+            id,
+            parent,
+            code,
+            name,
+            kind,
+            active,
+            version,
+        }),
+    )
 }

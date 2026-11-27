@@ -288,7 +288,6 @@ async fn list(
     response
 }
 
-
 async fn get_organization(
     State(state): State<Arc<OrganizationState>>,
     headers: HeaderMap,
@@ -341,9 +340,15 @@ pub fn router(state: OrganizationState) -> Router {
     Router::new()
         .route("/v1/organizations", get(list))
         .route("/v1/organizations/{item_id}", get(get_organization))
-        .route("/v1/memberships", get(memberships::list).post(memberships::create))
+        .route(
+            "/v1/memberships",
+            get(memberships::list).post(memberships::create),
+        )
         .route("/v1/memberships/{item_id}", get(memberships::get))
-        .route("/v1/memberships/{item_id}/revoke", axum::routing::post(memberships::revoke))
+        .route(
+            "/v1/memberships/{item_id}/revoke",
+            axum::routing::post(memberships::revoke),
+        )
         .route("/v1/dossiers", get(dossiers::list).post(dossiers::create))
         .route("/v1/dossiers/{dossier_id}", get(dossiers::get))
         .route(

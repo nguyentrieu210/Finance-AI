@@ -1877,7 +1877,6 @@ async fn decide_review(
     )
 }
 
-
 async fn create_membership(
     app: &Router,
     token: &str,
@@ -1933,7 +1932,9 @@ async fn revoke_membership(
                 .header("idempotency-key", key)
                 .header("if-finance-version", version)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(json!({"reason":"synthetic revocation"}).to_string()))
+                .body(Body::from(
+                    json!({"reason":"synthetic revocation"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await

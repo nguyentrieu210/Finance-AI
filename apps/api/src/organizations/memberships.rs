@@ -122,9 +122,14 @@ pub(super) async fn list(
     let Some(time) = now() else {
         return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
     };
-    let cursor_key: [u8; 32] =
-        Sha256::digest([b"finance.membership.cursor/v1".as_slice(), &state.cursor_key].concat())
-            .into();
+    let cursor_key: [u8; 32] = Sha256::digest(
+        [
+            b"finance.membership.cursor/v1".as_slice(),
+            &state.cursor_key,
+        ]
+        .concat(),
+    )
+    .into();
     let after = match query.cursor {
         None => Uuid::nil(),
         Some(value) => match decode_cursor(&cursor_key, state.scope, actor, &value, time) {

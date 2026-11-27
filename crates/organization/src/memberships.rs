@@ -204,16 +204,15 @@ pub async fn create(
         tx.commit().await?;
         return Ok(row);
     }
-    let version: i64 =
-        sqlx::query_scalar("SELECT finance.membership_create($1,$2,$3,$4,$5)")
-            .bind(t)
-            .bind(c)
-            .bind(a)
-            .bind(subject)
-            .bind(&roles)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(map_guard)?;
+    let version: i64 = sqlx::query_scalar("SELECT finance.membership_create($1,$2,$3,$4,$5)")
+        .bind(t)
+        .bind(c)
+        .bind(a)
+        .bind(subject)
+        .bind(&roles)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(map_guard)?;
     let command: Uuid = proof.context().command.into();
     let correlation: Uuid = proof.context().correlation.into();
     sqlx::query(
@@ -319,16 +318,15 @@ pub async fn revoke(
         tx.commit().await?;
         return Ok(row);
     }
-    let version: i64 =
-        sqlx::query_scalar("SELECT finance.membership_revoke($1,$2,$3,$4,$5)")
-            .bind(t)
-            .bind(c)
-            .bind(a)
-            .bind(subject)
-            .bind(expected)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(map_guard)?;
+    let version: i64 = sqlx::query_scalar("SELECT finance.membership_revoke($1,$2,$3,$4,$5)")
+        .bind(t)
+        .bind(c)
+        .bind(a)
+        .bind(subject)
+        .bind(expected)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(map_guard)?;
     let command: Uuid = proof.context().command.into();
     let correlation: Uuid = proof.context().correlation.into();
     sqlx::query(
