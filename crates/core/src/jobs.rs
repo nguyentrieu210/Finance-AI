@@ -1,4 +1,4 @@
-//! Synthetic-only durable outbox consumer. No external effects or live worker loop.
+//! Durable scoped outbox queue primitives with lease fencing and bounded retries.
 use finance_shared::ids::CompanyScope;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -92,6 +92,41 @@ pub async fn dispatch(pool: &PgPool, scope: CompanyScope, limit: i64) -> Result<
     tx.commit().await?;
     Ok(n)
 }
+
+fn valid_event_type(event_type: &str) -> bool {
+    !event_type.is_empty()
+        && event_type.len() <= 64
+        && event_type
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+}
+
+/// Materialize only events with a registered handler. This prevents a worker from
+/// acknowledging unrelated domain events merely because they share the outbox.
+pub async fn dispatch_event(
+    pool: &PgPool,
+    scope: CompanyScope,
+    event_type: &str,
+    limit: i64,
+) -> Result<u64, JobError> {
+    if !(1..=100).contains(&limit) || !valid_event_type(event_type) {
+        return Err(JobError::InvalidInput);
+    }
+    let mut tx = begin(pool, scope).await?;
+    let (t, c) = ids(scope);
+    let n = sqlx::query(
+        "INSERT INTO finance.job(tenant_id,company_id,id)          SELECT o.tenant_id,o.company_id,o.id FROM finance.outbox o          WHERE o.tenant_id=$1 AND o.company_id=$2 AND o.event_type=$3          AND NOT EXISTS(SELECT 1 FROM finance.job j            WHERE (j.tenant_id,j.company_id,j.id)=(o.tenant_id,o.company_id,o.id))          ORDER BY o.created_at,o.id LIMIT $4 ON CONFLICT DO NOTHING",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(event_type)
+    .bind(limit)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    tx.commit().await?;
+    Ok(n)
+}
 async fn finish_attempt(
     tx: &mut Transaction<'_, Postgres>,
     t: Uuid,
@@ -138,6 +173,73 @@ pub async fn claim(
         .bind(t).bind(c).bind(id).bind(worker).bind(seconds).fetch_one(&mut *tx).await?;
     sqlx::query("INSERT INTO finance.job_attempt(tenant_id,company_id,job_id,fence,worker_id,state,lease_until) SELECT tenant_id,company_id,id,fence,leased_by,'ACTIVE',lease_until FROM finance.job WHERE tenant_id=$1 AND company_id=$2 AND id=$3")
         .bind(t).bind(c).bind(id).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(Some(Lease {
+        scope,
+        job_id: id,
+        fence: new_fence,
+        worker,
+    }))
+}
+
+pub async fn claim_event(
+    pool: &PgPool,
+    scope: CompanyScope,
+    worker: Uuid,
+    seconds: i32,
+    event_type: &str,
+) -> Result<Option<Lease>, JobError> {
+    valid_lease(seconds)?;
+    if worker.is_nil() || !valid_event_type(event_type) {
+        return Err(JobError::InvalidInput);
+    }
+    let mut tx = begin(pool, scope).await?;
+    let (t, c) = ids(scope);
+    let row: Option<(Uuid, String, i32, i64)> = sqlx::query_as(
+        "SELECT j.id,j.state,j.attempts,j.fence          FROM finance.job j JOIN finance.outbox o           ON (o.tenant_id,o.company_id,o.id)=(j.tenant_id,j.company_id,j.id)          WHERE j.tenant_id=$1 AND j.company_id=$2 AND o.event_type=$3          AND ((j.state IN ('QUEUED','RETRY') AND j.available_at<=clock_timestamp())            OR (j.state='LEASED' AND j.lease_until<=clock_timestamp()))          ORDER BY j.available_at,j.id FOR UPDATE OF j SKIP LOCKED LIMIT 1",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(event_type)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((id, state, attempts, fence)) = row else {
+        tx.commit().await?;
+        return Ok(None);
+    };
+    if state == "LEASED" {
+        finish_attempt(&mut tx, t, c, id, fence, "EXPIRED").await?;
+    }
+    if attempts >= 3 {
+        sqlx::query(
+            "UPDATE finance.job SET state='DEAD',lease_until=NULL,leased_by=NULL,last_error='LEASE_EXPIRED'              WHERE tenant_id=$1 AND company_id=$2 AND id=$3",
+        )
+        .bind(t)
+        .bind(c)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        return Ok(None);
+    }
+    let new_fence: i64 = sqlx::query_scalar(
+        "UPDATE finance.job SET state='LEASED',attempts=attempts+1,fence=fence+1,leased_by=$4,          lease_until=clock_timestamp()+make_interval(secs=>$5::double precision),last_error=NULL          WHERE tenant_id=$1 AND company_id=$2 AND id=$3 RETURNING fence",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(id)
+    .bind(worker)
+    .bind(seconds)
+    .fetch_one(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO finance.job_attempt(tenant_id,company_id,job_id,fence,worker_id,state,lease_until)          SELECT tenant_id,company_id,id,fence,leased_by,'ACTIVE',lease_until          FROM finance.job WHERE tenant_id=$1 AND company_id=$2 AND id=$3",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
     tx.commit().await?;
     Ok(Some(Lease {
         scope,
