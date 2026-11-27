@@ -13,4 +13,5 @@ finance-shared = { path = "../shared" }
 unicode-normalization = "=0.1.26"
 
 [dev-dependencies]
+uuid.workspace = true
 finance-documents = { path = "../documents" }

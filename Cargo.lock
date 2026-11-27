@@ -521,6 +521,7 @@ dependencies = [
  "finance-ocr",
  "finance-shared",
  "unicode-normalization",
+ "uuid",
 ]
 
 [[package]]
@@ -554,6 +555,10 @@ dependencies = [
 [[package]]
 name = "finance-integration"
 version = "0.1.0"
+dependencies = [
+ "finance-shared",
+ "uuid",
+]
 
 [[package]]
 name = "finance-knowledge"

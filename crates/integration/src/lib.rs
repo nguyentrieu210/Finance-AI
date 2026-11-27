@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 //! Synthetic-only domain prototype. No authorization, durable mutation or production claim.
+pub mod reconcile;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum External {
     NotSubmitted,
