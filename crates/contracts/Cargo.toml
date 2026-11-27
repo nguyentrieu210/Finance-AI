@@ -9,3 +9,4 @@ publish.workspace = true
 finance-shared = { path = "../shared" }
 finance-financial = { path = "../financial" }
 chrono.workspace = true
+uuid.workspace = true

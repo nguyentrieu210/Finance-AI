@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 //! Synthetic-only domain prototype. No authorization, durable mutation or production claim.
 use chrono::NaiveDate;
+
+pub mod allocations;
+pub mod installments;
 pub use finance_financial::references::{Reference, list_contracts as list_verified};
 use finance_financial::{Error, available};
 use finance_shared::money::Money;
