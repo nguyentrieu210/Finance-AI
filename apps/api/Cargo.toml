@@ -21,4 +21,7 @@ tokio.workspace = true
 finance-shared = { path = "../../crates/shared" }
 
 [dev-dependencies]
+jsonwebtoken = { version = "=9.3.1", default-features = false }
+rsa = "=0.9.10"
+serde_json.workspace = true
 tower.workspace = true

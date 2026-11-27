@@ -7,3 +7,9 @@ publish.workspace = true
 
 [dependencies]
 finance-shared = { path = "../shared" }
+
+[dev-dependencies]
+finance-financial = { path = "../financial" }
+finance-integration = { path = "../integration" }
+finance-rule-engine = { path = "../rule-engine" }
+finance-validation = { path = "../validation" }

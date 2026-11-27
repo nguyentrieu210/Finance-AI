@@ -5,7 +5,7 @@ import './style.css';
 
 type Organization = components['schemas']['Organization'];
 type Page = { items: Organization[]; next_cursor?: string };
-const groups = [
+const groups: readonly { name: string; items: readonly (readonly [string, string])[] }[] = [
   { name: 'Nền tảng', items: [['E01','Core'],['E02','Danh tính'],['E03','Phân quyền'],['E04','Tổ chức'],['E22','Nhật ký']] },
   { name: 'Chứng từ và AI', items: [['E05','Tài liệu'],['E06','OCR'],['E07','Nhận diện tài liệu'],['E08','Trích xuất'],['E09','Kiểm tra'],['E10','Đối chiếu']] },
   { name: 'Nghiệp vụ tài chính', items: [['E11','Hạn mức'],['E12','Hợp đồng'],['E13','Tạm ứng'],['E14','Ngân sách'],['E15','Quy tắc'],['E16','Chính sách'],['E17','Tri thức']] },
@@ -99,16 +99,16 @@ function App() {
         {selected === 'E04' && sandbox ? <section aria-labelledby="org-title">
           <h2 id="org-title">Danh sách đơn vị tổ chức</h2>
           <p>Chỉ dùng token thử nghiệm được cấp bởi bộ kiểm thử nội bộ. Không nhập thông tin đăng nhập hoặc token thực tế.</p>
-          <form onSubmit={event => { event.preventDefault(); credential.current = token.trim(); setToken(''); void load(); }}>
+          <div className="sandbox-connection">
             <label htmlFor="sandbox-token">Token sandbox</label>
             <div className="actions"><input id="sandbox-token" type="password" autoComplete="off" value={token} onChange={event => setToken(event.target.value)} disabled={busy || connected} maxLength={16384} />
-            <button className="primary" type="submit" disabled={busy || connected || !token.trim()}>Kết nối</button><button type="button" onClick={clear}>Ngắt kết nối</button></div>
-          </form>
+            <button className="primary" type="button" disabled={busy || connected || !token.trim()} onClick={() => { credential.current = token.trim(); setToken(''); void load(); }}>Kết nối</button><button type="button" onClick={clear}>Ngắt kết nối</button></div>
+          </div>
           <p role="status" aria-live="polite">{status}</p>
           <div className="table-wrap"><table><thead><tr><th>Mã đơn vị</th><th>Tên đơn vị</th><th>Loại</th><th>Trạng thái</th></tr></thead>
           <tbody>{items.map(row => <tr key={row.id}><td>{row.code}</td><td>{row.name}</td><td>{row.kind}</td><td>{row.active ? 'Hoạt động' : 'Ngừng hoạt động'}</td></tr>)}</tbody></table></div>
           <div className="actions"><button disabled={!connected || busy} onClick={() => void load()}>Trang đầu</button><button disabled={!cursor || busy} onClick={() => void load(cursor)}>Trang tiếp</button></div>
-        </section> : <section aria-labelledby="gate-title"><h2 id="gate-title">Chưa mở nghiệp vụ</h2><p>Phân hệ {selected} chưa vượt qua toàn bộ điều kiện nghiệm thu và phân quyền. Không hiển thị số liệu giả, không cho phép gửi hồ sơ hoặc thay đổi dữ liệu.</p><p role="status">Chế độ kỹ thuật — chưa tiếp nhận chứng từ thực tế.</p></section>}
+        </section> : <section aria-labelledby="gate-title"><h2 id="gate-title">Chưa mở nghiệp vụ</h2><p>Phân hệ {selected} chưa vượt qua toàn bộ điều kiện nghiệm thu và phân quyền. Không hiển thị số liệu giả, không cho phép gửi hồ sơ hoặc thay đổi dữ liệu.</p><p role="status">Chưa tiếp nhận chứng từ thực tế — chế độ kỹ thuật.</p></section>}
       </main>
     </div>
   </div>;

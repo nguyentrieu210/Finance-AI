@@ -12,7 +12,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -44,13 +44,22 @@ jobs:
           npm run typecheck
           npm test
           npm run build
+          VITE_FINANCE_SYNTHETIC=1 npm run build
+      - name: Install browser integration dependencies
+        run: |
+          .venv/bin/pip install playwright==1.51.0
+          .venv/bin/python -m playwright install --with-deps chromium
       - name: Compose validation
         env:
           FINANCE_DEV_DB_PASSWORD: ci-config-only-not-a-secret
         run: docker compose -f infra/compose.yaml config --quiet
       - name: Real database baseline
         run: bash scripts/test_migration_baseline.sh
-      - name: Prototype database integration
+      - name: Prototype database integration and browser
+        env:
+          FINANCE_BROWSER_PYTHON: ${{ github.workspace }}/.venv/bin/python
+          FINANCE_BROWSER_DIST: ${{ github.workspace }}/apps/web/dist
+          FINANCE_BROWSER_SCRIPT: ${{ github.workspace }}/tests/browser/organization.py
         run: bash scripts/test_prototype_foundation.sh
       - name: Real ClamAV synthetic scanner probe
         timeout-minutes: 5
