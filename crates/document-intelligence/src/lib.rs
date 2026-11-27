@@ -4,6 +4,9 @@
 use finance_ocr::PageResult;
 use unicode_normalization::UnicodeNormalization;
 
+pub mod layout;
+pub mod table;
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Kind {
     Contract,
