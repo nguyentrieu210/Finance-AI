@@ -209,9 +209,9 @@ pub async fn list(
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     allowed_read(&mut tx, proof).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let rows = sqlx::query_as::<_, Rule>(&format!(
-        "SELECT * FROM (SELECT DISTINCT ON(rule_id) rule_id AS id,policy_id,version,rule_key AS name,severity,waivable,clause_id,definition::text AS definition_json FROM finance.rule_version WHERE tenant_id=$1 AND company_id=$2 AND rule_id>$3 ORDER BY rule_id,version DESC) rows ORDER BY id LIMIT $4"
-    ))
+    let rows = sqlx::query_as::<_, Rule>(
+        "SELECT * FROM (SELECT DISTINCT ON(rule_id) rule_id AS id,policy_id,version,rule_key AS name,severity,waivable,clause_id,definition::text AS definition_json FROM finance.rule_version WHERE tenant_id=$1 AND company_id=$2 AND rule_id>$3 ORDER BY rule_id,version DESC) rows ORDER BY id LIMIT $4",
+    )
     .bind(t)
     .bind(c)
     .bind(after)
@@ -270,8 +270,7 @@ pub async fn revise(
     );
     if draft.rule.is_nil()
         || draft.row.is_nil()
-        || expected < 1
-        || expected >= 9_007_199_254_740_991
+        || !(1..9_007_199_254_740_991).contains(&expected)
         || draft.reason.trim().is_empty()
         || draft.reason.len() > 2048
         || draft.reason.chars().any(char::is_control)
