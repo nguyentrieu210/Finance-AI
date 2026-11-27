@@ -171,6 +171,7 @@ struct ReceiptArtifact {
     bytes: u64,
 }
 
+#[derive(Debug)]
 struct OwnedArtifact {
     name: String,
     expected: Sha256Digest,
