@@ -92,6 +92,27 @@ async fn latest(
     .fetch_one(&mut **tx)
     .await?)
 }
+async fn draft_receipt(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant: Uuid,
+    company: Uuid,
+    template: Uuid,
+    version: i64,
+) -> Result<Template, Error> {
+    let mut receipt = sqlx::query_as::<_, Template>(&format!(
+        "{SELECT} WHERE tenant_id=$1 AND company_id=$2 AND template_id=$3 AND version=$4"
+    ))
+    .bind(tenant)
+    .bind(company)
+    .bind(template)
+    .bind(version)
+    .fetch_one(&mut **tx)
+    .await?;
+    // Creation/revision receipts describe the immutable version at command time.
+    receipt.state = "DRAFT".into();
+    Ok(receipt)
+}
+
 async fn source_digest(
     tx: &mut Transaction<'_, Postgres>,
     document: Uuid,
@@ -163,7 +184,7 @@ pub async fn create(
         if old != request {
             return Err(Error::Conflict);
         }
-        let receipt = latest(&mut tx, tenant, company, result).await?;
+        let receipt = draft_receipt(&mut tx, tenant, company, result, 1).await?;
         recheck_authenticated(&mut tx, Some(proof)).await?;
         tx.commit().await?;
         return Ok(receipt);
@@ -191,7 +212,7 @@ pub async fn create(
     sqlx::query("INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id) VALUES($1,$2,$3,'template.create',$4,$5,$6)")
         .bind(tenant).bind(company).bind(actor).bind(key.as_str()).bind(request).bind(draft.template)
         .execute(&mut *tx).await?;
-    let receipt = latest(&mut tx, tenant, company, draft.template).await?;
+    let receipt = draft_receipt(&mut tx, tenant, company, draft.template, 1).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(receipt)
@@ -207,6 +228,7 @@ pub async fn revise(
         return Err(Error::InvalidInput);
     };
     let expected = i64::from(expected);
+    let next = expected.checked_add(1).ok_or(Error::Conflict)?;
     if draft.template.is_nil()
         || draft.row.is_nil()
         || draft.document.is_nil()
@@ -255,7 +277,7 @@ pub async fn revise(
         if old != request || result != draft.template {
             return Err(Error::Conflict);
         }
-        let receipt = latest(&mut tx, tenant, company, draft.template).await?;
+        let receipt = draft_receipt(&mut tx, tenant, company, draft.template, next).await?;
         recheck_authenticated(&mut tx, Some(proof)).await?;
         tx.commit().await?;
         return Ok(receipt);
@@ -263,12 +285,14 @@ pub async fn revise(
     if current.version != expected || current.state != "DRAFT" {
         return Err(Error::Conflict);
     }
-    let next = expected.checked_add(1).ok_or(Error::Conflict)?;
-    sqlx::query(
+    let inserted = sqlx::query(
         "INSERT INTO finance.template_version(tenant_id,company_id,id,template_id,policy_id,name,version,state,format,source_digest,document_id,author_id) SELECT tenant_id,company_id,$4,template_id,policy_id,name,$5,'DRAFT',format,decode($6,'hex'),$7,author_id FROM finance.template_version WHERE tenant_id=$1 AND company_id=$2 AND template_id=$3 AND version=$8 AND author_id=$9",
     )
     .bind(tenant).bind(company).bind(draft.template).bind(draft.row).bind(next).bind(&digest)
     .bind(draft.document).bind(expected).bind(actor).execute(&mut *tx).await?;
+    if inserted.rows_affected() != 1 {
+        return Err(Error::Conflict);
+    }
     let command: Uuid = proof.context().command.into();
     let correlation: Uuid = proof.context().correlation.into();
     sqlx::query("INSERT INTO finance.audit_event(tenant_id,company_id,id,actor_id,command_id,correlation_id,resource_id,action) VALUES($1,$2,$3,$4,$3,$5,$6,'TEMPLATE_DRAFT_REVISED')")
@@ -279,7 +303,7 @@ pub async fn revise(
     sqlx::query("INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id) VALUES($1,$2,$3,'template.revise',$4,$5,$6)")
         .bind(tenant).bind(company).bind(actor).bind(key.as_str()).bind(request).bind(draft.template)
         .execute(&mut *tx).await?;
-    let receipt = latest(&mut tx, tenant, company, draft.template).await?;
+    let receipt = draft_receipt(&mut tx, tenant, company, draft.template, next).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(receipt)

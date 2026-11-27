@@ -166,6 +166,27 @@ async fn latest(
     .await?)
 }
 
+async fn draft_receipt(
+    tx: &mut Transaction<'_, Postgres>,
+    t: Uuid,
+    c: Uuid,
+    form: Uuid,
+    version: i64,
+) -> Result<Form, Error> {
+    let mut receipt = sqlx::query_as::<_, Form>(&format!(
+        "{SELECT_FORM} WHERE tenant_id=$1 AND company_id=$2 AND form_id=$3 AND version=$4"
+    ))
+    .bind(t)
+    .bind(c)
+    .bind(form)
+    .bind(version)
+    .fetch_one(&mut **tx)
+    .await?;
+    // Creation/revision receipts describe the immutable version at command time.
+    receipt.state = "DRAFT".into();
+    Ok(receipt)
+}
+
 pub struct CreateDraft<'a> {
     pub policy: Uuid,
     pub form: Uuid,
@@ -222,7 +243,7 @@ pub async fn create(
         if old != hash {
             return Err(Error::Conflict);
         }
-        let receipt = latest(&mut tx, t, c, result).await?;
+        let receipt = draft_receipt(&mut tx, t, c, result, 1).await?;
         recheck_authenticated(&mut tx, Some(proof)).await?;
         tx.commit().await?;
         return Ok(receipt);
@@ -247,7 +268,7 @@ pub async fn create(
         .bind(t).bind(c).bind(command).bind(form).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id) VALUES($1,$2,$3,'form.create',$4,$5,$6)")
         .bind(t).bind(c).bind(a).bind(key.as_str()).bind(hash).bind(form).execute(&mut *tx).await?;
-    let receipt = latest(&mut tx, t, c, form).await?;
+    let receipt = draft_receipt(&mut tx, t, c, form, 1).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(receipt)
@@ -322,7 +343,7 @@ pub async fn revise(
         if old != hash || result != form {
             return Err(Error::Conflict);
         }
-        let receipt = latest(&mut tx, t, c, form).await?;
+        let receipt = draft_receipt(&mut tx, t, c, form, next).await?;
         recheck_authenticated(&mut tx, Some(proof)).await?;
         tx.commit().await?;
         return Ok(receipt);
@@ -331,11 +352,14 @@ pub async fn revise(
     if current.version != expected || current.state != "DRAFT" {
         return Err(Error::Conflict);
     }
-    sqlx::query(
+    let inserted = sqlx::query(
         "INSERT INTO finance.form_version(tenant_id,company_id,id,form_id,policy_id,name,version,state,schema_json,author_id) SELECT tenant_id,company_id,$4,form_id,policy_id,$5,$6,'DRAFT',$7::text::jsonb,author_id FROM finance.form_version WHERE tenant_id=$1 AND company_id=$2 AND form_id=$3 AND version=$8 AND author_id=$9",
     )
     .bind(t).bind(c).bind(form).bind(row).bind(name).bind(next).bind(&payload).bind(expected).bind(a)
     .execute(&mut *tx).await?;
+    if inserted.rows_affected() != 1 {
+        return Err(Error::Conflict);
+    }
     let command: Uuid = proof.context().command.into();
     let correlation: Uuid = proof.context().correlation.into();
     sqlx::query("INSERT INTO finance.audit_event(tenant_id,company_id,id,actor_id,command_id,correlation_id,resource_id,action) VALUES($1,$2,$3,$4,$3,$5,$6,'FORM_DRAFT_REVISED')")
@@ -344,7 +368,7 @@ pub async fn revise(
         .bind(t).bind(c).bind(command).bind(form).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id) VALUES($1,$2,$3,'form.revise',$4,$5,$6)")
         .bind(t).bind(c).bind(a).bind(key.as_str()).bind(hash).bind(form).execute(&mut *tx).await?;
-    let receipt = latest(&mut tx, t, c, form).await?;
+    let receipt = draft_receipt(&mut tx, t, c, form, next).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(receipt)

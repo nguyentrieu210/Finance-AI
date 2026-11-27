@@ -583,6 +583,31 @@ async fn scoped_organization_http_real_database() {
         .0,
         StatusCode::CONFLICT
     );
+    assert_eq!(
+        create_template(
+            &app,
+            &policy_admin,
+            "template-one",
+            "Synthetic payment template",
+            "00000000-0000-0000-0000-000000001a02",
+            "PDF",
+        )
+        .await
+        .1,
+        template
+    );
+    assert_eq!(
+        create_form(
+            &app,
+            &policy_admin,
+            "form-one",
+            "Synthetic payment form",
+            fields.clone(),
+        )
+        .await
+        .1,
+        form
+    );
     let (_, template_page) = request(&app, "/v1/templates", Some(&policy_admin)).await;
     assert_eq!(template_page["items"].as_array().unwrap().len(), 1);
     assert_eq!(template_page["items"][0]["version"], 2);
