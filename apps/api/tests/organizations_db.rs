@@ -48,6 +48,37 @@ async fn request(app: &Router, uri: &str, token: Option<&str>) -> (StatusCode, V
     (status, value)
 }
 
+async fn create_organization(
+    app: &Router,
+    token: &str,
+    key: &str,
+    body: Value,
+) -> (StatusCode, Value, Option<String>) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/organizations")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("idempotency-key", key)
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let version = response
+        .headers()
+        .get("finance-version")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let value = serde_json::from_slice(&bytes).unwrap();
+    (status, value, version)
+}
+
 // Test-only static file serving; never mounted in the production binary.
 async fn index(State(root): State<PathBuf>) -> Response {
     match std::fs::read(root.join("index.html")) {
@@ -199,6 +230,55 @@ async fn scoped_organization_http_real_database() {
         .await
         .0,
         StatusCode::OK
+    );
+    let org_body = json!({
+        "kind": "DEPARTMENT",
+        "code": "HTTP-ORG-CREATE",
+        "name": "HTTP organization create"
+    });
+    let (org_status, created_org, org_version) =
+        create_organization(&app, &token, "http-org-create", org_body.clone()).await;
+    assert_eq!(org_status, StatusCode::CREATED);
+    assert_eq!(created_org["code"], "HTTP-ORG-CREATE");
+    assert_eq!(created_org["active"], true);
+    assert!(org_version.as_deref().is_some_and(|value| value.ends_with(":0\"")));
+    let replay =
+        create_organization(&app, &token, "http-org-create", org_body.clone()).await;
+    assert_eq!(replay.0, StatusCode::CREATED);
+    assert_eq!(replay.1["id"], created_org["id"]);
+    assert_eq!(replay.2, org_version);
+    assert_eq!(
+        create_organization(
+            &app,
+            &token,
+            "http-org-create",
+            json!({"kind":"DEPARTMENT","code":"HTTP-ORG-CHANGED","name":"changed"})
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        create_organization(
+            &app,
+            &requester,
+            "http-org-requester",
+            json!({"kind":"DEPARTMENT","code":"DENIED","name":"denied"})
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        create_organization(
+            &app,
+            &token,
+            "http-company-create",
+            json!({"kind":"COMPANY","code":"NOPE","name":"tenant-level denied"})
+        )
+        .await
+        .0,
+        StatusCode::UNPROCESSABLE_ENTITY
     );
     assert_eq!(
         request(
