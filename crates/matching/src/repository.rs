@@ -62,13 +62,7 @@ fn map_database(error: sqlx::Error) -> Error {
         _ => Error::Database(error),
     }
 }
-fn request_hash(
-    dossier: Uuid,
-    version: i64,
-    left: Uuid,
-    right: Uuid,
-    reason: &str,
-) -> Vec<u8> {
+fn request_hash(dossier: Uuid, version: i64, left: Uuid, right: Uuid, reason: &str) -> Vec<u8> {
     let mut hash = Sha256::new();
     hash.update(b"finance.match.confirm/v1");
     hash.update(dossier.as_bytes());
@@ -230,17 +224,16 @@ pub async fn confirm(
     .bind(result_id)
     .execute(&mut *tx)
     .await?;
-    let row = sqlx::query_as::<_, Receipt>(
-        "SELECT * FROM finance.runtime_match_receipt($1,$2,$3,$4,$5)",
-    )
-    .bind(tenant)
-    .bind(company)
-    .bind(dossier)
-    .bind(actor)
-    .bind(result_id)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(map_database)?;
+    let row =
+        sqlx::query_as::<_, Receipt>("SELECT * FROM finance.runtime_match_receipt($1,$2,$3,$4,$5)")
+            .bind(tenant)
+            .bind(company)
+            .bind(dossier)
+            .bind(actor)
+            .bind(result_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_database)?;
     if row.dossier_version != new_version {
         return Err(Error::Conflict);
     }

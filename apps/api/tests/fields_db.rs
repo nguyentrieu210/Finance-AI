@@ -1,17 +1,17 @@
 use axum::{
     Router,
-    body::{Body,to_bytes},
-    http::{Request,StatusCode,header},
+    body::{Body, to_bytes},
+    http::{Request, StatusCode, header},
 };
-use base64::{Engine,engine::general_purpose::URL_SAFE_NO_PAD};
-use finance_api::organizations::{OrganizationState,router};
-use finance_identity::{Verifier,VerifierStore};
-use finance_shared::ids::{CompanyId,CompanyScope,TenantId};
-use jsonwebtoken::{Algorithm,EncodingKey,Header,encode};
-use rsa::{RsaPrivateKey,pkcs1::EncodeRsaPrivateKey,traits::PublicKeyParts};
-use serde_json::{Value,json};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use finance_api::organizations::{OrganizationState, router};
+use finance_identity::{Verifier, VerifierStore};
+use finance_shared::ids::{CompanyId, CompanyScope, TenantId};
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
+use rsa::{RsaPrivateKey, pkcs1::EncodeRsaPrivateKey, traits::PublicKeyParts};
+use serde_json::{Value, json};
 use sqlx::postgres::PgPoolOptions;
-use std::time::{SystemTime,UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
 use uuid::Uuid;
 

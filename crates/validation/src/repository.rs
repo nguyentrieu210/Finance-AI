@@ -184,17 +184,16 @@ pub async fn decide(
         tx.commit().await?;
         return Ok(receipt(row));
     }
-    let meta: Option<(String, String, Option<String>)> = sqlx::query_as(
-        "SELECT * FROM finance.runtime_field_meta($1,$2,$3,$4,$5)",
-    )
-    .bind(tenant)
-    .bind(company)
-    .bind(dossier)
-    .bind(actor)
-    .bind(field)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(map_database)?;
+    let meta: Option<(String, String, Option<String>)> =
+        sqlx::query_as("SELECT * FROM finance.runtime_field_meta($1,$2,$3,$4,$5)")
+            .bind(tenant)
+            .bind(company)
+            .bind(dossier)
+            .bind(actor)
+            .bind(field)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(map_database)?;
     let Some((_path, value_type, _current)) = meta else {
         return Err(Error::Conflict);
     };

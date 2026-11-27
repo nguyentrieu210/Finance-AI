@@ -80,18 +80,17 @@ pub async fn list(
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     require_reader(&mut tx, proof).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let rows = sqlx::query_as::<_, Field>(
-        "SELECT * FROM finance.runtime_fields($1,$2,$3,$4,$5,NULL,$6)",
-    )
-    .bind(tenant)
-    .bind(company)
-    .bind(dossier)
-    .bind(actor)
-    .bind(after)
-    .bind(limit)
-    .fetch_all(&mut *tx)
-    .await
-    .map_err(map_database)?;
+    let rows =
+        sqlx::query_as::<_, Field>("SELECT * FROM finance.runtime_fields($1,$2,$3,$4,$5,NULL,$6)")
+            .bind(tenant)
+            .bind(company)
+            .bind(dossier)
+            .bind(actor)
+            .bind(after)
+            .bind(limit)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(map_database)?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(rows)
@@ -110,18 +109,17 @@ pub async fn get(
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     require_reader(&mut tx, proof).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let row = sqlx::query_as::<_, Field>(
-        "SELECT * FROM finance.runtime_fields($1,$2,$3,$4,$5,$6,1)",
-    )
-    .bind(tenant)
-    .bind(company)
-    .bind(dossier)
-    .bind(actor)
-    .bind(Uuid::nil())
-    .bind(field)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(map_database)?;
+    let row =
+        sqlx::query_as::<_, Field>("SELECT * FROM finance.runtime_fields($1,$2,$3,$4,$5,$6,1)")
+            .bind(tenant)
+            .bind(company)
+            .bind(dossier)
+            .bind(actor)
+            .bind(Uuid::nil())
+            .bind(field)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(map_database)?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(row)
