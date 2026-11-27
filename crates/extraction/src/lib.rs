@@ -11,6 +11,7 @@ use finance_shared::money::Amount;
 use unicode_normalization::UnicodeNormalization;
 
 pub mod gateway;
+pub mod rows;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Field {

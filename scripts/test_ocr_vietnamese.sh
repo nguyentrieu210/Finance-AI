@@ -27,3 +27,22 @@ tesseract --list-langs | grep -Fx vie
 )
 FINANCE_OCR_TSV="$work/result.tsv" cargo test --locked -p finance-ocr --test real_tsv -- --ignored --exact real_vietnamese_tsv
 echo 'PASS: Vietnamese synthetic image -> actual Tesseract -> Rust bounded TSV candidate'
+
+python3 - "$work" <<'PY'
+from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
+import sys
+root=Path(sys.argv[1])
+im=Image.new("RGB",(1800,480),"white")
+draw=ImageDraw.Draw(im)
+font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",68)
+draw.text((90,90),"Tổng thanh toán: 125000",font=font,fill="black")
+im.save(root/"rows.png")
+PY
+(
+ ulimit -v 2097152
+ ulimit -f 4096
+ timeout --kill-after=2s 30s tesseract "$work/rows.png" "$work/rows" -l vie --psm 6 tsv
+)
+FINANCE_OCR_ROWS_TSV="$work/rows.tsv" cargo test --locked -p finance-extraction --test real_rows -- --ignored --exact real_word_rows_to_financial_candidates
+echo 'PASS: real Vietnamese OCR word rows -> exact financial candidates, with original block indexes'
