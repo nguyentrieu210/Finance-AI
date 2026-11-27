@@ -183,7 +183,7 @@ fn wrong_checksum_length_signature_and_staging_tampering_fail() {
     ));
 }
 #[test]
-fn metadata_quota_and_office_gate() {
+fn metadata_quota_and_office_intent_gate() {
     let b = binding(10, 20, 30);
     let r = revision(b);
     for n in ["../a.pdf", "a/b.pdf", "a\\b.pdf", "a\0.pdf"] {
@@ -216,10 +216,10 @@ fn metadata_quota_and_office_gate() {
         ),
         Err(Error::Guard(UploadError::QuotaExceeded))
     ));
-    assert!(matches!(
-        Intent::create(b, r, "a.docx", 1, digest(PDF), DeclaredMime::Docx, 0),
-        Err(Error::UnsupportedContainer)
-    ));
+    assert!(
+        Intent::create(b, r, "a.docx", 1, digest(PDF), DeclaredMime::Docx, 0).is_ok(),
+        "Office metadata intent is allowed; ZIP signature and quarantine/scan gates apply at byte ingestion"
+    );
     let mut i = create(b, PDF);
     assert!(i.issue_grant(r, at(100), 301).is_err());
 }
