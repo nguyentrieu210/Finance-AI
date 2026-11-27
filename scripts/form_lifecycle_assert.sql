@@ -5,11 +5,14 @@ DECLARE t uuid:='00000000-0000-0000-0000-000000000001';
  maker uuid:='00000000-0000-0000-0000-0000000003f0';
  checker uuid:='00000000-0000-0000-0000-0000000003f1';
  requester uuid:='00000000-0000-0000-0000-0000000003e9';
- fid uuid; latest bigint;
+ fid uuid; latest bigint; tid uuid; template_latest bigint;
 BEGIN
  SELECT form_id,max(version) INTO fid,latest FROM finance.form_version
  WHERE tenant_id=t AND company_id=c AND policy_id=p GROUP BY form_id;
  IF fid IS NULL OR latest<>2 THEN RAISE EXCEPTION 'form API did not create two immutable versions'; END IF;
+ SELECT template_id,max(version) INTO tid,template_latest FROM finance.template_version
+ WHERE tenant_id=t AND company_id=c AND policy_id=p GROUP BY template_id;
+ IF tid IS NULL OR template_latest<>2 THEN RAISE EXCEPTION 'template API did not create two immutable versions'; END IF;
  IF NOT EXISTS(SELECT 1 FROM finance.form_version WHERE form_id=fid AND version=1 AND schema_json#>>'{fields,0,source_path}'='request.advance')
  OR NOT EXISTS(SELECT 1 FROM finance.form_version WHERE form_id=fid AND version=2 AND schema_json#>>'{fields,0,layout,width}'='12')
  THEN RAISE EXCEPTION 'normalized source/layout missing'; END IF;
@@ -18,6 +21,11 @@ BEGIN
  IF (SELECT state FROM finance.form_version WHERE form_id=fid AND version=1)<>'RETIRED'
  OR (SELECT state FROM finance.form_version WHERE form_id=fid AND version=2)<>'PUBLISHED'
  THEN RAISE EXCEPTION 'policy publication did not pin latest form version'; END IF;
+ IF (SELECT state FROM finance.template_version WHERE template_id=tid AND version=1)<>'RETIRED'
+ OR (SELECT state FROM finance.template_version WHERE template_id=tid AND version=2)<>'PUBLISHED'
+ THEN RAISE EXCEPTION 'policy publication did not pin latest template version'; END IF;
+ IF (SELECT count(*) FROM finance.audit_event WHERE resource_id=tid AND action IN ('TEMPLATE_DRAFT_CREATED','TEMPLATE_DRAFT_REVISED'))<>2
+ THEN RAISE EXCEPTION 'template audit coverage missing'; END IF;
  BEGIN
   UPDATE finance.form_version SET name='tampered' WHERE form_id=fid AND version=2;
   RAISE EXCEPTION 'published form content mutated';

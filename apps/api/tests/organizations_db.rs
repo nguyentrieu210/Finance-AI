@@ -301,6 +301,93 @@ async fn scoped_organization_http_real_database() {
         request(&app, "/v1/forms", Some(&requester)).await.1["items"],
         json!([])
     );
+    let (template_status, template, template_token) = create_template(
+        &app,
+        &policy_admin,
+        "template-one",
+        "Synthetic payment template",
+        "00000000-0000-0000-0000-000000001a02",
+        "PDF",
+    )
+    .await;
+    assert_eq!(template_status, StatusCode::CREATED);
+    assert_eq!(template["version"], 1);
+    assert_eq!(template["state"], "DRAFT");
+    let template_id = template["id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        create_template(
+            &app,
+            &policy_admin,
+            "template-one",
+            "Synthetic payment template",
+            "00000000-0000-0000-0000-000000001a02",
+            "PDF",
+        )
+        .await
+        .1,
+        template
+    );
+    assert_eq!(
+        create_template(
+            &app,
+            &policy_admin,
+            "template-macro",
+            "Macro",
+            "00000000-0000-0000-0000-000000001a03",
+            "DOCX",
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        create_template(
+            &app,
+            &requester,
+            "template-denied",
+            "Denied",
+            "00000000-0000-0000-0000-000000001a02",
+            "PDF",
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let (template_revise_status, template_v2, template_v2_token) = revise_template(
+        &app,
+        &policy_admin,
+        &template_id,
+        "template-revise",
+        template_token.as_deref().unwrap(),
+        "00000000-0000-0000-0000-000000001a04",
+        "New clean source",
+    )
+    .await;
+    assert_eq!(template_revise_status, StatusCode::OK);
+    assert_eq!(template_v2["version"], 2);
+    assert_eq!(template_v2["id"], template["id"]);
+    assert_ne!(template_token, template_v2_token);
+    assert_eq!(
+        revise_template(
+            &app,
+            &policy_admin,
+            &template_id,
+            "template-stale",
+            template_token.as_deref().unwrap(),
+            "00000000-0000-0000-0000-000000001a04",
+            "stale",
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let (_, template_page) = request(&app, "/v1/templates", Some(&policy_admin)).await;
+    assert_eq!(template_page["items"].as_array().unwrap().len(), 1);
+    assert_eq!(template_page["items"][0]["version"], 2);
+    assert_eq!(
+        request(&app, "/v1/templates", Some(&requester)).await.1["items"],
+        json!([])
+    );
     let uri = "/v1/organizations?limit=1";
     assert_eq!(request(&app, uri, None).await.0, StatusCode::UNAUTHORIZED);
     assert_eq!(
@@ -643,6 +730,79 @@ async fn revise_form(
         .headers()
         .get("finance-version")
         .map(|v| v.to_str().unwrap().to_owned());
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let value: Value = serde_json::from_slice(&bytes).unwrap();
+    (status, value, receipt)
+}
+
+async fn create_template(
+    app: &Router,
+    token: &str,
+    key: &str,
+    name: &str,
+    document_id: &str,
+    format: &str,
+) -> (StatusCode, Value, Option<String>) {
+    let body = json!({
+        "policy_id":"00000000-0000-0000-0000-000000001900",
+        "name":name,
+        "document_id":document_id,
+        "format":format
+    });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/templates")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("idempotency-key", key)
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let receipt = response
+        .headers()
+        .get("finance-version")
+        .map(|value| value.to_str().unwrap().to_owned());
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let value: Value = serde_json::from_slice(&bytes).unwrap();
+    (status, value, receipt)
+}
+
+async fn revise_template(
+    app: &Router,
+    token: &str,
+    template: &str,
+    key: &str,
+    version: &str,
+    document_id: &str,
+    reason: &str,
+) -> (StatusCode, Value, Option<String>) {
+    let body = json!({"document_id":document_id,"reason":reason});
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1/templates/{template}/revise"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("idempotency-key", key)
+                .header("if-finance-version", version)
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let receipt = response
+        .headers()
+        .get("finance-version")
+        .map(|value| value.to_str().unwrap().to_owned());
     let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     let value: Value = serde_json::from_slice(&bytes).unwrap();
     (status, value, receipt)
