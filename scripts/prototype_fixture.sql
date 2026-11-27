@@ -21,8 +21,8 @@ INSERT INTO finance.identity_subject(tenant_id,id,issuer,subject) VALUES ('00000
 INSERT INTO finance.membership(tenant_id,company_id,actor_id,role) VALUES ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-0000000003eb','AUDITOR');
 
 -- Approved synthetic references for read-only HTTP/RLS tests.
-INSERT INTO finance.reference_snapshot(tenant_id,company_id,id,source_system,external_version,source_digest,as_of,fresh_until,maker_id,checker_id,state) VALUES
-('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001200','SYNAPI','FIXTURE1',decode(repeat('12',32),'hex'),now()-interval '1 minute',now()+interval '1 day','00000000-0000-0000-0000-0000000003e8','00000000-0000-0000-0000-0000000003e9','APPROVED');
+INSERT INTO finance.reference_snapshot(tenant_id,company_id,id,source_system,external_version,source_digest,as_of,fresh_until,maker_id,state) VALUES
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001200','SYNAPI','FIXTURE1',decode(repeat('12',32),'hex'),now()-interval '1 minute',now()+interval '1 day','00000000-0000-0000-0000-0000000003e8','DRAFT');
 INSERT INTO finance.source_coverage(tenant_id,company_id,snapshot_id,resource_kind,complete,watermark) VALUES
 ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001200','CONTRACT',true,'FIXTURE'),
 ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001200','ADVANCE',true,'FIXTURE'),
@@ -31,6 +31,11 @@ INSERT INTO finance.financial_resource(tenant_id,company_id,id,currency,cap,cons
 ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001210','VND',1000000,100000,true,now()+interval '1 day','00000000-0000-0000-0000-000000001200','CONTRACT','["SYNAPI","CONTRACT-1"]'),
 ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001211','VND',500000,50000,true,now()+interval '1 day','00000000-0000-0000-0000-000000001200','ADVANCE','["SYNAPI","ADVANCE-1"]'),
 ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001212','VND',2000000,200000,true,now()+interval '1 day','00000000-0000-0000-0000-000000001200','BUDGET','["SYNAPI","CC1","ACC1"]');
+UPDATE finance.reference_snapshot
+SET state='APPROVED',checker_id='00000000-0000-0000-0000-0000000003e9'
+WHERE tenant_id='00000000-0000-0000-0000-000000000001'
+  AND company_id='00000000-0000-0000-0000-00000000000a'
+  AND id='00000000-0000-0000-0000-000000001200';
 
 -- One non-overlapping PUBLISHED policy for runtime read tests (SETTLEMENT only).
 INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,checker_id,state,effective_from,effective_until,source_digest,published_at) VALUES

@@ -363,9 +363,9 @@ pub async fn list(
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     allowed_read(&mut tx, proof).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let rows=sqlx::query_as::<_,Form>(&format!(
+    let rows=sqlx::query_as::<_,Form>(
         "SELECT id,policy_id,version,name,schema_hash,state FROM (SELECT DISTINCT ON(form_id) form_id AS id,policy_id,version,name,encode(sha256(convert_to(schema_json::text,'UTF8')),'hex') AS schema_hash,CASE WHEN state='REVOKED' THEN 'RETIRED' ELSE state END AS state FROM finance.form_version WHERE tenant_id=$1 AND company_id=$2 AND form_id>$3 ORDER BY form_id,version DESC) f ORDER BY id LIMIT $4"
-    )).bind(t).bind(c).bind(after).bind(limit).fetch_all(&mut *tx).await?;
+    ).bind(t).bind(c).bind(after).bind(limit).fetch_all(&mut *tx).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(rows)
