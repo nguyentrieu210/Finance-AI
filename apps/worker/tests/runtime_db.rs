@@ -48,7 +48,7 @@ printf '{"schema":"finance.export.receipt.v1","job_id":"%s","fence":%s,"artifact
             "FINANCE_WORKER_COMPANY_ID",
             "00000000-0000-0000-0000-00000000000a",
         )
-.env("FINANCE_WORKER_ID", "00000000-0000-0000-0000-000000006001")
+        .env("FINANCE_WORKER_ID", "00000000-0000-0000-0000-000000006001")
         .env("FINANCE_WORKER_LEASE_SECONDS", "30")
         .env("FINANCE_EXPORT_ADAPTER_TIMEOUT_SECONDS", "10")
         .env("FINANCE_EXPORT_ADAPTER", &adapter)
