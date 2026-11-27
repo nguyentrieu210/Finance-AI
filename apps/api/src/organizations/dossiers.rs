@@ -254,3 +254,83 @@ pub async fn list(
         Err(e) => error(status(e), correlation),
     }
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ChangeBody {
+    reason: String,
+    evidence_ids: Vec<Uuid>,
+}
+
+async fn change_dossier(
+    state: Arc<OrganizationState>,
+    headers: HeaderMap,
+    dossier: Uuid,
+    body: Result<Json<ChangeBody>, JsonRejection>,
+    change: draft::Change,
+) -> Response {
+    let correlation = random_id();
+    let Some(token) = headers
+        .get("if-finance-version")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| VersionToken::parse(s).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    if token.target != VersionTarget::Dossier || Uuid::from(token.resource_id) != dossier {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let proof = match authenticate_version(&state, &headers, correlation, Some(token.version)).await
+    {
+        Ok(proof) => proof,
+        Err(s) => return error(s, correlation),
+    };
+    let Some(key) = headers
+        .get("idempotency-key")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| IdempotencyKey::parse(s).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let input = draft::ChangeInput {
+        dossier,
+        revision: random_id(),
+        change,
+        reason: &body.reason,
+        evidence: &body.evidence_ids,
+    };
+    match draft::change(&state.runtime, &proof, &key, input).await {
+        Ok(row) => receipt(row, StatusCode::OK),
+        Err(e) => error(status(e), correlation),
+    }
+}
+
+pub(super) async fn revise(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(dossier): Path<Uuid>,
+    body: Result<Json<ChangeBody>, JsonRejection>,
+) -> Response {
+    change_dossier(state, headers, dossier, body, draft::Change::Revise).await
+}
+
+pub(super) async fn reopen(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(dossier): Path<Uuid>,
+    body: Result<Json<ChangeBody>, JsonRejection>,
+) -> Response {
+    change_dossier(state, headers, dossier, body, draft::Change::Reopen).await
+}
+
+pub(super) async fn cancel(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(dossier): Path<Uuid>,
+    body: Result<Json<ChangeBody>, JsonRejection>,
+) -> Response {
+    change_dossier(state, headers, dossier, body, draft::Change::Cancel).await
+}

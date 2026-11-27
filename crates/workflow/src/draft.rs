@@ -8,7 +8,7 @@ use finance_shared::{
     http_contract::IdempotencyKey,
     ids::{CompanyScope, ResourceScope},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -30,7 +30,7 @@ impl Kind {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, sqlx::FromRow)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, sqlx::FromRow)]
 pub struct Draft {
     pub id: Uuid,
     pub company_id: Uuid,
@@ -232,4 +232,145 @@ pub async fn list_filtered(
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(drafts)
+}
+
+#[derive(Clone, Copy)]
+pub enum Change {
+    Revise,
+    Reopen,
+    Cancel,
+}
+
+impl Change {
+    fn operation(self) -> &'static str {
+        match self {
+            Self::Revise => "dossier.revise",
+            Self::Reopen => "dossier.reopen",
+            Self::Cancel => "dossier.cancel",
+        }
+    }
+}
+
+pub struct ChangeInput<'a> {
+    pub dossier: Uuid,
+    pub revision: Uuid,
+    pub change: Change,
+    pub reason: &'a str,
+    pub evidence: &'a [Uuid],
+}
+
+pub async fn change(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    input: ChangeInput<'_>,
+) -> Result<Draft, Error> {
+    let expected = i64::from(
+        proof
+            .context()
+            .expected_version
+            .ok_or(Error::InvalidInput)?,
+    );
+    if input.dossier.is_nil()
+        || input.revision.is_nil()
+        || input.reason.trim().is_empty()
+        || input.reason.len() > 2048
+        || input.reason.chars().any(char::is_control)
+        || input.evidence.len() > 64
+        || input.evidence.iter().any(Uuid::is_nil)
+    {
+        return Err(Error::InvalidInput);
+    }
+    let mut evidence = input.evidence.to_vec();
+    evidence.sort();
+    evidence.dedup();
+    if evidence.len() != input.evidence.len() {
+        return Err(Error::InvalidInput);
+    }
+    let operation = input.change.operation();
+    let mut digest = Sha256::new();
+    digest.update(b"finance.dossier.change/v1");
+    digest.update(operation.as_bytes());
+    digest.update(input.dossier.as_bytes());
+    digest.update(expected.to_be_bytes());
+    digest.update((input.reason.len() as u64).to_be_bytes());
+    digest.update(input.reason.as_bytes());
+    for id in &evidence {
+        digest.update(id.as_bytes());
+    }
+    let hash = digest.finalize().to_vec();
+    let (t, c, a) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(grant_error)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
+        .bind(format!("{t}/{c}/{a}/{operation}/{}", key.as_str()))
+        .execute(&mut *tx)
+        .await?;
+    let owned: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM finance.dossier WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id=$4)",
+    ).bind(t).bind(c).bind(a).bind(input.dossier).fetch_one(&mut *tx).await?;
+    if !owned {
+        return Err(Error::Forbidden);
+    }
+    let prior: Option<(Vec<u8>, Uuid, String)> = sqlx::query_as(
+        "SELECT request_hash,result_id,(result_payload->'dossier')::text AS receipt FROM finance.idempotency_record WHERE tenant_id=$1 AND company_id=$2 AND actor_id=$3 AND operation_id=$4 AND key=$5",
+    ).bind(t).bind(c).bind(a).bind(operation).bind(key.as_str()).fetch_optional(&mut *tx).await?;
+    let row = if let Some((old, id, receipt)) = prior {
+        if old != hash || id != input.dossier {
+            return Err(Error::Conflict);
+        }
+        serde_json::from_str(&receipt).map_err(|_| Error::Conflict)?
+    } else {
+        let command: Uuid = proof.context().command.into();
+        let correlation: Uuid = proof.context().correlation.into();
+        sqlx::query("SELECT finance.workflow_change_dossier($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
+            .bind(t)
+            .bind(c)
+            .bind(a)
+            .bind(input.dossier)
+            .bind(expected)
+            .bind(operation)
+            .bind(input.revision)
+            .bind(input.reason)
+            .bind(&evidence)
+            .bind(command)
+            .bind(correlation)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_change_error)?;
+        let row = sqlx::query_as::<_, Draft>(&format!(
+            "{SELECT_DRAFT} WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id=$4"
+        ))
+        .bind(t)
+        .bind(c)
+        .bind(a)
+        .bind(input.dossier)
+        .fetch_one(&mut *tx)
+        .await?;
+        let payload = serde_json::json!({
+            "dossier": row,
+            "reason": input.reason,
+            "evidence_ids": evidence
+        })
+        .to_string();
+        sqlx::query("INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id,result_version,result_payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::text::jsonb)")
+            .bind(t).bind(c).bind(a).bind(operation).bind(key.as_str()).bind(hash)
+            .bind(input.dossier).bind(row.version).bind(payload).execute(&mut *tx).await?;
+        row
+    };
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(row)
+}
+
+fn map_change_error(error: sqlx::Error) -> Error {
+    if let sqlx::Error::Database(ref db) = error {
+        if matches!(db.code().as_deref(), Some("23514" | "23505")) {
+            return Error::Conflict;
+        }
+    }
+    Error::Database(error)
 }

@@ -1573,6 +1573,60 @@ async fn scoped_organization_http_real_database() {
                 .any(|item| item["id"].as_str() == Some(id))
         );
     }
+    let change_id = settlement["id"].as_str().unwrap();
+    let change_request = |op: &str, key: &str, version: u64, actor: &str| {
+        Request::builder()
+            .method("POST")
+            .uri(format!("/v1/dossiers/{change_id}/{op}"))
+            .header(header::AUTHORIZATION, format!("Bearer {actor}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header("idempotency-key", key)
+            .header("if-finance-version", format!("\"v1:dossier:{change_id}:{version}\""))
+            .body(Body::from(
+                json!({"reason":"Synthetic lifecycle test","evidence_ids":[]}).to_string(),
+            ))
+            .unwrap()
+    };
+    let denied = app
+        .clone()
+        .oneshot(change_request("revise", "revise-denied", 0, &other_requester))
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+    let invalid = app
+        .clone()
+        .oneshot(change_request("reopen", "reopen-draft", 0, &requester))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::CONFLICT);
+    let revised = app
+        .clone()
+        .oneshot(change_request("revise", "revise-settlement", 0, &requester))
+        .await
+        .unwrap();
+    assert_eq!(revised.status(), StatusCode::OK);
+    let body = to_bytes(revised.into_body(), 1024 * 1024).await.unwrap();
+    let revised: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(revised["version"], 1);
+    assert_eq!(revised["revision"], 1);
+    let cancelled = app
+        .clone()
+        .oneshot(change_request("cancel", "cancel-settlement", 1, &requester))
+        .await
+        .unwrap();
+    assert_eq!(cancelled.status(), StatusCode::OK);
+    let bytes = to_bytes(cancelled.into_body(), 1024 * 1024).await.unwrap();
+    let cancelled: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(cancelled["status"], "CANCELLED");
+    assert_eq!(cancelled["version"], 2);
+    let replay = app
+        .clone()
+        .oneshot(change_request("revise", "revise-settlement", 0, &requester))
+        .await
+        .unwrap();
+    assert_eq!(replay.status(), StatusCode::OK);
+    let bytes = to_bytes(replay.into_body(), 1024 * 1024).await.unwrap();
+    assert_eq!(serde_json::from_slice::<Value>(&bytes).unwrap(), revised);
     let (dashboard_status, dashboard) = request(&app, "/v1/dashboard", Some(&requester)).await;
     assert_eq!(dashboard_status, StatusCode::OK);
     let total = dashboard["items"]

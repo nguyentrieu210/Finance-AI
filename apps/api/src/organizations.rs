@@ -473,6 +473,18 @@ pub fn router(state: OrganizationState) -> Router {
         .route("/v1/dossiers", get(dossiers::list).post(dossiers::create))
         .route("/v1/dossiers/{dossier_id}", get(dossiers::get))
         .route(
+            "/v1/dossiers/{dossier_id}/revise",
+            axum::routing::post(dossiers::revise),
+        )
+        .route(
+            "/v1/dossiers/{dossier_id}/reopen",
+            axum::routing::post(dossiers::reopen),
+        )
+        .route(
+            "/v1/dossiers/{dossier_id}/cancel",
+            axum::routing::post(dossiers::cancel),
+        )
+        .route(
             "/v1/dossiers/{dossier_id}/documents",
             get(documents::list).post(documents::create),
         )
