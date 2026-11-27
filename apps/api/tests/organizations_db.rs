@@ -270,7 +270,11 @@ async fn scoped_organization_http_real_database() {
         &form_id,
         "form-revise",
         form_token.as_deref().unwrap(),
-        ("Synthetic payment form v2", fields.clone(), "Add stable source mapping"),
+        (
+            "Synthetic payment form v2",
+            fields.clone(),
+            "Add stable source mapping",
+        ),
     )
     .await;
     assert_eq!(revise_status, StatusCode::OK);
