@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
-pub mod repository;
 //! Synthetic-only domain prototype. No authorization, durable mutation or production claim.
+pub mod repository;
 use finance_shared::ids::{CompanyScope, ResourceId};
 
 pub struct Clause<'a> {
