@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import type { components } from '../../generated/api';
 import { DocumentIntents } from './DocumentIntents';
 import { Checks } from './Checks';
+import { VerifiedContracts } from '../contracts/VerifiedContracts';
+import { VerifiedAdvances } from '../advances/VerifiedAdvances';
+import { VerifiedBudgets } from '../budget/VerifiedBudgets';
 
 type Dossier = components['schemas']['Dossier'];
 type Kind = Dossier['kind'];
@@ -127,6 +130,7 @@ export function Drafts() {
       <button className="primary" disabled={!connected||busy||(!uncertain&&!/^[0-9a-f-]{36}$/i.test(company.trim()))} onClick={()=>void create()}>{uncertain?'Thử lại yêu cầu':'Tạo hồ sơ nháp'}</button>
     </div>
     <p role="status" aria-live="polite">{status}</p>
+    {connected&&<div className="reference-grid"><VerifiedContracts token={credential.current}/><VerifiedAdvances token={credential.current}/><VerifiedBudgets token={credential.current}/></div>}
     <div className="actions"><label htmlFor="filter-kind">Lọc loại hồ sơ</label><select id="filter-kind" value={filterKind} disabled={!connected||busy} onChange={e=>{setFilterKind(e.target.value as Kind | '');setCursor(undefined);setItems([]);setDetail(undefined);}}><option value="">Tất cả</option>{Object.entries(kinds).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select><button disabled={!connected||busy} onClick={()=>void list()}>Áp dụng bộ lọc</button></div>
     <div className="table-wrap"><table><thead><tr><th>Mã hồ sơ</th><th>Loại</th><th>Trạng thái</th><th>Phiên bản</th><th>Chi tiết</th></tr></thead>
       <tbody>{items.map(row=><tr key={row.id}><td>{row.code}</td><td>{kinds[row.kind]}</td><td>{row.status}</td><td>{row.version}</td><td><button disabled={busy} onClick={()=>void view(row.id)}>Xem</button></td></tr>)}</tbody></table></div>

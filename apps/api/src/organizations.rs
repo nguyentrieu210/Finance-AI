@@ -28,6 +28,7 @@ use uuid::Uuid;
 mod checks;
 mod documents;
 mod dossiers;
+mod references;
 
 type Hmac256 = Hmac<Sha256>;
 
@@ -270,6 +271,9 @@ pub fn router(state: OrganizationState) -> Router {
             get(documents::list).post(documents::create),
         )
         .route("/v1/dossiers/{dossier_id}/checks", get(checks::list))
+        .route("/v1/contracts", get(references::contracts))
+        .route("/v1/advances", get(references::advances))
+        .route("/v1/budgets", get(references::budgets))
         .layer(axum::extract::DefaultBodyLimit::max(8192))
         .with_state(Arc::new(state))
 }

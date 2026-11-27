@@ -432,8 +432,12 @@ dependencies = [
  "axum",
  "base64",
  "chrono",
+ "finance-advances",
+ "finance-budget",
+ "finance-contracts",
  "finance-core",
  "finance-documents",
+ "finance-financial",
  "finance-identity",
  "finance-organization",
  "finance-shared",
@@ -546,7 +550,13 @@ dependencies = [
 name = "finance-financial"
 version = "0.1.0"
 dependencies = [
+ "finance-core",
+ "finance-identity",
+ "finance-permissions",
  "finance-shared",
+ "serde",
+ "sqlx",
+ "uuid",
 ]
 
 [[package]]

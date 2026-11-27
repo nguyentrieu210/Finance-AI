@@ -142,6 +142,20 @@ async fn scoped_organization_http_real_database() {
         scope,
         [71; 32],
     ));
+    for (uri, kind) in [
+        ("/v1/contracts?limit=10", "CONTRACT"),
+        ("/v1/advances?limit=10", "ADVANCE"),
+        ("/v1/budgets?limit=10", "BUDGET"),
+    ] {
+        let (status, page) = request(&app, uri, Some(&requester)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(page["items"].as_array().unwrap().len(), 1);
+        assert_eq!(page["items"][0]["kind"], kind);
+        assert_eq!(page["items"][0]["coverage"], "COMPLETE");
+        assert_eq!(page["items"][0]["state"], "VERIFIED");
+        assert_eq!(request(&app, uri, Some(&auditor)).await.0, StatusCode::FORBIDDEN);
+        assert_eq!(request(&app, uri, None).await.0, StatusCode::UNAUTHORIZED);
+    }
     let uri = "/v1/organizations?limit=1";
     assert_eq!(request(&app, uri, None).await.0, StatusCode::UNAUTHORIZED);
     assert_eq!(

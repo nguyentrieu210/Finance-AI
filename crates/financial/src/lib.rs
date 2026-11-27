@@ -3,6 +3,7 @@
 use finance_shared::money::Money;
 
 pub mod payment;
+pub mod references;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
