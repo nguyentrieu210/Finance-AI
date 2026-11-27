@@ -4,7 +4,10 @@ use super::{
 };
 use axum::{
     Json,
-    extract::{Path, Query, State, rejection::{JsonRejection, QueryRejection}},
+    extract::{
+        Path, Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };

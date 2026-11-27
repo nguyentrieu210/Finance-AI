@@ -309,11 +309,7 @@ async fn list(
     response
 }
 
-fn stable_organization_id(
-    scope: CompanyScope,
-    actor: ActorId,
-    key: &IdempotencyKey,
-) -> Uuid {
+fn stable_organization_id(scope: CompanyScope, actor: ActorId, key: &IdempotencyKey) -> Uuid {
     let mut digest = Sha256::new();
     digest.update(b"finance.organization.http-id/v1");
     digest.update(Uuid::from(scope.tenant).as_bytes());

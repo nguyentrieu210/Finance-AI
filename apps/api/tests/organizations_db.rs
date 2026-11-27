@@ -241,9 +241,12 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(org_status, StatusCode::CREATED);
     assert_eq!(created_org["code"], "HTTP-ORG-CREATE");
     assert_eq!(created_org["active"], true);
-    assert!(org_version.as_deref().is_some_and(|value| value.ends_with(":0\"")));
-    let replay =
-        create_organization(&app, &token, "http-org-create", org_body.clone()).await;
+    assert!(
+        org_version
+            .as_deref()
+            .is_some_and(|value| value.ends_with(":0\""))
+    );
+    let replay = create_organization(&app, &token, "http-org-create", org_body.clone()).await;
     assert_eq!(replay.0, StatusCode::CREATED);
     assert_eq!(replay.1["id"], created_org["id"]);
     assert_eq!(replay.2, org_version);
