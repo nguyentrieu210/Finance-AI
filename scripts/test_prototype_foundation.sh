@@ -44,5 +44,14 @@ if [[ -n "${FINANCE_AUDIT_TEST_BIN:-}" ]]; then
 else
  FINANCE_PROTOTYPE_TEST_DATABASE_URL="$runtime_url" FINANCE_AUDIT_TEST_ADMIN_URL="$url" cargo test --locked -p finance-audit --test audit_db -- --ignored --exact scoped_audit_real_database
 fi
-unset url runtime_url worker_url
+identity_pw="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
+printf "CREATE ROLE finance_identity_test_login LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD '%s';\nGRANT finance_identity_lookup TO finance_identity_test_login;\n" "$identity_pw" | docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 >/dev/null
+identity_url="postgresql://finance_identity_test_login:$identity_pw@$port/finance_prototype?sslmode=disable"
+unset identity_pw
+if [[ -n "${FINANCE_IDENTITY_TEST_BIN:-}" ]]; then
+ FINANCE_IDENTITY_TEST_DATABASE_URL="$identity_url" FINANCE_AUDIT_TEST_ADMIN_URL="$url" "$FINANCE_IDENTITY_TEST_BIN" --ignored --exact tests::identity_real_database
+else
+ FINANCE_IDENTITY_TEST_DATABASE_URL="$identity_url" FINANCE_AUDIT_TEST_ADMIN_URL="$url" cargo test --locked -p finance-identity --lib -- --ignored --exact tests::identity_real_database
+fi
+unset url runtime_url worker_url identity_url
 echo 'PASS: real PostgreSQL synthetic prototype atomic command, replay, RLS and scoped FK'
