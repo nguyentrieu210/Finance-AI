@@ -688,6 +688,19 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(export_job["attempt"], 0);
     assert_eq!(export_job["progress"], 0);
     assert_eq!(export_receipt, ready_receipt);
+    let job_uri = format!("/v1/jobs/{}", export_job["id"].as_str().unwrap());
+    assert_eq!(
+        request(&app, &job_uri, Some(&requester)).await,
+        (StatusCode::OK, export_job.clone())
+    );
+    assert_eq!(
+        request(&app, &job_uri, Some(&other_requester)).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        request(&app, &job_uri, None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
     assert_eq!(
         create_export(
             &app,

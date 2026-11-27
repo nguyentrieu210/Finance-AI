@@ -142,3 +142,22 @@ BEGIN
 END $$;
 ROLLBACK;
 SELECT 'PASS: case-bound approver parent visibility';
+
+-- Job status must reflect the persisted fenced completion, not the initial HTTP receipt.
+BEGIN;
+SET LOCAL ROLE finance_runtime;
+SELECT set_config('finance.tenant_id','00000000-0000-0000-0000-000000000001',true),
+ set_config('finance.company_id','00000000-0000-0000-0000-00000000000a',true),
+ set_config('finance.actor_id','00000000-0000-0000-0000-0000000003e9',true);
+DO $$
+DECLARE t uuid:=finance.scope_tenant(); c uuid:=finance.scope_company(); a uuid:=finance.scope_actor(); j uuid;
+BEGIN
+ SELECT job_id INTO STRICT j FROM finance.package WHERE job_id IS NOT NULL;
+ IF NOT EXISTS(SELECT 1 FROM finance.runtime_job_status(t,c,a,j)
+   WHERE state='SUCCEEDED' AND progress=100 AND attempt>0)
+ THEN RAISE EXCEPTION 'job receipt does not reflect completion'; END IF;
+ IF has_table_privilege('finance_runtime','finance.job','SELECT')
+ THEN RAISE EXCEPTION 'runtime has raw job access'; END IF;
+END $$;
+ROLLBACK;
+SELECT 'PASS: scoped job receipt reflects fenced completion';

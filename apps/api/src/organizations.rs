@@ -34,6 +34,7 @@ mod exports;
 mod fields;
 mod forms;
 mod integration;
+mod jobs;
 mod knowledge;
 mod lifecycle;
 mod matches;
@@ -310,6 +311,7 @@ pub fn router(state: OrganizationState) -> Router {
             "/v1/dossiers/{dossier_id}/exports",
             axum::routing::post(exports::create),
         )
+        .route("/v1/jobs/{job_id}", get(jobs::get))
         .route("/v1/audit", get(audit::list))
         .route("/v1/dashboard", get(dashboard::get))
         .route("/__diagnostics/knowledge", get(knowledge::search))
