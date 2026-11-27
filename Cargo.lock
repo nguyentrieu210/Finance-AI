@@ -436,6 +436,7 @@ dependencies = [
  "chrono",
  "finance-advances",
  "finance-analytics",
+ "finance-audit",
  "finance-budget",
  "finance-contracts",
  "finance-core",

@@ -22,7 +22,7 @@ assert (root/'migrations'/f"{r['migration_baseline']}_foundation.sql").exists()
 created=set()
 for migration in (root/'migrations').glob('*.sql'):
     text=migration.read_text()
-    created.update(re.findall(r'CREATE TABLE\\s+finance\\.([a-z][a-z0-9_]*)',text))
+    created.update(re.findall(r'CREATE TABLE\s+finance\.([a-z][a-z0-9_]*)',text))
 assert created==set(tables), {
     'missing_ddl': sorted(set(tables)-created),
     'unregistered_ddl': sorted(created-set(tables)),
