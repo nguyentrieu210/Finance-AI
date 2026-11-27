@@ -14,5 +14,6 @@ finance-core = { path = "../core" }
 chrono.workspace = true
 finance-shared = { path = "../shared" }
 
-[dev-dependencies]
 uuid.workspace = true
+
+[dev-dependencies]
