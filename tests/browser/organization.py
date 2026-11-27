@@ -35,7 +35,7 @@ with sync_playwright() as p:
     initial_dossiers = page.locator("tbody tr").count()
     assert initial_dossiers >= 3
     page.get_by_label("UUID đơn vị sandbox").fill("00000000-0000-0000-0000-00000000000a")
-    page.get_by_label("Loại hồ sơ").select_option("SETTLEMENT")
+    page.get_by_label("Loại hồ sơ", exact=True).select_option("SETTLEMENT")
     page.get_by_role("button", name="Tạo hồ sơ nháp").click()
     expect(page.get_by_role("heading", name="Chi tiết hồ sơ")).to_be_visible()
     expect(page.locator("tbody tr")).to_have_count(initial_dossiers + 1)
