@@ -302,9 +302,17 @@ async fn scoped_organization_http_real_database() {
     let (_, form_page) = request(&app, "/v1/forms", Some(&policy_admin)).await;
     assert_eq!(form_page["items"].as_array().unwrap().len(), 1);
     assert_eq!(form_page["items"][0]["version"], 2);
-    assert_eq!(
-        request(&app, "/v1/forms", Some(&requester)).await.1["items"],
-        json!([])
+    let requester_forms = request(&app, "/v1/forms", Some(&requester)).await.1;
+    let requester_forms = requester_forms["items"].as_array().unwrap();
+    assert!(
+        requester_forms
+            .iter()
+            .all(|item| item["state"] == "PUBLISHED")
+    );
+    assert!(
+        requester_forms
+            .iter()
+            .all(|item| item["id"].as_str() != Some(form_id.as_str()))
     );
     let (template_status, template, template_token) = create_template(
         &app,
@@ -389,9 +397,17 @@ async fn scoped_organization_http_real_database() {
     let (_, template_page) = request(&app, "/v1/templates", Some(&policy_admin)).await;
     assert_eq!(template_page["items"].as_array().unwrap().len(), 1);
     assert_eq!(template_page["items"][0]["version"], 2);
-    assert_eq!(
-        request(&app, "/v1/templates", Some(&requester)).await.1["items"],
-        json!([])
+    let requester_templates = request(&app, "/v1/templates", Some(&requester)).await.1;
+    let requester_templates = requester_templates["items"].as_array().unwrap();
+    assert!(
+        requester_templates
+            .iter()
+            .all(|item| item["state"] == "PUBLISHED")
+    );
+    assert!(
+        requester_templates
+            .iter()
+            .all(|item| item["id"].as_str() != Some(template_id.as_str()))
     );
     let rule_definition = json!({"rule_id":"invoice_total_positive","version":1,"condition":{"op":"gt","args":[{"ref":"invoice.total"},{"literal":"0","value_type":"money","currency":"VND"}]},"severity":"BLOCK","waivable":false,"clause_id":"00000000-0000-0000-0000-000000001901"});
     let (rule_status, rule, rule_token) = create_rule(
@@ -406,6 +422,7 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(rule["version"], 1);
     assert_eq!(rule["severity"], "BLOCK");
     assert!(rule_token.is_some());
+    let created_rule_id = rule["id"].as_str().unwrap().to_owned();
     assert_eq!(
         create_rule(
             &app,
@@ -450,9 +467,17 @@ async fn scoped_organization_http_real_database() {
             .len(),
         1
     );
-    assert_eq!(
-        request(&app, "/v1/rules", Some(&requester)).await.1["items"],
-        json!([])
+    let requester_rules = request(&app, "/v1/rules", Some(&requester)).await.1;
+    let requester_rules = requester_rules["items"].as_array().unwrap();
+    assert!(
+        requester_rules
+            .iter()
+            .all(|item| item["state"] == "PUBLISHED")
+    );
+    assert!(
+        requester_rules
+            .iter()
+            .all(|item| item["id"].as_str() != Some(created_rule_id.as_str()))
     );
     let waiver_dossier = "00000000-0000-0000-0000-000000002120";
     let waiver_version = format!("\"v1:dossier:{waiver_dossier}:0\"");
