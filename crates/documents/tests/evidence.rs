@@ -45,10 +45,7 @@ fn normalized_rotation_and_bounds() {
     assert_eq!(r.rotate(Rotation::R90).rotate(Rotation::R270), r);
     assert_eq!(r.rotate(Rotation::R0), r);
     assert_eq!(Rect::new(0, 0, 0, 1), Err(Error::InvalidBounds));
-    assert_eq!(
-        Rect::new(0, 0, 1_000_001, 1),
-        Err(Error::InvalidBounds)
-    );
+    assert_eq!(Rect::new(0, 0, 1_000_001, 1), Err(Error::InvalidBounds));
     assert_eq!(Page::new(0, 1, r), Err(Error::InvalidPage));
     assert_eq!(Page::new(2, 1, r), Err(Error::InvalidPage));
     assert_eq!(Page::new(1, 201, r), Err(Error::InvalidPage));
@@ -72,13 +69,8 @@ fn evidence_is_bound_to_original_and_revision() {
     let source = original(10, 30, &digest);
     let page = Page::new(1, 2, Rect::new(0, 0, 10, 10).unwrap()).unwrap();
     let evidence_id = EvidenceId::try_from(id(50)).unwrap();
-    let evidence = Evidence::new(
-        evidence_id,
-        source,
-        Locator::Page(page),
-        "Tổng tiền: 123",
-    )
-    .unwrap();
+    let evidence =
+        Evidence::new(evidence_id, source, Locator::Page(page), "Tổng tiền: 123").unwrap();
     assert_eq!(evidence.id(), evidence_id);
     assert_eq!(evidence.excerpt(), "Tổng tiền: 123");
     assert_eq!(evidence.check_source(source), Ok(()));

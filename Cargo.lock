@@ -482,6 +482,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "finance-ocr"
+version = "0.1.0"
+dependencies = [
+ "finance-documents",
+ "finance-shared",
+ "uuid",
+]
+
+[[package]]
 name = "finance-organization"
 version = "0.1.0"
 dependencies = [

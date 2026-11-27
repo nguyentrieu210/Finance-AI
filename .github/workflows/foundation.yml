@@ -52,14 +52,19 @@ jobs:
         run: bash scripts/test_migration_baseline.sh
       - name: Prototype database integration
         run: bash scripts/test_prototype_foundation.sh
-      - name: Real S3 provider capability probe
-        timeout-minutes: 5
-        run: |
-          .venv/bin/pip install -r scripts/s3-probe-requirements.txt
-          bash scripts/test_s3_provider.sh
       - name: Real ClamAV synthetic scanner probe
         timeout-minutes: 5
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends clamav-daemon
           bash scripts/test_clamd_probe.sh
+  s3-capability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Real S3 provider capability probe
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -r scripts/s3-probe-requirements.txt
+          bash scripts/test_s3_provider.sh
