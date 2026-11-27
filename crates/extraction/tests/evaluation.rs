@@ -100,7 +100,8 @@ fn prompt_injection_text_remains_unverified_candidate_data() {
         None,
     )
     .unwrap();
-    let fields = extract(Kind::Invoice, &[page], Format::Vietnamese).unwrap();
+    let pages = [page];
+    let fields = extract(Kind::Invoice, &pages, Format::Vietnamese).unwrap();
     let supplier = fields
         .iter()
         .find(|field| field.field == Field::Supplier)
