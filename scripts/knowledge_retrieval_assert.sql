@@ -6,7 +6,7 @@ DECLARE t uuid:='00000000-0000-0000-0000-000000000001';c uuid:='00000000-0000-00
 BEGIN
  INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,effective_from,effective_until,source_digest)
  VALUES(t,c,p,'ADVANCE',maker,'2027-01-01','2028-01-01',h);
- INSERT INTO finance.policy_clause VALUES(t,c,p,cl,'K1','Synthetic advance required',h,1),(t,c,p,cl2,'Synthetic settlement receipt',h,2);
+ INSERT INTO finance.policy_clause VALUES(t,c,p,cl,'K1','Synthetic advance required',h,1),(t,c,p,cl2,'K2','Synthetic settlement receipt',h,2);
  INSERT INTO finance.checklist_item VALUES(t,c,p,gen_random_uuid(),cl,'ADVANCE_REQUEST',true);
  BEGIN
   PERFORM finance.prototype_index_clause(t,c,p,cl,first,0,0,26,m,'[1,0,0]'::finance.vector);
