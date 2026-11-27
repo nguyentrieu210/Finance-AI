@@ -469,6 +469,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "finance-organization"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "finance-core",
+ "finance-permissions",
+ "finance-shared",
+ "sha2",
+ "sqlx",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "finance-permissions"
 version = "0.1.0"
 dependencies = [

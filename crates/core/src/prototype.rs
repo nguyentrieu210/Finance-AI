@@ -84,7 +84,7 @@ fn hash_command(input: &CreateUnit<'_>) -> Vec<u8> {
     hash.finalize().to_vec()
 }
 /// This is an internal prototype operation, not an OpenAPI handler. Trusted context only.
-/// Hierarchy cycle updates, full ABAC and production roles are later work.
+/// Full ABAC and production roles are later work.
 pub async fn create_unit(
     pool: &PgPool,
     context: &CommandContext,
@@ -138,6 +138,11 @@ pub async fn create_unit(
         tx.commit().await?;
         return Ok(Receipt::Replayed(id));
     }
+    sqlx::query("SELECT finance.lock_org_tree($1,$2)")
+        .bind(tenant)
+        .bind(company)
+        .execute(&mut *tx)
+        .await?;
     sqlx::query("INSERT INTO finance.organization_unit(tenant_id,company_id,id,parent_id,code,name,kind) VALUES($1,$2,$3,$4,$5,$6,$7)")
         .bind(tenant).bind(company).bind(input.id).bind(input.parent).bind(input.code).bind(input.name).bind(input.kind.as_str()).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO finance.audit_event(tenant_id,company_id,id,actor_id,command_id,correlation_id,resource_id,action) VALUES($1,$2,$3,$4,$3,$5,$6,'ORG_UNIT_CREATED')")
