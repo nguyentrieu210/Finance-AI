@@ -954,7 +954,8 @@ async fn scoped_organization_http_real_database() {
     );
     let (_, updated) = request(&app, &dossier_uri, Some(&requester)).await;
     assert_eq!(updated["version"], 4);
-    let (_, documents) = request(&app, &doc_uri, Some(&requester)).await;
+    let (documents_status, documents) = request(&app, &doc_uri, Some(&requester)).await;
+    assert_eq!(documents_status, StatusCode::OK);
     assert_eq!(documents["items"].as_array().unwrap().len(), 4);
     assert_eq!(documents["items"][0]["state"], "PENDING_UPLOAD");
     assert_eq!(

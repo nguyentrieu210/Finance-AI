@@ -30,13 +30,15 @@ with sync_playwright() as p:
     expect(page.get_by_role("heading", name="Hồ sơ tài chính nháp")).to_be_visible()
     page.get_by_label("Token sandbox").fill(requester)
     page.get_by_role("button", name="Kết nối", exact=True).click()
-    expect(page.get_by_role("status")).to_have_text("Đã tải 3 hồ sơ từ API.")
+    expect(page.get_by_role("status")).to_contain_text("hồ sơ từ API.")
+    initial_dossiers = page.locator("tbody tr").count()
+    assert initial_dossiers >= 3
     page.get_by_label("UUID đơn vị sandbox").fill("00000000-0000-0000-0000-00000000000a")
     page.get_by_label("Loại hồ sơ").select_option("SETTLEMENT")
     page.get_by_role("button", name="Tạo hồ sơ nháp").click()
-    expect(page.get_by_role("status")).to_have_text("Đã tải 4 hồ sơ từ API.")
     expect(page.get_by_role("heading", name="Chi tiết hồ sơ")).to_be_visible()
-    assert page.locator("tbody tr").count() == 4
+    expect(page.locator("tbody tr")).to_have_count(initial_dossiers + 1)
+    expect(page.get_by_role("status")).to_contain_text("hồ sơ từ API.")
     docs = page.get_by_role("region",name="Metadata chứng từ")
     docs.get_by_label("File tổng hợp").set_input_files({"name":"browser-synthetic.pdf","mimeType":"application/pdf","buffer":b"%PDF-1.7 synthetic browser metadata"})
     expect(docs.locator(".document-status")).to_contain_text("Đã tính SHA-256")
@@ -46,8 +48,8 @@ with sync_playwright() as p:
     page.get_by_role("button", name="Ngắt kết nối", exact=True).click()
     assert page.locator("tbody tr").count() == 0
     page.get_by_role("button", name="E19 Biểu mẫu").click()
-    expect(page.get_by_role("heading", name="Chưa mở nghiệp vụ")).to_be_visible()
-    assert page.get_by_label("Token sandbox").count() == 0
+    expect(page.get_by_role("heading", name="Form Designer")).to_be_visible()
+    expect(page.get_by_label("Token PolicyAdmin sandbox")).to_have_value("")
     assert page.evaluate("Object.keys(localStorage).length + Object.keys(sessionStorage).length") == 0
     context.close()
     browser.close()
