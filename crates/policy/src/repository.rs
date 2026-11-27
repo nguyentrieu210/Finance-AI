@@ -122,9 +122,14 @@ pub async fn checklist(
     let rows = sqlx::query_as::<_, ChecklistItem>(
         "SELECT * FROM finance.runtime_checklist($1,$2,$3,$4,$5,$6)",
     )
-    .bind(t).bind(c).bind(a).bind(dossier).bind(after)
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(dossier)
+    .bind(after)
     .bind(i32::try_from(limit).map_err(|_| AppError::InvalidInput)?)
-    .fetch_all(&mut *tx).await?;
+    .fetch_all(&mut *tx)
+    .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(Some(rows))

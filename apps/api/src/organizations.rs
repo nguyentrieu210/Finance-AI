@@ -29,8 +29,8 @@ use std::{
 use uuid::Uuid;
 
 mod audit;
-mod checks;
 mod checklist;
+mod checks;
 mod dashboard;
 mod documents;
 mod dossiers;
@@ -476,10 +476,7 @@ pub fn router(state: OrganizationState) -> Router {
             get(documents::list).post(documents::create),
         )
         .route("/v1/dossiers/{dossier_id}/checks", get(checks::list))
-        .route(
-            "/v1/dossiers/{dossier_id}/checklist",
-            get(checklist::get),
-        )
+        .route("/v1/dossiers/{dossier_id}/checklist", get(checklist::get))
         .route("/v1/dossiers/{dossier_id}/fields", get(fields::list))
         .route(
             "/v1/dossiers/{dossier_id}/matches",

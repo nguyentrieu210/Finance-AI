@@ -47,7 +47,12 @@ pub(super) async fn get(
         return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
     };
     let key: [u8; 32] = Sha256::digest(
-        [b"finance.checklist.cursor/v1".as_slice(), &state.cursor_key, dossier.as_bytes()].concat(),
+        [
+            b"finance.checklist.cursor/v1".as_slice(),
+            &state.cursor_key,
+            dossier.as_bytes(),
+        ]
+        .concat(),
     )
     .into();
     let after = match query.cursor {
@@ -60,12 +65,16 @@ pub(super) async fn get(
     match repository::checklist(&state.runtime, &proof, dossier, after, limit).await {
         Ok(Some(items)) => {
             let next_cursor = if items.len() == limit as usize {
-                items.last().map(|row| encode_cursor(&key, state.scope, actor, row.id, time + 300))
+                items
+                    .last()
+                    .map(|row| encode_cursor(&key, state.scope, actor, row.id, time + 300))
             } else {
                 None
             };
             let mut response = Json(Page { items, next_cursor }).into_response();
-            response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
             response
         }
         Ok(None) => error(StatusCode::NOT_FOUND, correlation),
