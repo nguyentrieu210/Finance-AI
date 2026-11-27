@@ -203,7 +203,6 @@ pub async fn begin(
     .bind(key.as_str())
     .bind(hash)
     .bind(result)
-    .bind(version)
     .execute(&mut *tx)
     .await?;
     let receipt = accountant_dossier(&mut tx, t, c, dossier, a).await?;
@@ -321,7 +320,6 @@ pub async fn decide(
     .bind(key.as_str())
     .bind(hash)
     .bind(current.id)
-    .bind(version)
     .execute(&mut *tx)
     .await?;
     let row = sqlx::query_as::<_, Review>(
