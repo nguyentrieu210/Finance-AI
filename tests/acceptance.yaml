@@ -1,0 +1,646 @@
+- id: E01-AT01
+  requirement: E01-R01
+  scenario: VND/USD, khác currency, overflow, decimal serialization
+  expected: 'Invariant: Decimal chính xác, scale và currency/UOM rõ; reject overflow, không float; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E01-AT02
+  requirement: E01-R02
+  scenario: request thiếu actor, version conflict, clock frozen
+  expected: 'Invariant: CommandId, tenant/company, actor, expected version, correlation; UTC clock injectable; assert expected
+    positive behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E01-AT03
+  requirement: E01-R03
+  scenario: crash, lease expiry, duplicate delivery
+  expected: 'Invariant: Lease có fencing token, heartbeat, retry bounded, dead letter; worker stale không commit; assert expected
+    positive behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E01-AT04
+  requirement: E01-R04
+  scenario: rollback không mất event, replay khác payload 409
+  expected: 'Invariant: Transaction scope, idempotency, inbox/outbox atomic; retry conflict bounded; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E02-AT01
+  requirement: E02-R01
+  scenario: token hết hạn, sai issuer, rotated key
+  expected: 'Invariant: issuer/audience/algorithm/expiry/JWKS allowlist; fail closed; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E02-AT02
+  requirement: E02-R02
+  scenario: subject không có membership bị từ chối
+  expected: 'Invariant: mapping subject nội bộ, phiên và revoke; không tự gia nhập tenant; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E02-AT03
+  requirement: E02-R03
+  scenario: service không gọi approval
+  expected: 'Invariant: worker identity scoped, không impersonate approver; assert expected positive behavior and negative
+    rejection where applicable.'
+  layer: domain + integration
+- id: E02-AT04
+  requirement: E02-R04
+  scenario: phiên bị revoke không mutate
+  expected: 'Invariant: logout, revoke và refresh theo IdP; không lưu token trong localStorage; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E03-AT01
+  requirement: E03-R01
+  scenario: IDOR, cùng tenant khác company
+  expected: 'Invariant: RBAC + ABAC, company, ownership, assigned reviewer, deny by default; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E03-AT02
+  requirement: E03-R02
+  scenario: pool reuse không rò tenant
+  expected: 'Invariant: non-owner non-BYPASSRLS, FORCE RLS khi phù hợp, SET LOCAL trong transaction; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E03-AT03
+  requirement: E03-R03
+  scenario: dual-role self approval denied
+  expected: 'Invariant: người lập, người yêu cầu ngoại lệ không tự phê duyệt; actor độc lập; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E03-AT04
+  requirement: E03-R04
+  scenario: delegation hết hạn và stale browser
+  expected: 'Invariant: quyền có thời hạn, scope và revoke, kiểm tra tại command execution; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E04-AT01
+  requirement: E04-R01
+  scenario: cross-company FK reject
+  expected: 'Invariant: tenant/company/department/cost center, unique code và effective dates; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E04-AT02
+  requirement: E04-R02
+  scenario: privilege escalation denied
+  expected: 'Invariant: mời/gán/thu hồi role với audit, admin kỹ thuật không mặc định đọc hồ sơ; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E04-AT03
+  requirement: E04-R03
+  scenario: change timezone không sửa lịch sử
+  expected: 'Invariant: locale, timezone, currency, retention, provider egress policy versioned; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E04-AT04
+  requirement: E04-R04
+  scenario: disabled org cannot create dossier
+  expected: 'Invariant: cost center và company hợp lệ tại ngày nghiệp vụ; assert expected positive behavior and negative rejection
+    where applicable.'
+  layer: domain + integration
+- id: E05-AT01
+  requirement: E05-R01
+  scenario: polyglot, malware, oversized rejected
+  expected: 'Invariant: MIME sniff, SHA256, quarantine, AV, quotas và object key scoped; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E05-AT02
+  requirement: E05-R02
+  scenario: seal rồi thay file không sửa bản gốc
+  expected: 'Invariant: upload finalize xác nhận checksum; replace tạo ref/revision, không ghi đè; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E05-AT03
+  requirement: E05-R03
+  scenario: viewer mở đúng trang, cross-tenant denied
+  expected: 'Invariant: locator page/cell/bbox chuẩn tọa độ, hash original, excerpt; download scoped; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E05-AT04
+  requirement: E05-R04
+  scenario: legal hold không xóa, orphan cleanup
+  expected: 'Invariant: classify, supersede, retention hold và delete chỉ theo policy; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E06-AT01
+  requirement: E06-R01
+  scenario: malformed PDF và bomb timeout
+  expected: 'Invariant: PDF text layer và raster per page; sandbox, cap CPU/RAM/pages; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E06-AT02
+  requirement: E06-R02
+  scenario: scan nghiêng, chữ dấu, rotated page
+  expected: 'Invariant: PaddleOCR isolated; model/version, page bounding boxes, Vietnamese text; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E06-AT03
+  requirement: E06-R03
+  scenario: blur không tự xác nhận
+  expected: 'Invariant: điểm chất lượng ảnh và retry preprocessing; low quality human review; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E06-AT04
+  requirement: E06-R04
+  scenario: cache cross-tenant forbidden, model upgrade rerun
+  expected: 'Invariant: cache theo tenant/hash/model/config; stale job discard; assert expected positive behavior and negative
+    rejection where applicable.'
+  layer: domain + integration
+- id: E07-AT01
+  requirement: E07-R01
+  scenario: PDF chứa hợp đồng và phụ lục
+  expected: 'Invariant: kind candidates, unknown/ambiguous, user confirm; multi-doc split; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E07-AT02
+  requirement: E07-R02
+  scenario: table across pages
+  expected: 'Invariant: blocks, reading order, tables, merged cells, continuation pages; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E07-AT03
+  requirement: E07-R03
+  scenario: 1.234 vs 1,234 không đoán
+  expected: 'Invariant: giữ raw Unicode, dấu số, ngày, timezone; ambiguity explicit; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E07-AT04
+  requirement: E07-R04
+  scenario: missing table cell stays unknown
+  expected: 'Invariant: block IDs link original page; no invented cells; assert expected positive behavior and negative rejection
+    where applicable.'
+  layer: domain + integration
+- id: E08-AT01
+  requirement: E08-R01
+  scenario: unapproved provider blocked
+  expected: 'Invariant: approved provider/region, redaction, token cap, timeout, no tools; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E08-AT02
+  requirement: E08-R02
+  scenario: schema violation rejected
+  expected: 'Invariant: schema theo document kind, raw+normalized+evidence, model/prompt version; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E08-AT03
+  requirement: E08-R03
+  scenario: high confidence không auto verified
+  expected: 'Invariant: candidate, correction, verified separate; critical independent review; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E08-AT04
+  requirement: E08-R04
+  scenario: regression, injection text treated as data
+  expected: 'Invariant: golden corpus per field/kind, cost latency and false acceptance; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E09-AT01
+  requirement: E09-R01
+  scenario: invalid date, negative outside signed adjustment
+  expected: 'Invariant: required types, enum, date, checksum, decimal scale; assert expected positive behavior and negative
+    rejection where applicable.'
+  layer: domain + integration
+- id: E09-AT02
+  requirement: E09-R02
+  scenario: subtotal mismatch, stale reference
+  expected: 'Invariant: document-specific fields and totals, field provenance and freshness; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E09-AT03
+  requirement: E09-R03
+  scenario: missing beneficiary blocks
+  expected: 'Invariant: policy lists critical paths and required evidence; unknown not pass; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E09-AT04
+  requirement: E09-R04
+  scenario: late extraction does not overwrite revision
+  expected: 'Invariant: dependency graph from document/ref changes to checks/review; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E10-AT01
+  requirement: E10-R01
+  scenario: different issuer same invoice number not same identity
+  expected: 'Invariant: exact normalized invoice/vendor/contract identity; fuzzy suggestions only; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E10-AT02
+  requirement: E10-R02
+  scenario: split receipt, incompatible UOM
+  expected: 'Invariant: many-to-many allocation, UOM conversion approved, unmatched rows explicit; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E10-AT03
+  requirement: E10-R03
+  scenario: quantity mismatch, rounding boundary
+  expected: 'Invariant: line quantity, price, totals, tolerance pinned; no silent rounding; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E10-AT04
+  requirement: E10-R04
+  scenario: ambiguous match remains unknown
+  expected: 'Invariant: operands and evidence pairs, manual matching reason and reviewer; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E11-AT01
+  requirement: E11-R01
+  scenario: currency mix, tax rounding, signed adjustment
+  expected: 'Invariant: gross/net/tax/discount/retention/FX explicitly typed per policy; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E11-AT02
+  requirement: E11-R02
+  scenario: duplicate paid event, partial payment reversal
+  expected: 'Invariant: append-only effects, unique external transaction, reversal link; no double counting; assert expected
+    positive behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E11-AT03
+  requirement: E11-R03
+  scenario: two concurrent requests exceed cap; timeout no release
+  expected: 'Invariant: atomic lock order, idempotent reserve/commit/consume/release, reconcile uncertainty; assert expected
+    positive behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E11-AT04
+  requirement: E11-R04
+  scenario: missing history unknown, negative remaining flagged
+  expected: 'Invariant: cap min of applicable verified constraints; no negative balance silently clamped; assert expected
+    positive behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E12-AT01
+  requirement: E12-R01
+  scenario: future addendum not used
+  expected: 'Invariant: base/addendum effective range, approved adjustments, obligations; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E12-AT02
+  requirement: E12-R02
+  scenario: same goods received twice claim
+  expected: 'Invariant: receipt/acceptance lines and billed/paid allocations across dossiers; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E12-AT03
+  requirement: E12-R03
+  scenario: stale or incomplete snapshot unknown
+  expected: 'Invariant: immutable verified import, as_of, completeness; no live ERP assumption; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E12-AT04
+  requirement: E12-R04
+  scenario: partial installments, retention release policy
+  expected: 'Invariant: per contract/installment balances, retention and advance deduction; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E13-AT01
+  requirement: E13-R01
+  scenario: draft not counted as issued
+  expected: 'Invariant: purpose, due date, employee/vendor, amount, verified external issue; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E13-AT02
+  requirement: E13-R02
+  scenario: concurrent settlement against one advance
+  expected: 'Invariant: multiple advances, partial application, same currency unless approved FX; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E13-AT03
+  requirement: E13-R03
+  scenario: unverified refund not consumed
+  expected: 'Invariant: refund confirmed from source; extra payment separate reservation; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E13-AT04
+  requirement: E13-R04
+  scenario: timezone boundary and extension
+  expected: 'Invariant: as-of business date, extensions approved, overdue warning/block policy; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E14-AT01
+  requirement: E14-R01
+  scenario: wrong period or stale data
+  expected: 'Invariant: period, account/cost center, original/revised budget version; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E14-AT02
+  requirement: E14-R02
+  scenario: ERP actual already includes local commitment
+  expected: 'Invariant: budget reservation and actual reconciled using disjoint buckets; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E14-AT03
+  requirement: E14-R03
+  scenario: multi-resource reservation rollback
+  expected: 'Invariant: atomic all-or-none across relevant budgets and contracts; assert expected positive behavior and negative
+    rejection where applicable.'
+  layer: domain + integration
+- id: E14-AT04
+  requirement: E14-R04
+  scenario: nonwaivable cap blocked
+  expected: 'Invariant: budget override only if policy permits and authorized; assert expected positive behavior and negative
+    rejection where applicable.'
+  layer: domain + integration
+- id: E15-AT01
+  requirement: E15-R01
+  scenario: unknown operator or money currency mismatch
+  expected: 'Invariant: schema/type registry, bounded AST, no IO/LLM/code, version; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E15-AT02
+  requirement: E15-R02
+  scenario: unknown under NOT, short circuit evidence
+  expected: 'Invariant: PASS/FAIL/UNKNOWN/ERROR/NOT_APPLICABLE plus severity; tri-state semantics; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E15-AT03
+  requirement: E15-R03
+  scenario: draft rule not effective in live
+  expected: 'Invariant: run against approved anonymized historical snapshots; compare result distribution; assert expected
+    positive behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E15-AT04
+  requirement: E15-R04
+  scenario: expired waiver and changed snapshot block
+  expected: 'Invariant: version pinned, mandatory unknown blocks; waiver separate immutable record; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E16-AT01
+  requirement: E16-R01
+  scenario: overlap active scopes rejected
+  expected: 'Invariant: draft/review/publish/retire/revoke; maker-checker; immutable versions; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E16-AT02
+  requirement: E16-R02
+  scenario: unmapped rule cannot publish
+  expected: 'Invariant: rule/checklist/form/workflow links to approved source clause; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E16-AT03
+  requirement: E16-R03
+  scenario: ambiguous effective version
+  expected: 'Invariant: company + kind + effective business date, priority explicit; conflict blocks; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E16-AT04
+  requirement: E16-R04
+  scenario: revoked version blocks new submission
+  expected: 'Invariant: diff, affected dossiers, re-evaluate open revisions on required change; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E17-AT01
+  requirement: E17-R01
+  scenario: draft or revoked clause not retrieved for current advice
+  expected: 'Invariant: approved versioned clauses only, scoped chunk and embedding; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E17-AT02
+  requirement: E17-R02
+  scenario: cross-tenant retrieval forbidden
+  expected: 'Invariant: tenant/company/policy version filters, lexical+vector search; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E17-AT03
+  requirement: E17-R03
+  scenario: hallucinated citation not shown as verified
+  expected: 'Invariant: cite clause and evidence, distinguish guidance from decisions; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E17-AT04
+  requirement: E17-R04
+  scenario: prompt injection cannot publish
+  expected: 'Invariant: AI proposes diff or rule draft; no autonomous publish; assert expected positive behavior and negative
+    rejection where applicable.'
+  layer: domain + integration
+- id: E18-AT01
+  requirement: E18-R01
+  scenario: direct status PATCH denied
+  expected: 'Invariant: revision, state transitions and optimistic locking, ready seal; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E18-AT02
+  requirement: E18-R02
+  scenario: stale check run or failed reservation blocks
+  expected: 'Invariant: checklist, rule results, reservations, evidence and snapshot atomic; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E18-AT03
+  requirement: E18-R03
+  scenario: self review or missing confirmation denied
+  expected: 'Invariant: assign queue, critical confirmation, accept/return, SoD; assert expected positive behavior and negative
+    rejection where applicable.'
+  layer: domain + integration
+- id: E18-AT04
+  requirement: E18-R04
+  scenario: unknown DO cannot release reservations
+  expected: 'Invariant: waiver approval, expiry, manual handoff, unknown external status handling; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E19-AT01
+  requirement: E19-R01
+  scenario: invalid field dependency cycle
+  expected: 'Invariant: typed fields, condition, source path, required and display layout; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E19-AT02
+  requirement: E19-R02
+  scenario: hidden required policy inconsistency rejected
+  expected: 'Invariant: server validates field schema, dynamic visibility and required fields; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E19-AT03
+  requirement: E19-R03
+  scenario: old dossier opens correct form
+  expected: 'Invariant: published form pinned to revision, migration preview only; assert expected positive behavior and negative
+    rejection where applicable.'
+  layer: domain + integration
+- id: E19-AT04
+  requirement: E19-R04
+  scenario: draft not used on active dossier
+  expected: 'Invariant: admin preview, draft save, maker-checker publish via policy; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E20-AT01
+  requirement: E20-R01
+  scenario: malicious DOCX and unmapped placeholder rejected
+  expected: 'Invariant: version, mapping, sandbox, macros forbidden, approved fonts; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E20-AT02
+  requirement: E20-R02
+  scenario: Vietnamese fonts, multi-page table, conversion fail
+  expected: 'Invariant: Decimal formatting, tables, pagination, deterministic input manifest; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E20-AT03
+  requirement: E20-R03
+  scenario: same idempotency key returns same package
+  expected: 'Invariant: ordered PDF + originals index, evidence manifest, hashes, signed access; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E20-AT04
+  requirement: E20-R04
+  scenario: storage failure no EXPORTED
+  expected: 'Invariant: atomic success only after storage verify; retry cleanup and stale protection; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E21-AT01
+  requirement: E21-R01
+  scenario: LLM signal cannot auto approve or reject
+  expected: 'Invariant: duplicate/near match, vendor bank changes, anomalous amounts; advisory; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E21-AT02
+  requirement: E21-R02
+  scenario: unauthorized closure rejected
+  expected: 'Invariant: assign and resolve signal with reason, evidence, owner; assert expected positive behavior and negative
+    rejection where applicable.'
+  layer: domain + integration
+- id: E21-AT03
+  requirement: E21-R03
+  scenario: changed revision invalidates waiver
+  expected: 'Invariant: link immutable finding and approval, expiry/revocation; no override nonwaivable; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E21-AT04
+  requirement: E21-R04
+  scenario: unresolved blocking signal prevents ready
+  expected: 'Invariant: severity and routing by approved policy, no automatic transfer; assert expected positive behavior
+    and negative rejection where applicable.'
+  layer: domain + integration
+- id: E22-AT01
+  requirement: E22-R01
+  scenario: rollback leaves neither effect nor event
+  expected: 'Invariant: mutation event same transaction, actor, scope, correlation, revision, redacted diff; assert expected
+    positive behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E22-AT02
+  requirement: E22-R02
+  scenario: tamper detection and delete denied
+  expected: 'Invariant: append-only role, per-tenant sequence/hash chain, external checkpoint optional required prod; assert
+    expected positive behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E22-AT03
+  requirement: E22-R03
+  scenario: auditor cannot read other company
+  expected: 'Invariant: scoped auditor query and export, access event, no raw secret; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E22-AT04
+  requirement: E22-R04
+  scenario: restore integrity and retention conflict
+  expected: 'Invariant: legal hold and approved deletion with tombstone, backup restore verify chain; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E23-AT01
+  requirement: E23-R01
+  scenario: manual submitted not approved
+  expected: 'Invariant: reference import verified by maker-checker; manual handoff with receipt; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E23-AT02
+  requirement: E23-R02
+  scenario: timeout unknown, duplicate/out-of-order callback
+  expected: 'Invariant: capability discovery, external idempotency, status mapping, signed webhook or polling; assert expected
+    positive behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E23-AT03
+  requirement: E23-R03
+  scenario: duplicate transaction, stale import
+  expected: 'Invariant: read-only snapshots and settlement/payment events, freshness/completeness; assert expected positive
+    behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E23-AT04
+  requirement: E23-R04
+  scenario: lost ack and reversal, no auto-release
+  expected: 'Invariant: unknown external state queue, authoritative lookup, authorized correction; no transfer endpoint; assert
+    expected positive behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E24-AT01
+  requirement: E24-R01
+  scenario: returned/reopened case counted once
+  expected: 'Invariant: first-pass accepted, active time, rule coverage denominator and excluded unknown; assert expected
+    positive behavior and negative rejection where applicable.'
+  layer: domain + integration
+- id: E24-AT02
+  requirement: E24-R02
+  scenario: no cross-company aggregate leak
+  expected: 'Invariant: tenant/company filters, time zone, pagination, aggregates; assert expected positive behavior and negative
+    rejection where applicable.'
+  layer: domain + integration
+- id: E24-AT03
+  requirement: E24-R03
+  scenario: dead-letter alarm and unknown state
+  expected: 'Invariant: queue age, errors, cost, stale references and reservations; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: E24-AT04
+  requirement: E24-R04
+  scenario: CSV formula injection and unauthorized export
+  expected: 'Invariant: authorized report, masked PII, audit and reproducible filter; assert expected positive behavior and
+    negative rejection where applicable.'
+  layer: domain + integration
+- id: SYS-AT01
+  requirement: SYSTEM
+  scenario: Two parallel reservations 60/60 against cap 100
+  expected: Exactly one succeeds; remaining 40; one active hold; no orphan audit.
+  layer: system integration
+- id: SYS-AT02
+  requirement: SYSTEM
+  scenario: Three dossier types end-to-end
+  expected: Payment, advance, settlement each sealed, exported, manually handed off and independently reviewed with evidence.
+  layer: system integration
+- id: SYS-AT03
+  requirement: SYSTEM
+  scenario: Provider timeout or malicious instructions
+  expected: No PASS or approval; failed job visible, retry bounded.
+  layer: system integration
+- id: SYS-AT04
+  requirement: SYSTEM
+  scenario: DO lost acknowledgement
+  expected: UNKNOWN and hold remains; reconciliation does not duplicate submission.
+  layer: system integration
+- id: SYS-AT05
+  requirement: SYSTEM
+  scenario: ERP duplicate and partial reversal
+  expected: Unique effects, reversal bounded; source status reconciled.
+  layer: system integration
+- id: SYS-AT06
+  requirement: SYSTEM
+  scenario: Policy revoke after seal
+  expected: Old snapshot unchanged; new handoff blocked pending approved resolution.
+  layer: system integration
+- id: SYS-AT07
+  requirement: SYSTEM
+  scenario: Restore DB and object storage
+  expected: Manifest hashes and audit checkpoint verify; measure RPO/RTO.
+  layer: system integration
+- id: SYS-AT08
+  requirement: SYSTEM
+  scenario: Cross-tenant direct and indirect access
+  expected: API/DB/object/RAG/report deny, no data leakage.
+  layer: system integration
+- id: SYS-AT09
+  requirement: SYSTEM
+  scenario: Approved corpus evaluation
+  expected: Report per-field accuracy, false PASS blocker corpus, evidence accuracy, latency and cost; target gates reviewed.
+  layer: system integration
+- id: SYS-AT10
+  requirement: SYSTEM
+  scenario: Concurrent revise and export
+  expected: Old output not active; stale worker cannot change new revision.
+  layer: system integration
+- id: SYS-AT11
+  requirement: SYSTEM
+  scenario: Partial settlement plus confirmed refund
+  expected: No overlap; extra request separately controlled.
+  layer: system integration
+- id: SYS-AT12
+  requirement: SYSTEM
+  scenario: Same idempotency key with different payload
+  expected: 409 and no mutation.
+  layer: system integration
+- id: SYS-AT13
+  requirement: SYSTEM
+  scenario: Role revocation mid-session
+  expected: Next command denied; audit records attempted action.
+  layer: system integration
+- id: SYS-AT14
+  requirement: SYSTEM
+  scenario: Waiver expires before accept
+  expected: Accept blocked; original finding remains.
+  layer: system integration

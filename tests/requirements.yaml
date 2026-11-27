@@ -1,0 +1,480 @@
+- id: E01-R01
+  engine: E01
+  title: Money/Quantity
+  requirement: Decimal chính xác, scale và currency/UOM rõ; reject overflow, không float
+  test: E01-AT01
+- id: E01-R02
+  engine: E01
+  title: Command envelope
+  requirement: CommandId, tenant/company, actor, expected version, correlation; UTC clock injectable
+  test: E01-AT02
+- id: E01-R03
+  engine: E01
+  title: Durable jobs
+  requirement: Lease có fencing token, heartbeat, retry bounded, dead letter; worker stale không commit
+  test: E01-AT03
+- id: E01-R04
+  engine: E01
+  title: Transaction ports
+  requirement: Transaction scope, idempotency, inbox/outbox atomic; retry conflict bounded
+  test: E01-AT04
+- id: E02-R01
+  engine: E02
+  title: Token validation
+  requirement: issuer/audience/algorithm/expiry/JWKS allowlist; fail closed
+  test: E02-AT01
+- id: E02-R02
+  engine: E02
+  title: Membership
+  requirement: mapping subject nội bộ, phiên và revoke; không tự gia nhập tenant
+  test: E02-AT02
+- id: E02-R03
+  engine: E02
+  title: Service identity
+  requirement: worker identity scoped, không impersonate approver
+  test: E02-AT03
+- id: E02-R04
+  engine: E02
+  title: Session
+  requirement: logout, revoke và refresh theo IdP; không lưu token trong localStorage
+  test: E02-AT04
+- id: E03-R01
+  engine: E03
+  title: Resource access
+  requirement: RBAC + ABAC, company, ownership, assigned reviewer, deny by default
+  test: E03-AT01
+- id: E03-R02
+  engine: E03
+  title: RLS
+  requirement: non-owner non-BYPASSRLS, FORCE RLS khi phù hợp, SET LOCAL trong transaction
+  test: E03-AT02
+- id: E03-R03
+  engine: E03
+  title: SoD
+  requirement: người lập, người yêu cầu ngoại lệ không tự phê duyệt; actor độc lập
+  test: E03-AT03
+- id: E03-R04
+  engine: E03
+  title: Delegation
+  requirement: quyền có thời hạn, scope và revoke, kiểm tra tại command execution
+  test: E03-AT04
+- id: E04-R01
+  engine: E04
+  title: Hierarchy
+  requirement: tenant/company/department/cost center, unique code và effective dates
+  test: E04-AT01
+- id: E04-R02
+  engine: E04
+  title: Membership admin
+  requirement: mời/gán/thu hồi role với audit, admin kỹ thuật không mặc định đọc hồ sơ
+  test: E04-AT02
+- id: E04-R03
+  engine: E04
+  title: Company settings
+  requirement: locale, timezone, currency, retention, provider egress policy versioned
+  test: E04-AT03
+- id: E04-R04
+  engine: E04
+  title: Scope resolution
+  requirement: cost center và company hợp lệ tại ngày nghiệp vụ
+  test: E04-AT04
+- id: E05-R01
+  engine: E05
+  title: Upload
+  requirement: MIME sniff, SHA256, quarantine, AV, quotas và object key scoped
+  test: E05-AT01
+- id: E05-R02
+  engine: E05
+  title: Immutable originals
+  requirement: upload finalize xác nhận checksum; replace tạo ref/revision, không ghi đè
+  test: E05-AT02
+- id: E05-R03
+  engine: E05
+  title: Evidence
+  requirement: locator page/cell/bbox chuẩn tọa độ, hash original, excerpt; download scoped
+  test: E05-AT03
+- id: E05-R04
+  engine: E05
+  title: Lifecycle
+  requirement: classify, supersede, retention hold và delete chỉ theo policy
+  test: E05-AT04
+- id: E06-R01
+  engine: E06
+  title: Render
+  requirement: PDF text layer và raster per page; sandbox, cap CPU/RAM/pages
+  test: E06-AT01
+- id: E06-R02
+  engine: E06
+  title: OCR adapter
+  requirement: PaddleOCR isolated; model/version, page bounding boxes, Vietnamese text
+  test: E06-AT02
+- id: E06-R03
+  engine: E06
+  title: Quality
+  requirement: điểm chất lượng ảnh và retry preprocessing; low quality human review
+  test: E06-AT03
+- id: E06-R04
+  engine: E06
+  title: Caching
+  requirement: cache theo tenant/hash/model/config; stale job discard
+  test: E06-AT04
+- id: E07-R01
+  engine: E07
+  title: Classification
+  requirement: kind candidates, unknown/ambiguous, user confirm; multi-doc split
+  test: E07-AT01
+- id: E07-R02
+  engine: E07
+  title: Layout
+  requirement: blocks, reading order, tables, merged cells, continuation pages
+  test: E07-AT02
+- id: E07-R03
+  engine: E07
+  title: Normalization
+  requirement: giữ raw Unicode, dấu số, ngày, timezone; ambiguity explicit
+  test: E07-AT03
+- id: E07-R04
+  engine: E07
+  title: Provenance
+  requirement: block IDs link original page; no invented cells
+  test: E07-AT04
+- id: E08-R01
+  engine: E08
+  title: Provider policy
+  requirement: approved provider/region, redaction, token cap, timeout, no tools
+  test: E08-AT01
+- id: E08-R02
+  engine: E08
+  title: Typed candidates
+  requirement: schema theo document kind, raw+normalized+evidence, model/prompt version
+  test: E08-AT02
+- id: E08-R03
+  engine: E08
+  title: Verification
+  requirement: candidate, correction, verified separate; critical independent review
+  test: E08-AT03
+- id: E08-R04
+  engine: E08
+  title: Evaluation
+  requirement: golden corpus per field/kind, cost latency and false acceptance
+  test: E08-AT04
+- id: E09-R01
+  engine: E09
+  title: Schema validation
+  requirement: required types, enum, date, checksum, decimal scale
+  test: E09-AT01
+- id: E09-R02
+  engine: E09
+  title: Semantic validation
+  requirement: document-specific fields and totals, field provenance and freshness
+  test: E09-AT02
+- id: E09-R03
+  engine: E09
+  title: Critical field registry
+  requirement: policy lists critical paths and required evidence; unknown not pass
+  test: E09-AT03
+- id: E09-R04
+  engine: E09
+  title: Invalidation
+  requirement: dependency graph from document/ref changes to checks/review
+  test: E09-AT04
+- id: E10-R01
+  engine: E10
+  title: Identity match
+  requirement: exact normalized invoice/vendor/contract identity; fuzzy suggestions only
+  test: E10-AT01
+- id: E10-R02
+  engine: E10
+  title: Line match
+  requirement: many-to-many allocation, UOM conversion approved, unmatched rows explicit
+  test: E10-AT02
+- id: E10-R03
+  engine: E10
+  title: Reconciliation
+  requirement: line quantity, price, totals, tolerance pinned; no silent rounding
+  test: E10-AT03
+- id: E10-R04
+  engine: E10
+  title: Explain
+  requirement: operands and evidence pairs, manual matching reason and reviewer
+  test: E10-AT04
+- id: E11-R01
+  engine: E11
+  title: Money arithmetic
+  requirement: gross/net/tax/discount/retention/FX explicitly typed per policy
+  test: E11-AT01
+- id: E11-R02
+  engine: E11
+  title: Allocation ledger
+  requirement: append-only effects, unique external transaction, reversal link; no double counting
+  test: E11-AT02
+- id: E11-R03
+  engine: E11
+  title: Reservation
+  requirement: atomic lock order, idempotent reserve/commit/consume/release, reconcile uncertainty
+  test: E11-AT03
+- id: E11-R04
+  engine: E11
+  title: Payable calculation
+  requirement: cap min of applicable verified constraints; no negative balance silently clamped
+  test: E11-AT04
+- id: E12-R01
+  engine: E12
+  title: Contract versions
+  requirement: base/addendum effective range, approved adjustments, obligations
+  test: E12-AT01
+- id: E12-R02
+  engine: E12
+  title: Acceptance allocations
+  requirement: receipt/acceptance lines and billed/paid allocations across dossiers
+  test: E12-AT02
+- id: E12-R03
+  engine: E12
+  title: Reference provenance
+  requirement: immutable verified import, as_of, completeness; no live ERP assumption
+  test: E12-AT03
+- id: E12-R04
+  engine: E12
+  title: Outstanding
+  requirement: per contract/installment balances, retention and advance deduction
+  test: E12-AT04
+- id: E13-R01
+  engine: E13
+  title: Advance issuance
+  requirement: purpose, due date, employee/vendor, amount, verified external issue
+  test: E13-AT01
+- id: E13-R02
+  engine: E13
+  title: Settlement allocation
+  requirement: multiple advances, partial application, same currency unless approved FX
+  test: E13-AT02
+- id: E13-R03
+  engine: E13
+  title: Refund and extra
+  requirement: refund confirmed from source; extra payment separate reservation
+  test: E13-AT03
+- id: E13-R04
+  engine: E13
+  title: Overdue
+  requirement: as-of business date, extensions approved, overdue warning/block policy
+  test: E13-AT04
+- id: E14-R01
+  engine: E14
+  title: Budget references
+  requirement: period, account/cost center, original/revised budget version
+  test: E14-AT01
+- id: E14-R02
+  engine: E14
+  title: Commitments
+  requirement: budget reservation and actual reconciled using disjoint buckets
+  test: E14-AT02
+- id: E14-R03
+  engine: E14
+  title: Cap
+  requirement: atomic all-or-none across relevant budgets and contracts
+  test: E14-AT03
+- id: E14-R04
+  engine: E14
+  title: Exceptions
+  requirement: budget override only if policy permits and authorized
+  test: E14-AT04
+- id: E15-R01
+  engine: E15
+  title: Compiler
+  requirement: schema/type registry, bounded AST, no IO/LLM/code, version
+  test: E15-AT01
+- id: E15-R02
+  engine: E15
+  title: Evaluator
+  requirement: PASS/FAIL/UNKNOWN/ERROR/NOT_APPLICABLE plus severity; tri-state semantics
+  test: E15-AT02
+- id: E15-R03
+  engine: E15
+  title: Simulator
+  requirement: run against approved anonymized historical snapshots; compare result distribution
+  test: E15-AT03
+- id: E15-R04
+  engine: E15
+  title: Gate
+  requirement: version pinned, mandatory unknown blocks; waiver separate immutable record
+  test: E15-AT04
+- id: E16-R01
+  engine: E16
+  title: Policy lifecycle
+  requirement: draft/review/publish/retire/revoke; maker-checker; immutable versions
+  test: E16-AT01
+- id: E16-R02
+  engine: E16
+  title: Clause mapping
+  requirement: rule/checklist/form/workflow links to approved source clause
+  test: E16-AT02
+- id: E16-R03
+  engine: E16
+  title: Effective resolution
+  requirement: company + kind + effective business date, priority explicit; conflict blocks
+  test: E16-AT03
+- id: E16-R04
+  engine: E16
+  title: Impact
+  requirement: diff, affected dossiers, re-evaluate open revisions on required change
+  test: E16-AT04
+- id: E17-R01
+  engine: E17
+  title: Ingestion
+  requirement: approved versioned clauses only, scoped chunk and embedding
+  test: E17-AT01
+- id: E17-R02
+  engine: E17
+  title: Retrieval
+  requirement: tenant/company/policy version filters, lexical+vector search
+  test: E17-AT02
+- id: E17-R03
+  engine: E17
+  title: Explanation
+  requirement: cite clause and evidence, distinguish guidance from decisions
+  test: E17-AT03
+- id: E17-R04
+  engine: E17
+  title: Change proposal
+  requirement: AI proposes diff or rule draft; no autonomous publish
+  test: E17-AT04
+- id: E18-R01
+  engine: E18
+  title: Dossier lifecycle
+  requirement: revision, state transitions and optimistic locking, ready seal
+  test: E18-AT01
+- id: E18-R02
+  engine: E18
+  title: Preflight
+  requirement: checklist, rule results, reservations, evidence and snapshot atomic
+  test: E18-AT02
+- id: E18-R03
+  engine: E18
+  title: Review
+  requirement: assign queue, critical confirmation, accept/return, SoD
+  test: E18-AT03
+- id: E18-R04
+  engine: E18
+  title: Exception/handoff
+  requirement: waiver approval, expiry, manual handoff, unknown external status handling
+  test: E18-AT04
+- id: E19-R01
+  engine: E19
+  title: Form schema
+  requirement: typed fields, condition, source path, required and display layout
+  test: E19-AT01
+- id: E19-R02
+  engine: E19
+  title: Validation
+  requirement: server validates field schema, dynamic visibility and required fields
+  test: E19-AT02
+- id: E19-R03
+  engine: E19
+  title: Versioning
+  requirement: published form pinned to revision, migration preview only
+  test: E19-AT03
+- id: E19-R04
+  engine: E19
+  title: Designer
+  requirement: admin preview, draft save, maker-checker publish via policy
+  test: E19-AT04
+- id: E20-R01
+  engine: E20
+  title: Template registry
+  requirement: version, mapping, sandbox, macros forbidden, approved fonts
+  test: E20-AT01
+- id: E20-R02
+  engine: E20
+  title: Render
+  requirement: Decimal formatting, tables, pagination, deterministic input manifest
+  test: E20-AT02
+- id: E20-R03
+  engine: E20
+  title: Package
+  requirement: ordered PDF + originals index, evidence manifest, hashes, signed access
+  test: E20-AT03
+- id: E20-R04
+  engine: E20
+  title: Export job
+  requirement: atomic success only after storage verify; retry cleanup and stale protection
+  test: E20-AT04
+- id: E21-R01
+  engine: E21
+  title: Signals
+  requirement: duplicate/near match, vendor bank changes, anomalous amounts; advisory
+  test: E21-AT01
+- id: E21-R02
+  engine: E21
+  title: Case review
+  requirement: assign and resolve signal with reason, evidence, owner
+  test: E21-AT02
+- id: E21-R03
+  engine: E21
+  title: Waiver tracking
+  requirement: link immutable finding and approval, expiry/revocation; no override nonwaivable
+  test: E21-AT03
+- id: E21-R04
+  engine: E21
+  title: Escalation
+  requirement: severity and routing by approved policy, no automatic transfer
+  test: E21-AT04
+- id: E22-R01
+  engine: E22
+  title: Atomic events
+  requirement: mutation event same transaction, actor, scope, correlation, revision, redacted diff
+  test: E22-AT01
+- id: E22-R02
+  engine: E22
+  title: Tamper evidence
+  requirement: append-only role, per-tenant sequence/hash chain, external checkpoint optional required prod
+  test: E22-AT02
+- id: E22-R03
+  engine: E22
+  title: Read/export
+  requirement: scoped auditor query and export, access event, no raw secret
+  test: E22-AT03
+- id: E22-R04
+  engine: E22
+  title: Retention
+  requirement: legal hold and approved deletion with tombstone, backup restore verify chain
+  test: E22-AT04
+- id: E23-R01
+  engine: E23
+  title: Manual bridge
+  requirement: reference import verified by maker-checker; manual handoff with receipt
+  test: E23-AT01
+- id: E23-R02
+  engine: E23
+  title: DO adapter
+  requirement: capability discovery, external idempotency, status mapping, signed webhook or polling
+  test: E23-AT02
+- id: E23-R03
+  engine: E23
+  title: ERP adapter
+  requirement: read-only snapshots and settlement/payment events, freshness/completeness
+  test: E23-AT03
+- id: E23-R04
+  engine: E23
+  title: Reconciliation
+  requirement: unknown external state queue, authoritative lookup, authorized correction; no transfer endpoint
+  test: E23-AT04
+- id: E24-R01
+  engine: E24
+  title: KPI definitions
+  requirement: first-pass accepted, active time, rule coverage denominator and excluded unknown
+  test: E24-AT01
+- id: E24-R02
+  engine: E24
+  title: Scoped queries
+  requirement: tenant/company filters, time zone, pagination, aggregates
+  test: E24-AT02
+- id: E24-R03
+  engine: E24
+  title: Operational dashboards
+  requirement: queue age, errors, cost, stale references and reservations
+  test: E24-AT03
+- id: E24-R04
+  engine: E24
+  title: Export
+  requirement: authorized report, masked PII, audit and reproducible filter
+  test: E24-AT04

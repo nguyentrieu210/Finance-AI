@@ -1,0 +1,2051 @@
+- id: G00
+  owner: A00
+  title: Bootstrap workspace, pinned tooling, CI baseline
+  depends: []
+  paths:
+  - Cargo.toml
+  - apps/web
+  - infra
+  - .github
+  evidence: cargo build, frontend build, CI run
+  requirements: []
+  gate: pilot
+- id: G01
+  owner: A00
+  title: Freeze shared types, API draft, schema/migration registry, auth/audit ports and ADRs
+  depends:
+  - G00
+  paths:
+  - contracts
+  - crates/shared
+  - migrations
+  evidence: reviewed contracts, OpenAPI lint, typed client generation, migration baseline
+  requirements: []
+  gate: pilot
+- id: E01-01
+  owner: A01
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/core
+  evidence: approved interface and test design
+  requirements: &id001
+  - E01-R01
+  - E01-R02
+  - E01-R03
+  - E01-R04
+  gate: pilot
+- id: E01-02
+  owner: A01
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E01-01
+  paths:
+  - crates/core
+  evidence: domain tests for each requirement
+  requirements: *id001
+  gate: pilot
+- id: E01-03
+  owner: A01
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E01-02
+  paths:
+  - crates/core
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id001
+  gate: pilot
+- id: E01-04
+  owner: A01
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E01-03
+  paths:
+  - crates/core
+  - apps/api/routes/core
+  - apps/worker/handlers/core
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id001
+  gate: pilot
+- id: E01-05
+  owner: A01
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E01-01
+  paths:
+  - apps/web/src/features/core
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id001
+  gate: pilot
+- id: E01-06
+  owner: A01
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E01-04
+  - E01-05
+  paths:
+  - crates/core
+  - tests/core
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id001
+  gate: pilot
+- id: E02-01
+  owner: A02
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/identity
+  evidence: approved interface and test design
+  requirements: &id002
+  - E02-R01
+  - E02-R02
+  - E02-R03
+  - E02-R04
+  gate: pilot
+- id: E02-02
+  owner: A02
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E02-01
+  - E01-01
+  paths:
+  - crates/identity
+  evidence: domain tests for each requirement
+  requirements: *id002
+  gate: pilot
+- id: E02-03
+  owner: A02
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E02-02
+  - E01-02
+  paths:
+  - crates/identity
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id002
+  gate: pilot
+- id: E02-04
+  owner: A02
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E02-03
+  - E01-03
+  paths:
+  - crates/identity
+  - apps/api/routes/identity
+  - apps/worker/handlers/identity
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id002
+  gate: pilot
+- id: E02-05
+  owner: A02
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E02-01
+  paths:
+  - apps/web/src/features/identity
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id002
+  gate: pilot
+- id: E02-06
+  owner: A02
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E02-04
+  - E02-05
+  - E01-04
+  paths:
+  - crates/identity
+  - tests/identity
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id002
+  gate: pilot
+- id: E03-01
+  owner: A03
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/permissions
+  evidence: approved interface and test design
+  requirements: &id003
+  - E03-R01
+  - E03-R02
+  - E03-R03
+  - E03-R04
+  gate: pilot
+- id: E03-02
+  owner: A03
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E03-01
+  - E01-01
+  - E02-01
+  paths:
+  - crates/permissions
+  evidence: domain tests for each requirement
+  requirements: *id003
+  gate: pilot
+- id: E03-03
+  owner: A03
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E03-02
+  - E01-02
+  - E02-02
+  paths:
+  - crates/permissions
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id003
+  gate: pilot
+- id: E03-04
+  owner: A03
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E03-03
+  - E01-03
+  - E02-03
+  paths:
+  - crates/permissions
+  - apps/api/routes/permissions
+  - apps/worker/handlers/permissions
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id003
+  gate: pilot
+- id: E03-05
+  owner: A03
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E03-01
+  paths:
+  - apps/web/src/features/permissions
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id003
+  gate: pilot
+- id: E03-06
+  owner: A03
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E03-04
+  - E03-05
+  - E01-04
+  - E02-04
+  paths:
+  - crates/permissions
+  - tests/permissions
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id003
+  gate: pilot
+- id: E04-01
+  owner: A04
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/organization
+  evidence: approved interface and test design
+  requirements: &id004
+  - E04-R01
+  - E04-R02
+  - E04-R03
+  - E04-R04
+  gate: pilot
+- id: E04-02
+  owner: A04
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E04-01
+  - E01-01
+  - E03-01
+  paths:
+  - crates/organization
+  evidence: domain tests for each requirement
+  requirements: *id004
+  gate: pilot
+- id: E04-03
+  owner: A04
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E04-02
+  - E01-02
+  - E03-02
+  paths:
+  - crates/organization
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id004
+  gate: pilot
+- id: E04-04
+  owner: A04
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E04-03
+  - E01-03
+  - E03-03
+  - E22-03
+  paths:
+  - crates/organization
+  - apps/api/routes/organization
+  - apps/worker/handlers/organization
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id004
+  gate: pilot
+- id: E04-05
+  owner: A04
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E04-01
+  paths:
+  - apps/web/src/features/organization
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id004
+  gate: pilot
+- id: E04-06
+  owner: A04
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E04-04
+  - E04-05
+  - E01-04
+  - E03-04
+  paths:
+  - crates/organization
+  - tests/organization
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id004
+  gate: pilot
+- id: E05-01
+  owner: A05
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/documents
+  evidence: approved interface and test design
+  requirements: &id005
+  - E05-R01
+  - E05-R02
+  - E05-R03
+  - E05-R04
+  gate: pilot
+- id: E05-02
+  owner: A05
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E05-01
+  - E01-01
+  - E03-01
+  - E22-01
+  paths:
+  - crates/documents
+  evidence: domain tests for each requirement
+  requirements: *id005
+  gate: pilot
+- id: E05-03
+  owner: A05
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E05-02
+  - E01-02
+  - E03-02
+  - E22-02
+  paths:
+  - crates/documents
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id005
+  gate: pilot
+- id: E05-04
+  owner: A05
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E05-03
+  - E01-03
+  - E03-03
+  - E22-03
+  paths:
+  - crates/documents
+  - apps/api/routes/documents
+  - apps/worker/handlers/documents
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id005
+  gate: pilot
+- id: E05-05
+  owner: A05
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E05-01
+  paths:
+  - apps/web/src/features/documents
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id005
+  gate: pilot
+- id: E05-06
+  owner: A05
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E05-04
+  - E05-05
+  - E01-04
+  - E03-04
+  - E22-04
+  paths:
+  - crates/documents
+  - tests/documents
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id005
+  gate: pilot
+- id: E06-01
+  owner: A06
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/ocr
+  evidence: approved interface and test design
+  requirements: &id006
+  - E06-R01
+  - E06-R02
+  - E06-R03
+  - E06-R04
+  gate: pilot
+- id: E06-02
+  owner: A06
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E06-01
+  - E01-01
+  - E05-01
+  paths:
+  - crates/ocr
+  evidence: domain tests for each requirement
+  requirements: *id006
+  gate: pilot
+- id: E06-03
+  owner: A06
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E06-02
+  - E01-02
+  - E05-02
+  paths:
+  - crates/ocr
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id006
+  gate: pilot
+- id: E06-04
+  owner: A06
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E06-03
+  - E01-03
+  - E05-03
+  - E03-03
+  - E22-03
+  paths:
+  - crates/ocr
+  - apps/api/routes/ocr
+  - apps/worker/handlers/ocr
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id006
+  gate: pilot
+- id: E06-05
+  owner: A06
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E06-01
+  paths:
+  - apps/web/src/features/ocr
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id006
+  gate: pilot
+- id: E06-06
+  owner: A06
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E06-04
+  - E06-05
+  - E01-04
+  - E05-04
+  paths:
+  - crates/ocr
+  - tests/ocr
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id006
+  gate: pilot
+- id: E07-01
+  owner: A07
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/document-intelligence
+  evidence: approved interface and test design
+  requirements: &id007
+  - E07-R01
+  - E07-R02
+  - E07-R03
+  - E07-R04
+  gate: pilot
+- id: E07-02
+  owner: A07
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E07-01
+  - E01-01
+  - E06-01
+  paths:
+  - crates/document-intelligence
+  evidence: domain tests for each requirement
+  requirements: *id007
+  gate: pilot
+- id: E07-03
+  owner: A07
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E07-02
+  - E01-02
+  - E06-02
+  paths:
+  - crates/document-intelligence
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id007
+  gate: pilot
+- id: E07-04
+  owner: A07
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E07-03
+  - E01-03
+  - E06-03
+  - E03-03
+  - E22-03
+  paths:
+  - crates/document-intelligence
+  - apps/api/routes/document-intelligence
+  - apps/worker/handlers/document-intelligence
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id007
+  gate: pilot
+- id: E07-05
+  owner: A07
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E07-01
+  paths:
+  - apps/web/src/features/document-intelligence
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id007
+  gate: pilot
+- id: E07-06
+  owner: A07
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E07-04
+  - E07-05
+  - E01-04
+  - E06-04
+  paths:
+  - crates/document-intelligence
+  - tests/document-intelligence
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id007
+  gate: pilot
+- id: E08-01
+  owner: A08
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/extraction
+  evidence: approved interface and test design
+  requirements: &id008
+  - E08-R01
+  - E08-R02
+  - E08-R03
+  - E08-R04
+  gate: pilot
+- id: E08-02
+  owner: A08
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E08-01
+  - E01-01
+  - E07-01
+  - E22-01
+  paths:
+  - crates/extraction
+  evidence: domain tests for each requirement
+  requirements: *id008
+  gate: pilot
+- id: E08-03
+  owner: A08
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E08-02
+  - E01-02
+  - E07-02
+  - E22-02
+  paths:
+  - crates/extraction
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id008
+  gate: pilot
+- id: E08-04
+  owner: A08
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E08-03
+  - E01-03
+  - E07-03
+  - E22-03
+  - E03-03
+  paths:
+  - crates/extraction
+  - apps/api/routes/extraction
+  - apps/worker/handlers/extraction
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id008
+  gate: pilot
+- id: E08-05
+  owner: A08
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E08-01
+  paths:
+  - apps/web/src/features/extraction
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id008
+  gate: pilot
+- id: E08-06
+  owner: A08
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E08-04
+  - E08-05
+  - E01-04
+  - E07-04
+  - E22-04
+  paths:
+  - crates/extraction
+  - tests/extraction
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id008
+  gate: pilot
+- id: E09-01
+  owner: A09
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/validation
+  evidence: approved interface and test design
+  requirements: &id009
+  - E09-R01
+  - E09-R02
+  - E09-R03
+  - E09-R04
+  gate: pilot
+- id: E09-02
+  owner: A09
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E09-01
+  - E01-01
+  - E08-01
+  paths:
+  - crates/validation
+  evidence: domain tests for each requirement
+  requirements: *id009
+  gate: pilot
+- id: E09-03
+  owner: A09
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E09-02
+  - E01-02
+  - E08-02
+  paths:
+  - crates/validation
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id009
+  gate: pilot
+- id: E09-04
+  owner: A09
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E09-03
+  - E01-03
+  - E08-03
+  - E03-03
+  - E22-03
+  paths:
+  - crates/validation
+  - apps/api/routes/validation
+  - apps/worker/handlers/validation
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id009
+  gate: pilot
+- id: E09-05
+  owner: A09
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E09-01
+  paths:
+  - apps/web/src/features/validation
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id009
+  gate: pilot
+- id: E09-06
+  owner: A09
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E09-04
+  - E09-05
+  - E01-04
+  - E08-04
+  paths:
+  - crates/validation
+  - tests/validation
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id009
+  gate: pilot
+- id: E10-01
+  owner: A10
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/matching
+  evidence: approved interface and test design
+  requirements: &id010
+  - E10-R01
+  - E10-R02
+  - E10-R03
+  - E10-R04
+  gate: pilot
+- id: E10-02
+  owner: A10
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E10-01
+  - E01-01
+  - E09-01
+  paths:
+  - crates/matching
+  evidence: domain tests for each requirement
+  requirements: *id010
+  gate: pilot
+- id: E10-03
+  owner: A10
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E10-02
+  - E01-02
+  - E09-02
+  paths:
+  - crates/matching
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id010
+  gate: pilot
+- id: E10-04
+  owner: A10
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E10-03
+  - E01-03
+  - E09-03
+  - E03-03
+  - E22-03
+  paths:
+  - crates/matching
+  - apps/api/routes/matching
+  - apps/worker/handlers/matching
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id010
+  gate: pilot
+- id: E10-05
+  owner: A10
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E10-01
+  paths:
+  - apps/web/src/features/matching
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id010
+  gate: pilot
+- id: E10-06
+  owner: A10
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E10-04
+  - E10-05
+  - E01-04
+  - E09-04
+  paths:
+  - crates/matching
+  - tests/matching
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id010
+  gate: pilot
+- id: E11-01
+  owner: A11
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/financial
+  evidence: approved interface and test design
+  requirements: &id011
+  - E11-R01
+  - E11-R02
+  - E11-R03
+  - E11-R04
+  gate: pilot
+- id: E11-02
+  owner: A11
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E11-01
+  - E01-01
+  - E22-01
+  paths:
+  - crates/financial
+  evidence: domain tests for each requirement
+  requirements: *id011
+  gate: pilot
+- id: E11-03
+  owner: A11
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E11-02
+  - E01-02
+  - E22-02
+  paths:
+  - crates/financial
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id011
+  gate: pilot
+- id: E11-04
+  owner: A11
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E11-03
+  - E01-03
+  - E22-03
+  - E03-03
+  paths:
+  - crates/financial
+  - apps/api/routes/financial
+  - apps/worker/handlers/financial
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id011
+  gate: pilot
+- id: E11-05
+  owner: A11
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E11-01
+  paths:
+  - apps/web/src/features/financial
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id011
+  gate: pilot
+- id: E11-06
+  owner: A11
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E11-04
+  - E11-05
+  - E01-04
+  - E22-04
+  paths:
+  - crates/financial
+  - tests/financial
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id011
+  gate: pilot
+- id: E12-01
+  owner: A12
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/contracts
+  evidence: approved interface and test design
+  requirements: &id012
+  - E12-R01
+  - E12-R02
+  - E12-R03
+  - E12-R04
+  gate: pilot
+- id: E12-02
+  owner: A12
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E12-01
+  - E01-01
+  - E11-01
+  paths:
+  - crates/contracts
+  evidence: domain tests for each requirement
+  requirements: *id012
+  gate: pilot
+- id: E12-03
+  owner: A12
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E12-02
+  - E01-02
+  - E11-02
+  paths:
+  - crates/contracts
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id012
+  gate: pilot
+- id: E12-04
+  owner: A12
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E12-03
+  - E01-03
+  - E11-03
+  - E03-03
+  - E22-03
+  paths:
+  - crates/contracts
+  - apps/api/routes/contracts
+  - apps/worker/handlers/contracts
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id012
+  gate: pilot
+- id: E12-05
+  owner: A12
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E12-01
+  paths:
+  - apps/web/src/features/contracts
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id012
+  gate: pilot
+- id: E12-06
+  owner: A12
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E12-04
+  - E12-05
+  - E01-04
+  - E11-04
+  paths:
+  - crates/contracts
+  - tests/contracts
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id012
+  gate: pilot
+- id: E13-01
+  owner: A13
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/advances
+  evidence: approved interface and test design
+  requirements: &id013
+  - E13-R01
+  - E13-R02
+  - E13-R03
+  - E13-R04
+  gate: pilot
+- id: E13-02
+  owner: A13
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E13-01
+  - E01-01
+  - E11-01
+  paths:
+  - crates/advances
+  evidence: domain tests for each requirement
+  requirements: *id013
+  gate: pilot
+- id: E13-03
+  owner: A13
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E13-02
+  - E01-02
+  - E11-02
+  paths:
+  - crates/advances
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id013
+  gate: pilot
+- id: E13-04
+  owner: A13
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E13-03
+  - E01-03
+  - E11-03
+  - E03-03
+  - E22-03
+  paths:
+  - crates/advances
+  - apps/api/routes/advances
+  - apps/worker/handlers/advances
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id013
+  gate: pilot
+- id: E13-05
+  owner: A13
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E13-01
+  paths:
+  - apps/web/src/features/advances
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id013
+  gate: pilot
+- id: E13-06
+  owner: A13
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E13-04
+  - E13-05
+  - E01-04
+  - E11-04
+  paths:
+  - crates/advances
+  - tests/advances
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id013
+  gate: pilot
+- id: E14-01
+  owner: A14
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/budget
+  evidence: approved interface and test design
+  requirements: &id014
+  - E14-R01
+  - E14-R02
+  - E14-R03
+  - E14-R04
+  gate: pilot
+- id: E14-02
+  owner: A14
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E14-01
+  - E01-01
+  - E11-01
+  paths:
+  - crates/budget
+  evidence: domain tests for each requirement
+  requirements: *id014
+  gate: pilot
+- id: E14-03
+  owner: A14
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E14-02
+  - E01-02
+  - E11-02
+  paths:
+  - crates/budget
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id014
+  gate: pilot
+- id: E14-04
+  owner: A14
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E14-03
+  - E01-03
+  - E11-03
+  - E03-03
+  - E22-03
+  paths:
+  - crates/budget
+  - apps/api/routes/budget
+  - apps/worker/handlers/budget
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id014
+  gate: pilot
+- id: E14-05
+  owner: A14
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E14-01
+  paths:
+  - apps/web/src/features/budget
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id014
+  gate: pilot
+- id: E14-06
+  owner: A14
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E14-04
+  - E14-05
+  - E01-04
+  - E11-04
+  paths:
+  - crates/budget
+  - tests/budget
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id014
+  gate: pilot
+- id: E15-01
+  owner: A15
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/rule-engine
+  evidence: approved interface and test design
+  requirements: &id015
+  - E15-R01
+  - E15-R02
+  - E15-R03
+  - E15-R04
+  gate: pilot
+- id: E15-02
+  owner: A15
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E15-01
+  - E01-01
+  - E09-01
+  - E22-01
+  paths:
+  - crates/rule-engine
+  evidence: domain tests for each requirement
+  requirements: *id015
+  gate: pilot
+- id: E15-03
+  owner: A15
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E15-02
+  - E01-02
+  - E09-02
+  - E22-02
+  paths:
+  - crates/rule-engine
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id015
+  gate: pilot
+- id: E15-04
+  owner: A15
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E15-03
+  - E01-03
+  - E09-03
+  - E22-03
+  - E03-03
+  paths:
+  - crates/rule-engine
+  - apps/api/routes/rule-engine
+  - apps/worker/handlers/rule-engine
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id015
+  gate: pilot
+- id: E15-05
+  owner: A15
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E15-01
+  paths:
+  - apps/web/src/features/rule-engine
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id015
+  gate: pilot
+- id: E15-06
+  owner: A15
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E15-04
+  - E15-05
+  - E01-04
+  - E09-04
+  - E22-04
+  paths:
+  - crates/rule-engine
+  - tests/rule-engine
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id015
+  gate: pilot
+- id: E16-01
+  owner: A16
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/policy
+  evidence: approved interface and test design
+  requirements: &id016
+  - E16-R01
+  - E16-R02
+  - E16-R03
+  - E16-R04
+  gate: pilot
+- id: E16-02
+  owner: A16
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E16-01
+  - E01-01
+  - E03-01
+  - E15-01
+  - E22-01
+  paths:
+  - crates/policy
+  evidence: domain tests for each requirement
+  requirements: *id016
+  gate: pilot
+- id: E16-03
+  owner: A16
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E16-02
+  - E01-02
+  - E03-02
+  - E15-02
+  - E22-02
+  paths:
+  - crates/policy
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id016
+  gate: pilot
+- id: E16-04
+  owner: A16
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E16-03
+  - E01-03
+  - E03-03
+  - E15-03
+  - E22-03
+  paths:
+  - crates/policy
+  - apps/api/routes/policy
+  - apps/worker/handlers/policy
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id016
+  gate: pilot
+- id: E16-05
+  owner: A16
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E16-01
+  paths:
+  - apps/web/src/features/policy
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id016
+  gate: pilot
+- id: E16-06
+  owner: A16
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E16-04
+  - E16-05
+  - E01-04
+  - E03-04
+  - E15-04
+  - E22-04
+  paths:
+  - crates/policy
+  - tests/policy
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id016
+  gate: pilot
+- id: E17-01
+  owner: A17
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/knowledge
+  evidence: approved interface and test design
+  requirements: &id017
+  - E17-R01
+  - E17-R02
+  - E17-R03
+  - E17-R04
+  gate: pilot
+- id: E17-02
+  owner: A17
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E17-01
+  - E01-01
+  - E16-01
+  paths:
+  - crates/knowledge
+  evidence: domain tests for each requirement
+  requirements: *id017
+  gate: pilot
+- id: E17-03
+  owner: A17
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E17-02
+  - E01-02
+  - E16-02
+  paths:
+  - crates/knowledge
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id017
+  gate: pilot
+- id: E17-04
+  owner: A17
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E17-03
+  - E01-03
+  - E16-03
+  - E03-03
+  - E22-03
+  paths:
+  - crates/knowledge
+  - apps/api/routes/knowledge
+  - apps/worker/handlers/knowledge
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id017
+  gate: pilot
+- id: E17-05
+  owner: A17
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E17-01
+  paths:
+  - apps/web/src/features/knowledge
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id017
+  gate: pilot
+- id: E17-06
+  owner: A17
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E17-04
+  - E17-05
+  - E01-04
+  - E16-04
+  paths:
+  - crates/knowledge
+  - tests/knowledge
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id017
+  gate: pilot
+- id: E18-01
+  owner: A18
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/workflow
+  evidence: approved interface and test design
+  requirements: &id018
+  - E18-R01
+  - E18-R02
+  - E18-R03
+  - E18-R04
+  gate: pilot
+- id: E18-02
+  owner: A18
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E18-01
+  - E01-01
+  - E03-01
+  - E05-01
+  - E11-01
+  - E15-01
+  - E16-01
+  - E22-01
+  paths:
+  - crates/workflow
+  evidence: domain tests for each requirement
+  requirements: *id018
+  gate: pilot
+- id: E18-03
+  owner: A18
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E18-02
+  - E01-02
+  - E03-02
+  - E05-02
+  - E11-02
+  - E15-02
+  - E16-02
+  - E22-02
+  paths:
+  - crates/workflow
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id018
+  gate: pilot
+- id: E18-04
+  owner: A18
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E18-03
+  - E01-03
+  - E03-03
+  - E05-03
+  - E11-03
+  - E15-03
+  - E16-03
+  - E22-03
+  paths:
+  - crates/workflow
+  - apps/api/routes/workflow
+  - apps/worker/handlers/workflow
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id018
+  gate: pilot
+- id: E18-05
+  owner: A18
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E18-01
+  paths:
+  - apps/web/src/features/workflow
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id018
+  gate: pilot
+- id: E18-06
+  owner: A18
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E18-04
+  - E18-05
+  - E01-04
+  - E03-04
+  - E05-04
+  - E11-04
+  - E15-04
+  - E16-04
+  - E22-04
+  paths:
+  - crates/workflow
+  - tests/workflow
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id018
+  gate: pilot
+- id: E19-01
+  owner: A19
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/forms
+  evidence: approved interface and test design
+  requirements: &id019
+  - E19-R01
+  - E19-R02
+  - E19-R03
+  - E19-R04
+  gate: pilot
+- id: E19-02
+  owner: A19
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E19-01
+  - E01-01
+  - E16-01
+  paths:
+  - crates/forms
+  evidence: domain tests for each requirement
+  requirements: *id019
+  gate: pilot
+- id: E19-03
+  owner: A19
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E19-02
+  - E01-02
+  - E16-02
+  paths:
+  - crates/forms
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id019
+  gate: pilot
+- id: E19-04
+  owner: A19
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E19-03
+  - E01-03
+  - E16-03
+  - E03-03
+  - E22-03
+  paths:
+  - crates/forms
+  - apps/api/routes/forms
+  - apps/worker/handlers/forms
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id019
+  gate: pilot
+- id: E19-05
+  owner: A19
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E19-01
+  paths:
+  - apps/web/src/features/forms
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id019
+  gate: pilot
+- id: E19-06
+  owner: A19
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E19-04
+  - E19-05
+  - E01-04
+  - E16-04
+  paths:
+  - crates/forms
+  - tests/forms
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id019
+  gate: pilot
+- id: E20-01
+  owner: A20
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/templates
+  evidence: approved interface and test design
+  requirements: &id020
+  - E20-R01
+  - E20-R02
+  - E20-R03
+  - E20-R04
+  gate: pilot
+- id: E20-02
+  owner: A20
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E20-01
+  - E01-01
+  - E05-01
+  - E18-01
+  - E19-01
+  paths:
+  - crates/templates
+  evidence: domain tests for each requirement
+  requirements: *id020
+  gate: pilot
+- id: E20-03
+  owner: A20
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E20-02
+  - E01-02
+  - E05-02
+  - E18-02
+  - E19-02
+  paths:
+  - crates/templates
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id020
+  gate: pilot
+- id: E20-04
+  owner: A20
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E20-03
+  - E01-03
+  - E05-03
+  - E18-03
+  - E19-03
+  - E03-03
+  - E22-03
+  paths:
+  - crates/templates
+  - apps/api/routes/templates
+  - apps/worker/handlers/templates
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id020
+  gate: pilot
+- id: E20-05
+  owner: A20
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E20-01
+  paths:
+  - apps/web/src/features/templates
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id020
+  gate: pilot
+- id: E20-06
+  owner: A20
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E20-04
+  - E20-05
+  - E01-04
+  - E05-04
+  - E18-04
+  - E19-04
+  paths:
+  - crates/templates
+  - tests/templates
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id020
+  gate: pilot
+- id: E21-01
+  owner: A21
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/risk-engine
+  evidence: approved interface and test design
+  requirements: &id021
+  - E21-R01
+  - E21-R02
+  - E21-R03
+  - E21-R04
+  gate: pilot
+- id: E21-02
+  owner: A21
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E21-01
+  - E01-01
+  - E10-01
+  - E15-01
+  - E18-01
+  paths:
+  - crates/risk-engine
+  evidence: domain tests for each requirement
+  requirements: *id021
+  gate: pilot
+- id: E21-03
+  owner: A21
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E21-02
+  - E01-02
+  - E10-02
+  - E15-02
+  - E18-02
+  paths:
+  - crates/risk-engine
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id021
+  gate: pilot
+- id: E21-04
+  owner: A21
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E21-03
+  - E01-03
+  - E10-03
+  - E15-03
+  - E18-03
+  - E03-03
+  - E22-03
+  paths:
+  - crates/risk-engine
+  - apps/api/routes/risk-engine
+  - apps/worker/handlers/risk-engine
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id021
+  gate: pilot
+- id: E21-05
+  owner: A21
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E21-01
+  paths:
+  - apps/web/src/features/risk-engine
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id021
+  gate: pilot
+- id: E21-06
+  owner: A21
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E21-04
+  - E21-05
+  - E01-04
+  - E10-04
+  - E15-04
+  - E18-04
+  paths:
+  - crates/risk-engine
+  - tests/risk-engine
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id021
+  gate: pilot
+- id: E22-01
+  owner: A22
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/audit
+  evidence: approved interface and test design
+  requirements: &id022
+  - E22-R01
+  - E22-R02
+  - E22-R03
+  - E22-R04
+  gate: pilot
+- id: E22-02
+  owner: A22
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E22-01
+  - E01-01
+  paths:
+  - crates/audit
+  evidence: domain tests for each requirement
+  requirements: *id022
+  gate: pilot
+- id: E22-03
+  owner: A22
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E22-02
+  - E01-02
+  paths:
+  - crates/audit
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id022
+  gate: pilot
+- id: E22-04
+  owner: A22
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E22-03
+  - E01-03
+  paths:
+  - crates/audit
+  - apps/api/routes/audit
+  - apps/worker/handlers/audit
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id022
+  gate: pilot
+- id: E22-05
+  owner: A22
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E22-01
+  paths:
+  - apps/web/src/features/audit
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id022
+  gate: pilot
+- id: E22-06
+  owner: A22
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E22-04
+  - E22-05
+  - E01-04
+  paths:
+  - crates/audit
+  - tests/audit
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id022
+  gate: pilot
+- id: E23-01
+  owner: A23
+  title: Freeze module interfaces and invariants (manual bridge + adapter contracts; live disabled)
+  depends:
+  - G01
+  paths:
+  - crates/integration
+  evidence: approved interface and test design
+  requirements: &id023
+  - E23-R01
+  - E23-R02
+  - E23-R03
+  - E23-R04
+  gate: pilot
+- id: E23-02
+  owner: A23
+  title: Implement domain behavior and unit/property tests (manual bridge + adapter contracts; live disabled)
+  depends:
+  - E23-01
+  - E01-01
+  - E11-01
+  - E18-01
+  - E22-01
+  paths:
+  - crates/integration
+  evidence: domain tests for each requirement
+  requirements: *id023
+  gate: pilot
+- id: E23-03
+  owner: A23
+  title: Implement persistence/adapters, real DB tests (manual bridge + adapter contracts; live disabled)
+  depends:
+  - E23-02
+  - E01-02
+  - E11-02
+  - E18-02
+  - E22-02
+  paths:
+  - crates/integration
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id023
+  gate: pilot
+- id: E23-04
+  owner: A23
+  title: Implement application ports, HTTP contract or internal worker wiring (manual bridge + adapter contracts; live disabled)
+  depends:
+  - E23-03
+  - E01-03
+  - E11-03
+  - E18-03
+  - E22-03
+  - E03-03
+  paths:
+  - crates/integration
+  - apps/api/routes/integration
+  - apps/worker/handlers/integration
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id023
+  gate: pilot
+- id: E23-05
+  owner: A23
+  title: Implement feature UI or internal operational diagnostics (manual bridge + adapter contracts; live disabled)
+  depends:
+  - E23-01
+  paths:
+  - apps/web/src/features/integration
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id023
+  gate: pilot
+- id: E23-06
+  owner: A23
+  title: Integrate module and run acceptance evidence (manual bridge + adapter contracts; live disabled)
+  depends:
+  - E23-04
+  - E23-05
+  - E01-04
+  - E11-04
+  - E18-04
+  - E22-04
+  paths:
+  - crates/integration
+  - tests/integration
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id023
+  gate: pilot
+- id: E24-01
+  owner: A24
+  title: Freeze module interfaces and invariants
+  depends:
+  - G01
+  paths:
+  - crates/analytics
+  evidence: approved interface and test design
+  requirements: &id024
+  - E24-R01
+  - E24-R02
+  - E24-R03
+  - E24-R04
+  gate: pilot
+- id: E24-02
+  owner: A24
+  title: Implement domain behavior and unit/property tests
+  depends:
+  - E24-01
+  - E01-01
+  - E18-01
+  - E22-01
+  paths:
+  - crates/analytics
+  evidence: domain tests for each requirement
+  requirements: *id024
+  gate: pilot
+- id: E24-03
+  owner: A24
+  title: Implement persistence/adapters, real DB tests
+  depends:
+  - E24-02
+  - E01-02
+  - E18-02
+  - E22-02
+  paths:
+  - crates/analytics
+  - migrations/registry
+  evidence: migration and integration tests, scoped queries
+  requirements: *id024
+  gate: pilot
+- id: E24-04
+  owner: A24
+  title: Implement application ports, HTTP contract or internal worker wiring
+  depends:
+  - E24-03
+  - E01-03
+  - E18-03
+  - E22-03
+  - E03-03
+  paths:
+  - crates/analytics
+  - apps/api/routes/analytics
+  - apps/worker/handlers/analytics
+  evidence: contract tests, auth negative tests, worker retry
+  requirements: *id024
+  gate: pilot
+- id: E24-05
+  owner: A24
+  title: Implement feature UI or internal operational diagnostics
+  depends:
+  - E24-01
+  paths:
+  - apps/web/src/features/analytics
+  evidence: generated client contract and UI tests; internal modules diagnostics only
+  requirements: *id024
+  gate: pilot
+- id: E24-06
+  owner: A24
+  title: Integrate module and run acceptance evidence
+  depends:
+  - E24-04
+  - E24-05
+  - E01-04
+  - E18-04
+  - E22-04
+  paths:
+  - crates/analytics
+  - tests/analytics
+  evidence: all module acceptance IDs, integrated test report
+  requirements: *id024
+  gate: pilot
+- id: G02
+  owner: A00
+  title: 'Foundation integration: identity, RLS, audit and job fencing'
+  depends:
+  - E01-06
+  - E02-06
+  - E03-06
+  - E04-06
+  - E22-06
+  paths:
+  - tests/system
+  evidence: real DB auth/audit/job recovery suite
+  requirements: []
+  gate: pilot
+- id: G03
+  owner: A00
+  title: Three-kind dossier vertical slice and finance concurrency verification
+  depends:
+  - G02
+  - E05-06
+  - E06-06
+  - E07-06
+  - E08-06
+  - E09-06
+  - E10-06
+  - E11-06
+  - E12-06
+  - E13-06
+  - E14-06
+  - E15-06
+  - E16-06
+  - E17-06
+  - E18-06
+  - E19-06
+  - E20-06
+  paths:
+  - tests/system
+  evidence: real storage/OCR, three flows, finance race and sealed snapshot
+  requirements: []
+  gate: pilot
+- id: G04
+  owner: A00
+  title: 'Pilot release candidate: manual DO/ERP bridge, security, UX, AI evaluation'
+  depends:
+  - G03
+  - E21-06
+  - E23-06
+  - E24-06
+  paths:
+  - tests/system
+  - infra
+  evidence: integrated HEAD CI, corpus report, restore drill, finance/security signoff
+  requirements: []
+  gate: pilot
+- id: X01
+  owner: A23
+  title: Obtain DO/ERP API docs, sandbox, credentials, owner and approved mapping
+  depends:
+  - G01
+  paths:
+  - docs/integration
+  evidence: external dependency approval; BLOCKED until provided
+  requirements: []
+  gate: live
+- id: X02
+  owner: A23
+  title: Implement real DO connector and sandbox reconciliation
+  depends:
+  - X01
+  - E23-06
+  paths:
+  - crates/integration/do
+  evidence: real sandbox request/ack/timeout replay
+  requirements: []
+  gate: live
+- id: X03
+  owner: A23
+  title: Implement ERP read connector and real data reconciliation
+  depends:
+  - X01
+  - E23-06
+  paths:
+  - crates/integration/erp
+  evidence: real sandbox coverage/payment/reversal evidence
+  requirements: []
+  gate: live
+- id: G05
+  owner: A00
+  title: Production readiness and live integration release
+  depends:
+  - G04
+  - X02
+  - X03
+  paths:
+  - tests/system
+  - infra
+  evidence: owner acceptance, security approval, live recon, rollback rehearsal
+  requirements: []
+  gate: live
