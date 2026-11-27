@@ -45,3 +45,51 @@ fn only_independently_checked_effective_version_can_resolve() {
         Some(Error::Missing)
     );
 }
+
+#[test]
+fn e16_at02_unmapped_policy_cannot_resolve() {
+    let mut p = fixture(7, Status::Published);
+    p.clauses_mapped = false;
+    let scope = p.scope;
+    let day = p.start;
+    assert_eq!(resolve(&[p], scope, 1, day).err(), Some(Error::Invalid));
+}
+
+#[test]
+fn e16_at03_effective_date_scope_and_kind_are_isolated() {
+    let p = fixture(8, Status::Published);
+    let scope = p.scope;
+    let start = p.start;
+    let end = p.end_exclusive;
+    let mut foreign = fixture(9, Status::Published);
+    foreign.scope.company = CompanyId::try_from(Uuid::from_u128(10)).unwrap();
+    let mut other_kind = fixture(11, Status::Published);
+    other_kind.kind = 2;
+    let policies = [p, foreign, other_kind];
+    assert_eq!(
+        resolve(&policies, scope, 1, start).unwrap().id,
+        policies[0].id
+    );
+    assert_eq!(
+        resolve(&policies, scope, 1, start.pred_opt().unwrap()).err(),
+        Some(Error::Missing)
+    );
+    assert_eq!(
+        resolve(&policies, scope, 1, end.pred_opt().unwrap())
+            .unwrap()
+            .id,
+        policies[0].id
+    );
+    assert_eq!(
+        resolve(&policies, scope, 1, end).err(),
+        Some(Error::Missing)
+    );
+}
+
+#[test]
+fn e16_at04_revoked_version_cannot_resolve_for_new_submission() {
+    let p = fixture(12, Status::Revoked);
+    let scope = p.scope;
+    let day = p.start;
+    assert_eq!(resolve(&[p], scope, 1, day).err(), Some(Error::Missing));
+}
