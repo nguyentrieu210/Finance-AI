@@ -312,7 +312,12 @@ pub async fn resolve_reconciliation(
         evidence_bytes.extend_from_slice(value.as_bytes());
     }
     let expected_bytes = expected.to_be_bytes();
-    let digest = request_hash(&[id.as_bytes(), &expected_bytes, reason.as_bytes(), &evidence_bytes]);
+    let digest = request_hash(&[
+        id.as_bytes(),
+        &expected_bytes,
+        reason.as_bytes(),
+        &evidence_bytes,
+    ]);
     let (tenant, company, actor) = binding(proof)?;
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     require_role(&mut tx, proof.context(), Role::FinanceApprover)

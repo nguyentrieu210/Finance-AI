@@ -43,5 +43,4 @@ pub fn blocks(finding: &Finding, waiver: Option<&Waiver>, now: i64) -> bool {
     })
 }
 
-
 pub mod repository;

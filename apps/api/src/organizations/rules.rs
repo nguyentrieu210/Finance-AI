@@ -1,8 +1,13 @@
 //! E15 immutable rule draft/create and scoped published/admin reads.
-use super::{OrganizationState, PageQuery, decode_cursor, dossiers, encode_cursor, error, now, random_id};
+use super::{
+    OrganizationState, PageQuery, decode_cursor, dossiers, encode_cursor, error, now, random_id,
+};
 use axum::{
     Json,
-    extract::{Path, Query, State, rejection::{JsonRejection, QueryRejection}},
+    extract::{
+        Path, Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -55,60 +60,134 @@ fn response(rule: Rule) -> Result<RuleResponse, ()> {
     })
 }
 fn receipt(rule: Rule, status: StatusCode) -> Response {
-    let id=rule.id; let version=rule.version;
-    let Ok(body)=response(rule) else { return error(StatusCode::SERVICE_UNAVAILABLE, random_id()); };
-    let Ok(version)=Version::try_from(version) else { return error(StatusCode::SERVICE_UNAVAILABLE, random_id()); };
-    let token=VersionToken{target:VersionTarget::Rule,resource_id:ResourceId::try_from(id).expect("stored nonnil rule"),version};
-    let mut out=(status,Json(body)).into_response();
-    out.headers_mut().insert("finance-version",HeaderValue::from_str(&token.to_string()).expect("canonical token"));
-    out.headers_mut().insert(header::CACHE_CONTROL,HeaderValue::from_static("no-store"));
+    let id = rule.id;
+    let version = rule.version;
+    let Ok(body) = response(rule) else {
+        return error(StatusCode::SERVICE_UNAVAILABLE, random_id());
+    };
+    let Ok(version) = Version::try_from(version) else {
+        return error(StatusCode::SERVICE_UNAVAILABLE, random_id());
+    };
+    let token = VersionToken {
+        target: VersionTarget::Rule,
+        resource_id: ResourceId::try_from(id).expect("stored nonnil rule"),
+        version,
+    };
+    let mut out = (status, Json(body)).into_response();
+    out.headers_mut().insert(
+        "finance-version",
+        HeaderValue::from_str(&token.to_string()).expect("canonical token"),
+    );
+    out.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     out
 }
-fn key(headers:&HeaderMap)->Option<IdempotencyKey>{
-    headers.get("idempotency-key").and_then(|h|h.to_str().ok()).and_then(|s|IdempotencyKey::parse(s).ok())
+fn key(headers: &HeaderMap) -> Option<IdempotencyKey> {
+    headers
+        .get("idempotency-key")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| IdempotencyKey::parse(s).ok())
 }
 pub(super) async fn create(
-    State(state):State<Arc<OrganizationState>>,headers:HeaderMap,
-    body:Result<Json<Create>,JsonRejection>
-)->Response{
-    let correlation=random_id();
-    let proof=match dossiers::authenticate_version(&state,&headers,correlation,None).await{Ok(p)=>p,Err(s)=>return error(s,correlation)};
-    let Some(key)=key(&headers) else{return error(StatusCode::BAD_REQUEST,correlation)};
-    let Ok(Json(body))=body else{return error(StatusCode::BAD_REQUEST,correlation)};
-    match repository::create(&state.runtime,&proof,&key,body.policy_id,random_id(),&body.name,&body.definition).await{
-        Ok(rule)=>receipt(rule,StatusCode::CREATED),
-        Err(e)=>error(dossiers::status(e),correlation),
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    body: Result<Json<Create>, JsonRejection>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match dossiers::authenticate_version(&state, &headers, correlation, None).await {
+        Ok(p) => p,
+        Err(s) => return error(s, correlation),
+    };
+    let Some(key) = key(&headers) else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    match repository::create(
+        &state.runtime,
+        &proof,
+        &key,
+        body.policy_id,
+        random_id(),
+        &body.name,
+        &body.definition,
+    )
+    .await
+    {
+        Ok(rule) => receipt(rule, StatusCode::CREATED),
+        Err(e) => error(dossiers::status(e), correlation),
     }
 }
 pub(super) async fn get(
-    State(state):State<Arc<OrganizationState>>,headers:HeaderMap,Path(id):Path<Uuid>
-)->Response{
-    let correlation=random_id();
-    let proof=match dossiers::authenticate_version(&state,&headers,correlation,None).await{Ok(p)=>p,Err(s)=>return error(s,correlation)};
-    match repository::get(&state.runtime,&proof,id).await{
-        Ok(Some(rule))=>receipt(rule,StatusCode::OK),
-        Ok(None)=>error(StatusCode::NOT_FOUND,correlation),
-        Err(e)=>error(dossiers::status(e),correlation),
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match dossiers::authenticate_version(&state, &headers, correlation, None).await {
+        Ok(p) => p,
+        Err(s) => return error(s, correlation),
+    };
+    match repository::get(&state.runtime, &proof, id).await {
+        Ok(Some(rule)) => receipt(rule, StatusCode::OK),
+        Ok(None) => error(StatusCode::NOT_FOUND, correlation),
+        Err(e) => error(dossiers::status(e), correlation),
     }
 }
 pub(super) async fn list(
-    State(state):State<Arc<OrganizationState>>,headers:HeaderMap,
-    query:Result<Query<PageQuery>,QueryRejection>
-)->Response{
-    let correlation=random_id();
-    let proof=match dossiers::authenticate_version(&state,&headers,correlation,None).await{Ok(p)=>p,Err(s)=>return error(s,correlation)};
-    let Principal::User(actor)=proof.context().actor else{return error(StatusCode::FORBIDDEN,correlation)};
-    let Ok(Query(query))=query else{return error(StatusCode::BAD_REQUEST,correlation)};
-    let limit=query.limit.unwrap_or(50);if !(1..=100).contains(&limit){return error(StatusCode::BAD_REQUEST,correlation)}
-    let Some(time)=now() else{return error(StatusCode::SERVICE_UNAVAILABLE,correlation)};
-    let cursor_key:[u8;32]=Sha256::digest([b"finance.rule.cursor/v1".as_slice(),&state.cursor_key].concat()).into();
-    let after=match query.cursor{None=>Uuid::nil(),Some(value)=>match decode_cursor(&cursor_key,state.scope,actor,&value,time){Some(id)=>id,None=>return error(StatusCode::BAD_REQUEST,correlation)}};
-    match repository::list(&state.runtime,&proof,after,limit).await{
-        Ok(rows)=>{
-            let next_cursor=if rows.len()==limit as usize{rows.last().map(|x|encode_cursor(&cursor_key,state.scope,actor,x.id,time+300))}else{None};
-            let items=match rows.into_iter().map(response).collect::<Result<Vec<_>,_>>(){Ok(v)=>v,Err(_)=>return error(StatusCode::SERVICE_UNAVAILABLE,correlation)};
-            let mut out=Json(Page{items,next_cursor}).into_response();out.headers_mut().insert(header::CACHE_CONTROL,HeaderValue::from_static("no-store"));out
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    query: Result<Query<PageQuery>, QueryRejection>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match dossiers::authenticate_version(&state, &headers, correlation, None).await {
+        Ok(p) => p,
+        Err(s) => return error(s, correlation),
+    };
+    let Principal::User(actor) = proof.context().actor else {
+        return error(StatusCode::FORBIDDEN, correlation);
+    };
+    let Ok(Query(query)) = query else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let limit = query.limit.unwrap_or(50);
+    if !(1..=100).contains(&limit) {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let Some(time) = now() else {
+        return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+    };
+    let cursor_key: [u8; 32] =
+        Sha256::digest([b"finance.rule.cursor/v1".as_slice(), &state.cursor_key].concat()).into();
+    let after = match query.cursor {
+        None => Uuid::nil(),
+        Some(value) => match decode_cursor(&cursor_key, state.scope, actor, &value, time) {
+            Some(id) => id,
+            None => return error(StatusCode::BAD_REQUEST, correlation),
+        },
+    };
+    match repository::list(&state.runtime, &proof, after, limit).await {
+        Ok(rows) => {
+            let next_cursor = if rows.len() == limit as usize {
+                rows.last()
+                    .map(|x| encode_cursor(&cursor_key, state.scope, actor, x.id, time + 300))
+            } else {
+                None
+            };
+            let items = match rows
+                .into_iter()
+                .map(response)
+                .collect::<Result<Vec<_>, _>>()
+            {
+                Ok(v) => v,
+                Err(_) => return error(StatusCode::SERVICE_UNAVAILABLE, correlation),
+            };
+            let mut out = Json(Page { items, next_cursor }).into_response();
+            out.headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            out
         }
-        Err(e)=>error(dossiers::status(e),correlation)
+        Err(e) => error(dossiers::status(e), correlation),
     }
 }

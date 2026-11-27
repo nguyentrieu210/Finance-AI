@@ -60,7 +60,9 @@ fn validate_definition(name: &str, definition: &Value) -> Result<(String, bool, 
     if name.is_empty()
         || name.len() > 64
         || !name.as_bytes()[0].is_ascii_alphabetic()
-        || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+        || !name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
     {
         return Err(Error::InvalidInput);
     }
@@ -74,7 +76,11 @@ fn validate_definition(name: &str, definition: &Value) -> Result<(String, bool, 
         Severity::Warning => "WARNING",
         Severity::Info => "INFO",
     };
-    Ok((severity.to_owned(), compiled.waivable(), compiled.clause_id()))
+    Ok((
+        severity.to_owned(),
+        compiled.waivable(),
+        compiled.clause_id(),
+    ))
 }
 
 fn request_hash(policy: Uuid, name: &str, definition: &Value) -> Result<Vec<u8>, Error> {
@@ -142,8 +148,14 @@ pub async fn create(
         if old != hash {
             return Err(Error::Conflict);
         }
-        let row = sqlx::query_as::<_, Rule>(&format!("{SELECT_RULE} WHERE tenant_id=$1 AND company_id=$2 AND id=$3"))
-            .bind(t).bind(c).bind(result).fetch_one(&mut *tx).await?;
+        let row = sqlx::query_as::<_, Rule>(&format!(
+            "{SELECT_RULE} WHERE tenant_id=$1 AND company_id=$2 AND id=$3"
+        ))
+        .bind(t)
+        .bind(c)
+        .bind(result)
+        .fetch_one(&mut *tx)
+        .await?;
         recheck_authenticated(&mut tx, Some(proof)).await?;
         tx.commit().await?;
         return Ok(row);
@@ -167,8 +179,14 @@ pub async fn create(
         .bind(t).bind(c).bind(command).bind(id).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id) VALUES($1,$2,$3,'rule.create',$4,$5,$6)")
         .bind(t).bind(c).bind(a).bind(key.as_str()).bind(hash).bind(id).execute(&mut *tx).await?;
-    let row = sqlx::query_as::<_, Rule>(&format!("{SELECT_RULE} WHERE tenant_id=$1 AND company_id=$2 AND id=$3"))
-        .bind(t).bind(c).bind(id).fetch_one(&mut *tx).await?;
+    let row = sqlx::query_as::<_, Rule>(&format!(
+        "{SELECT_RULE} WHERE tenant_id=$1 AND company_id=$2 AND id=$3"
+    ))
+    .bind(t)
+    .bind(c)
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(row)
@@ -190,7 +208,12 @@ pub async fn list(
     let rows = sqlx::query_as::<_, Rule>(&format!(
         "{SELECT_RULE} WHERE tenant_id=$1 AND company_id=$2 AND id>$3 ORDER BY id LIMIT $4"
     ))
-    .bind(t).bind(c).bind(after).bind(limit).fetch_all(&mut *tx).await?;
+    .bind(t)
+    .bind(c)
+    .bind(after)
+    .bind(limit)
+    .fetch_all(&mut *tx)
+    .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(rows)
@@ -211,7 +234,11 @@ pub async fn get(
     let row = sqlx::query_as::<_, Rule>(&format!(
         "{SELECT_RULE} WHERE tenant_id=$1 AND company_id=$2 AND id=$3"
     ))
-    .bind(t).bind(c).bind(id).fetch_optional(&mut *tx).await?;
+    .bind(t)
+    .bind(c)
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(row)

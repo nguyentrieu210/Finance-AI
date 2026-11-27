@@ -388,41 +388,202 @@ async fn scoped_organization_http_real_database() {
         request(&app, "/v1/templates", Some(&requester)).await.1["items"],
         json!([])
     );
-    let rule_definition=json!({"rule_id":"invoice_total_positive","version":1,"condition":{"op":"gt","args":[{"ref":"invoice.total"},{"literal":"0","value_type":"money","currency":"VND"}]},"severity":"BLOCK","waivable":false,"clause_id":"00000000-0000-0000-0000-000000001901"});
-    let (rule_status,rule,rule_token)=create_rule(&app,&policy_admin,"rule-one","invoice_total_positive",rule_definition.clone()).await;
-    assert_eq!(rule_status,StatusCode::CREATED);
-    assert_eq!(rule["version"],1);
-    assert_eq!(rule["severity"],"BLOCK");
+    let rule_definition = json!({"rule_id":"invoice_total_positive","version":1,"condition":{"op":"gt","args":[{"ref":"invoice.total"},{"literal":"0","value_type":"money","currency":"VND"}]},"severity":"BLOCK","waivable":false,"clause_id":"00000000-0000-0000-0000-000000001901"});
+    let (rule_status, rule, rule_token) = create_rule(
+        &app,
+        &policy_admin,
+        "rule-one",
+        "invoice_total_positive",
+        rule_definition.clone(),
+    )
+    .await;
+    assert_eq!(rule_status, StatusCode::CREATED);
+    assert_eq!(rule["version"], 1);
+    assert_eq!(rule["severity"], "BLOCK");
     assert!(rule_token.is_some());
-    assert_eq!(create_rule(&app,&policy_admin,"rule-one","invoice_total_positive",rule_definition.clone()).await.1,rule);
-    let changed=json!({"rule_id":"invoice_total_positive","version":1,"condition":{"literal":false,"value_type":"boolean"},"severity":"BLOCK","waivable":false,"clause_id":"00000000-0000-0000-0000-000000001901"});
-    assert_eq!(create_rule(&app,&policy_admin,"rule-one","invoice_total_positive",changed).await.0,StatusCode::CONFLICT);
-    assert_eq!(create_rule(&app,&requester,"rule-denied","invoice_total_positive",rule_definition).await.0,StatusCode::FORBIDDEN);
-    assert_eq!(request(&app,"/v1/rules",Some(&policy_admin)).await.1["items"].as_array().unwrap().len(),1);
-    assert_eq!(request(&app,"/v1/rules",Some(&requester)).await.1["items"],json!([]));
-    let waiver_dossier="00000000-0000-0000-0000-000000002120";
-    let waiver_version=format!("\"v1:dossier:{waiver_dossier}:0\"");
-    let (waiver_status,waiver,waiver_receipt)=request_waiver(&app,&requester,waiver_dossier,"waiver-one",&waiver_version,"00000000-0000-0000-0000-000000002123").await;
-    assert_eq!(waiver_status,StatusCode::OK);assert_eq!(waiver["state"],"REQUESTED");assert_eq!(waiver_receipt.as_deref(),Some(waiver_version.as_str()));
-    let waiver_id=waiver["id"].as_str().unwrap().to_owned();
-    let approver=mint("form-checker");
-    assert_eq!(decide_waiver(&app,&requester,waiver_dossier,&waiver_id,"waiver-self",&waiver_version,"APPROVED",Some("2035-12-01T00:00:00Z")).await.0,StatusCode::FORBIDDEN);
-    let (decision_status,decision,_)=decide_waiver(&app,&approver,waiver_dossier,&waiver_id,"waiver-approve",&waiver_version,"APPROVED",Some("2035-12-01T00:00:00Z")).await;
-    assert_eq!(decision_status,StatusCode::OK);assert_eq!(decision["state"],"APPROVED");
-    assert_eq!(request(&app,&format!("/v1/dossiers/{waiver_dossier}/waivers"),Some(&requester)).await.1["items"].as_array().unwrap().len(),1);
-    let handoff_dossier="00000000-0000-0000-0000-000000002300";
-    let handoff_version=format!("\"v1:dossier:{handoff_dossier}:0\"");
-    let (handoff_status,handoff,handoff_receipt)=create_handoff(&app,&requester,handoff_dossier,"handoff-one",&handoff_version,"00000000-0000-0000-0000-000000002304","MANUAL",Some("MANUAL-RECEIPT-1")).await;
-    assert_eq!(handoff_status,StatusCode::CREATED);assert_eq!(handoff["state"],"ACKNOWLEDGED");assert_ne!(handoff["state"],"APPROVED");assert!(handoff_receipt.as_deref().unwrap().ends_with(":1\""));
-    assert_eq!(create_handoff(&app,&requester,handoff_dossier,"handoff-do",&handoff_version,"00000000-0000-0000-0000-000000002304","DO_API",None).await.0,StatusCode::CONFLICT);
-    assert_eq!(request(&app,&format!("/v1/dossiers/{handoff_dossier}/handoffs"),Some(&requester)).await.1["items"].as_array().unwrap().len(),1);
-    let recon_id="00000000-0000-0000-0000-000000002316";
-    let (recon_status,recon,recon_token)=request_with_headers(&app,&format!("/v1/reconciliation/{recon_id}"),Some(&requester)).await;
-    assert_eq!(recon_status,StatusCode::OK);assert_eq!(recon["state"],"OPEN");assert!(recon_token.as_deref().unwrap().ends_with(":0\""));
-    let approver=mint("form-checker");
-    assert_eq!(resolve_reconciliation(&app,&requester,recon_id,"recon-denied",recon_token.as_deref().unwrap()).await.0,StatusCode::FORBIDDEN);
-    let (resolve_status,resolved,_)=resolve_reconciliation(&app,&approver,recon_id,"recon-resolve",recon_token.as_deref().unwrap()).await;
-    assert_eq!(resolve_status,StatusCode::OK);assert_eq!(resolved["state"],"RESOLVED");
+    assert_eq!(
+        create_rule(
+            &app,
+            &policy_admin,
+            "rule-one",
+            "invoice_total_positive",
+            rule_definition.clone()
+        )
+        .await
+        .1,
+        rule
+    );
+    let changed = json!({"rule_id":"invoice_total_positive","version":1,"condition":{"literal":false,"value_type":"boolean"},"severity":"BLOCK","waivable":false,"clause_id":"00000000-0000-0000-0000-000000001901"});
+    assert_eq!(
+        create_rule(
+            &app,
+            &policy_admin,
+            "rule-one",
+            "invoice_total_positive",
+            changed
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        create_rule(
+            &app,
+            &requester,
+            "rule-denied",
+            "invoice_total_positive",
+            rule_definition
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        request(&app, "/v1/rules", Some(&policy_admin)).await.1["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        request(&app, "/v1/rules", Some(&requester)).await.1["items"],
+        json!([])
+    );
+    let waiver_dossier = "00000000-0000-0000-0000-000000002120";
+    let waiver_version = format!("\"v1:dossier:{waiver_dossier}:0\"");
+    let (waiver_status, waiver, waiver_receipt) = request_waiver(
+        &app,
+        &requester,
+        waiver_dossier,
+        "waiver-one",
+        &waiver_version,
+        "00000000-0000-0000-0000-000000002123",
+    )
+    .await;
+    assert_eq!(waiver_status, StatusCode::OK);
+    assert_eq!(waiver["state"], "REQUESTED");
+    assert_eq!(waiver_receipt.as_deref(), Some(waiver_version.as_str()));
+    let waiver_id = waiver["id"].as_str().unwrap().to_owned();
+    let approver = mint("form-checker");
+    assert_eq!(
+        decide_waiver(
+            &app,
+            &requester,
+            waiver_dossier,
+            &waiver_id,
+            "waiver-self",
+            &waiver_version,
+            "APPROVED",
+            Some("2035-12-01T00:00:00Z")
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let (decision_status, decision, _) = decide_waiver(
+        &app,
+        &approver,
+        waiver_dossier,
+        &waiver_id,
+        "waiver-approve",
+        &waiver_version,
+        "APPROVED",
+        Some("2035-12-01T00:00:00Z"),
+    )
+    .await;
+    assert_eq!(decision_status, StatusCode::OK);
+    assert_eq!(decision["state"], "APPROVED");
+    assert_eq!(
+        request(
+            &app,
+            &format!("/v1/dossiers/{waiver_dossier}/waivers"),
+            Some(&requester)
+        )
+        .await
+        .1["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let handoff_dossier = "00000000-0000-0000-0000-000000002300";
+    let handoff_version = format!("\"v1:dossier:{handoff_dossier}:0\"");
+    let (handoff_status, handoff, handoff_receipt) = create_handoff(
+        &app,
+        &requester,
+        handoff_dossier,
+        "handoff-one",
+        &handoff_version,
+        "00000000-0000-0000-0000-000000002304",
+        "MANUAL",
+        Some("MANUAL-RECEIPT-1"),
+    )
+    .await;
+    assert_eq!(handoff_status, StatusCode::CREATED);
+    assert_eq!(handoff["state"], "ACKNOWLEDGED");
+    assert_ne!(handoff["state"], "APPROVED");
+    assert!(handoff_receipt.as_deref().unwrap().ends_with(":1\""));
+    assert_eq!(
+        create_handoff(
+            &app,
+            &requester,
+            handoff_dossier,
+            "handoff-do",
+            &handoff_version,
+            "00000000-0000-0000-0000-000000002304",
+            "DO_API",
+            None
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        request(
+            &app,
+            &format!("/v1/dossiers/{handoff_dossier}/handoffs"),
+            Some(&requester)
+        )
+        .await
+        .1["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let recon_id = "00000000-0000-0000-0000-000000002316";
+    let (recon_status, recon, recon_token) = request_with_headers(
+        &app,
+        &format!("/v1/reconciliation/{recon_id}"),
+        Some(&requester),
+    )
+    .await;
+    assert_eq!(recon_status, StatusCode::OK);
+    assert_eq!(recon["state"], "OPEN");
+    assert!(recon_token.as_deref().unwrap().ends_with(":0\""));
+    let approver = mint("form-checker");
+    assert_eq!(
+        resolve_reconciliation(
+            &app,
+            &requester,
+            recon_id,
+            "recon-denied",
+            recon_token.as_deref().unwrap()
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let (resolve_status, resolved, _) = resolve_reconciliation(
+        &app,
+        &approver,
+        recon_id,
+        "recon-resolve",
+        recon_token.as_deref().unwrap(),
+    )
+    .await;
+    assert_eq!(resolve_status, StatusCode::OK);
+    assert_eq!(resolved["state"], "RESOLVED");
     let ready_id = "00000000-0000-0000-0000-000000001800";
     let check_id = "00000000-0000-0000-0000-000000001802";
     let ready_version = format!("\"v1:dossier:{ready_id}:0\"");
