@@ -1316,7 +1316,7 @@ async fn create_rule(
         .get("finance-version")
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     let body = serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({}));
     (status, body, version)
 }
@@ -1357,7 +1357,7 @@ async fn request_waiver(
         .get("finance-version")
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     (
         status,
         serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({})),
@@ -1404,7 +1404,7 @@ async fn decide_waiver(
         .get("finance-version")
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     (
         status,
         serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({})),

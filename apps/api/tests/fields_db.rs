@@ -283,8 +283,7 @@ async fn actual_ocr_fields_http_review() {
             dossier,
             "match-owner-denied",
             1,
-            evidence[0],
-            evidence[1],
+            (evidence[0], evidence[1]),
             "Manual pair check"
         )
         .await
@@ -297,8 +296,7 @@ async fn actual_ocr_fields_http_review() {
         dossier,
         "match-one",
         1,
-        evidence[0],
-        evidence[1],
+        (evidence[0], evidence[1]),
         "Manual pair check",
     )
     .await;
@@ -314,8 +312,7 @@ async fn actual_ocr_fields_http_review() {
         dossier,
         "match-one",
         1,
-        evidence[0],
-        evidence[1],
+        (evidence[0], evidence[1]),
         "Manual pair check",
     )
     .await;
@@ -329,8 +326,7 @@ async fn actual_ocr_fields_http_review() {
             dossier,
             "match-one",
             1,
-            evidence[0],
-            evidence[1],
+            (evidence[0], evidence[1]),
             "Changed reason"
         )
         .await
@@ -382,10 +378,10 @@ async fn confirm_match(
     dossier: &str,
     key: &str,
     version: u64,
-    left: &str,
-    right: &str,
+    evidence: (&str, &str),
     reason: &str,
 ) -> (StatusCode, Value, Option<String>) {
+    let (left, right) = evidence;
     let response = app
         .clone()
         .oneshot(
