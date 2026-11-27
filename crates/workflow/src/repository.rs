@@ -153,6 +153,26 @@ async fn latest(tx:&mut Transaction<'_,Postgres>,t:Uuid,c:Uuid,w:Uuid)->Result<W
     )).bind(t).bind(c).bind(w).fetch_one(&mut **tx).await?)
 }
 
+async fn draft_receipt(
+    tx: &mut Transaction<'_, Postgres>,
+    t: Uuid,
+    c: Uuid,
+    workflow: Uuid,
+    version: i64,
+) -> Result<Workflow, Error> {
+    let mut receipt = sqlx::query_as::<_, Workflow>(&format!(
+        "{SELECT} WHERE tenant_id=$1 AND company_id=$2 AND workflow_id=$3 AND version=$4"
+    ))
+    .bind(t)
+    .bind(c)
+    .bind(workflow)
+    .bind(version)
+    .fetch_one(&mut **tx)
+    .await?;
+    receipt.state = "DRAFT".into();
+    Ok(receipt)
+}
+
 pub struct CreateDraft<'a>{pub policy:Uuid,pub workflow:Uuid,pub row:Uuid,pub name:&'a str,pub transitions:&'a [Transition]}
 pub async fn create(pool:&sqlx::PgPool,proof:&AuthenticatedCommand,key:&IdempotencyKey,d:CreateDraft<'_>)->Result<Workflow,Error>{
     if d.policy.is_nil()||d.workflow.is_nil()||d.row.is_nil()||d.workflow==d.row||d.name.trim().is_empty()
@@ -171,7 +191,7 @@ pub async fn create(pool:&sqlx::PgPool,proof:&AuthenticatedCommand,key:&Idempote
     ).bind(t).bind(c).bind(a).bind(key.as_str()).fetch_optional(&mut *tx).await?;
     if let Some((old,result))=prior{
         if old!=hash{return Err(Error::Conflict);}
-        let receipt=latest(&mut tx,t,c,result).await?;
+        let receipt=draft_receipt(&mut tx,t,c,result,1).await?;
         recheck_authenticated(&mut tx,Some(proof)).await?;tx.commit().await?;return Ok(receipt);
     }
     let policy_ok:bool=sqlx::query_scalar(
@@ -187,7 +207,7 @@ pub async fn create(pool:&sqlx::PgPool,proof:&AuthenticatedCommand,key:&Idempote
         .bind(t).bind(c).bind(command).bind(d.workflow).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id) VALUES($1,$2,$3,'workflow.create',$4,$5,$6)")
         .bind(t).bind(c).bind(a).bind(key.as_str()).bind(hash).bind(d.workflow).execute(&mut *tx).await?;
-    let receipt=latest(&mut tx,t,c,d.workflow).await?;
+    let receipt=draft_receipt(&mut tx,t,c,d.workflow,1).await?;
     recheck_authenticated(&mut tx,Some(proof)).await?;tx.commit().await?;Ok(receipt)
 }
 
@@ -212,7 +232,7 @@ pub async fn revise(pool:&sqlx::PgPool,proof:&AuthenticatedCommand,key:&Idempote
     ).bind(t).bind(c).bind(a).bind(key.as_str()).fetch_optional(&mut *tx).await?;
     if let Some((old,result))=prior{
         if old!=hash||result!=d.workflow{return Err(Error::Conflict);}
-        let receipt=latest(&mut tx,t,c,d.workflow).await?;
+        let receipt=draft_receipt(&mut tx,t,c,d.workflow,next).await?;
         recheck_authenticated(&mut tx,Some(proof)).await?;tx.commit().await?;return Ok(receipt);
     }
     let current=latest(&mut tx,t,c,d.workflow).await?;
@@ -229,7 +249,7 @@ pub async fn revise(pool:&sqlx::PgPool,proof:&AuthenticatedCommand,key:&Idempote
         .bind(t).bind(c).bind(command).bind(d.workflow).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id) VALUES($1,$2,$3,'workflow.revise',$4,$5,$6)")
         .bind(t).bind(c).bind(a).bind(key.as_str()).bind(hash).bind(d.workflow).execute(&mut *tx).await?;
-    let receipt=latest(&mut tx,t,c,d.workflow).await?;
+    let receipt=draft_receipt(&mut tx,t,c,d.workflow,next).await?;
     recheck_authenticated(&mut tx,Some(proof)).await?;tx.commit().await?;Ok(receipt)
 }
 

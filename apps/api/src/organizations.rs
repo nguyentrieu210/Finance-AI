@@ -50,6 +50,7 @@ mod reviews;
 mod risks;
 mod rules;
 mod templates;
+mod workflows;
 
 type Hmac256 = Hmac<Sha256>;
 
@@ -515,6 +516,12 @@ pub fn router(state: OrganizationState) -> Router {
         .route("/v1/audit", get(audit::list))
         .route("/v1/dashboard", get(dashboard::get))
         .route("/__diagnostics/knowledge", get(knowledge::search))
+        .route("/v1/workflows", get(workflows::list).post(workflows::create))
+        .route("/v1/workflows/{item_id}", get(workflows::get))
+        .route(
+            "/v1/workflows/{item_id}/revise",
+            axum::routing::post(workflows::revise),
+        )
         .route("/v1/forms", get(forms::list).post(forms::create))
         .route("/v1/forms/{item_id}", get(forms::get))
         .route(

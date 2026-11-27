@@ -452,6 +452,93 @@ async fn scoped_organization_http_real_database() {
         .0,
         StatusCode::FORBIDDEN
     );
+    let transitions = json!([
+        {"command":"PROCESS","from":"DRAFT","to":"PROCESSING","role":"REQUESTER","guard_refs":["authorized","current_revision","clean_docs"]},
+        {"command":"PROCESS","from":"NEEDS_INPUT","to":"PROCESSING","role":"REQUESTER","guard_refs":["authorized","current_revision","clean_docs"]},
+        {"command":"PROCESS_COMPLETE","from":"PROCESSING","to":"REVIEWABLE","role":"SYSTEM","guard_refs":["authorized","current_revision","worker_fenced","complete"]},
+        {"command":"PROCESS_COMPLETE","from":"PROCESSING","to":"NEEDS_INPUT","role":"SYSTEM","guard_refs":["authorized","current_revision","worker_fenced","incomplete"]},
+        {"command":"READY","from":"REVIEWABLE","to":"READY","role":"REQUESTER","guard_refs":["authorized","current_revision","complete","verified","rules_pass","reserved","snapshot_current"]},
+        {"command":"EXPORT","from":"READY","to":"EXPORTED","role":"SYSTEM","guard_refs":["authorized","current_revision","artifact_verified","snapshot_current"]},
+        {"command":"HANDOFF","from":"EXPORTED","to":"HANDED_OFF","role":"REQUESTER","guard_refs":["authorized","current_revision","external_receipt","reserved","snapshot_current","rules_pass"]},
+        {"command":"BEGIN_REVIEW","from":"HANDED_OFF","to":"ACCOUNTING_REVIEW","role":"REQUESTER","guard_refs":["authorized","current_revision","independent_accountant"]},
+        {"command":"ACCEPT","from":"ACCOUNTING_REVIEW","to":"ACCEPTED","role":"ACCOUNTANT","guard_refs":["authorized","current_revision","independent_accountant","critical_confirmed","required_external_evidence","snapshot_current","rules_pass"]},
+        {"command":"RETURN","from":"ACCOUNTING_REVIEW","to":"RETURNED","role":"ACCOUNTANT","guard_refs":["authorized","current_revision","independent_accountant","return_reason","reconciled"]},
+        {"command":"REOPEN","from":"RETURNED","to":"DRAFT","role":"REQUESTER","guard_refs":["authorized","current_revision","reconciled"]}
+    ]);
+    let (workflow_status, workflow, workflow_token) = create_workflow(
+        &app,
+        &policy_admin,
+        "workflow-one",
+        "Synthetic workflow",
+        transitions.clone(),
+    )
+    .await;
+    assert_eq!(workflow_status, StatusCode::CREATED);
+    assert_eq!(workflow["version"], 1);
+    let workflow_id = workflow["id"].as_str().unwrap();
+    let workflow_uri = format!("/v1/workflows/{workflow_id}");
+    assert_eq!(
+        request(&app, &workflow_uri, Some(&requester)).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        request(&app, &workflow_uri, Some(&policy_admin)).await.1,
+        workflow
+    );
+    assert_eq!(
+        create_workflow(
+            &app,
+            &requester,
+            "workflow-denied",
+            "Denied",
+            transitions.clone(),
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let (revise_workflow_status, revised_workflow, _) = revise_workflow(
+        &app,
+        &policy_admin,
+        workflow_id,
+        "workflow-revise",
+        workflow_token.as_deref().unwrap(),
+        ("Synthetic workflow v2", transitions.clone(), "Revision"),
+    )
+    .await;
+    assert_eq!(revise_workflow_status, StatusCode::OK);
+    assert_eq!(revised_workflow["version"], 2);
+    assert_eq!(
+        create_workflow(
+            &app,
+            &policy_admin,
+            "workflow-one",
+            "Synthetic workflow",
+            transitions.clone(),
+        )
+        .await
+        .1,
+        workflow
+    );
+    assert_eq!(
+        revise_workflow(
+            &app,
+            &policy_admin,
+            workflow_id,
+            "workflow-stale",
+            workflow_token.as_deref().unwrap(),
+            ("Stale", transitions.clone(), "Stale revision"),
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let (workflow_list_status, workflow_page) =
+        request(&app, "/v1/workflows", Some(&policy_admin)).await;
+    assert_eq!(workflow_list_status, StatusCode::OK);
+    assert!(workflow_page["items"].as_array().unwrap().iter().any(|item| {
+        item["id"] == workflow_id && item["version"] == 2
+    }));
     let fields = json!([
         {"path":"advance","label":"Có tạm ứng","type":"boolean","required":true,"source_path":"request.advance","layout_row":0,"layout_column":0,"layout_width":12},
         {"path":"amount","label":"Số tiền","type":"money","required":true,"source_path":"request.amount","layout_row":1,"layout_column":0,"layout_width":6,"condition_ref":"advance"},
@@ -1542,6 +1629,74 @@ async fn revise_form(
             Request::builder()
                 .method("POST")
                 .uri(format!("/v1/forms/{form}/revise"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("idempotency-key", key)
+                .header("if-finance-version", version)
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let receipt = response
+        .headers()
+        .get("finance-version")
+        .map(|v| v.to_str().unwrap().to_owned());
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let value: Value = serde_json::from_slice(&bytes).unwrap();
+    (status, value, receipt)
+}
+
+async fn create_workflow(
+    app: &Router,
+    token: &str,
+    key: &str,
+    name: &str,
+    transitions: Value,
+) -> (StatusCode, Value, Option<String>) {
+    let body =
+        json!({"policy_id":"00000000-0000-0000-0000-000000001900","name":name,"transitions":transitions});
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/workflows")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("idempotency-key", key)
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let receipt = response
+        .headers()
+        .get("finance-version")
+        .map(|v| v.to_str().unwrap().to_owned());
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let value: Value = serde_json::from_slice(&bytes).unwrap();
+    (status, value, receipt)
+}
+
+async fn revise_workflow(
+    app: &Router,
+    token: &str,
+    workflow: &str,
+    key: &str,
+    version: &str,
+    revision: (&str, Value, &str),
+) -> (StatusCode, Value, Option<String>) {
+    let (name, transitions, reason) = revision;
+    let body = json!({"name":name,"transitions":transitions,"reason":reason});
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1/workflows/{workflow}/revise"))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .header("idempotency-key", key)
