@@ -1,0 +1,2 @@
+# Wave 3 — authenticated organization read adapter
+Explicitly injected synthetic-only router, not mounted by default application. Uses the existing offline JWKS identity resolver, current membership and scoped nonprivileged PostgreSQL repository. Server-configured company scope, fixed maximum 100 rows, HMAC cursor tied to scope and actor, 300-second expiry, closed DTO, generic errors, no-store. No live OIDC configuration, real data, public write route, session storage or production permission. CI pending. Remaining business API operations remain disabled.

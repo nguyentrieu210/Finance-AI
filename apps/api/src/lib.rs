@@ -2,6 +2,8 @@
 use axum::{Json, Router, http::StatusCode, routing::get};
 use finance_shared::API_LIVENESS;
 
+pub mod organizations;
+
 pub fn router() -> Router {
     Router::new()
         .route("/health/live", get(|| async { Json(API_LIVENESS) }))

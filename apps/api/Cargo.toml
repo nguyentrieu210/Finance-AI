@@ -6,6 +6,16 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+base64 = "=0.22.1"
+finance-core = { path = "../../crates/core" }
+finance-identity = { path = "../../crates/identity" }
+finance-organization = { path = "../../crates/organization" }
+hmac = "=0.12.1"
+rand = "=0.8.5"
+serde.workspace = true
+sha2 = "=0.10.9"
+sqlx.workspace = true
+uuid.workspace = true
 axum.workspace = true
 tokio.workspace = true
 finance-shared = { path = "../../crates/shared" }

@@ -428,9 +428,19 @@ name = "finance-api"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64",
+ "finance-core",
+ "finance-identity",
+ "finance-organization",
  "finance-shared",
+ "hmac",
+ "rand",
+ "serde",
+ "sha2",
+ "sqlx",
  "tokio",
  "tower",
+ "uuid",
 ]
 
 [[package]]
