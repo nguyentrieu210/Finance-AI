@@ -501,6 +501,7 @@ dependencies = [
  "chrono",
  "finance-financial",
  "finance-shared",
+ "uuid",
 ]
 
 [[package]]
