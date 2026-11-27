@@ -1,7 +1,7 @@
 name: finance-ai-dev
 services:
   postgres:
-    image: pgvector/pgvector:0.8.0-pg17
+    image: pgvector/pgvector:0.8.0-pg17@sha256:40b404964359299eefdd5f8518facf1886c562848cf4de13b6eaf91cb70c2b87
     environment:
       POSTGRES_DB: finance
       POSTGRES_USER: finance_dev
