@@ -1,0 +1,9 @@
+[package]
+name = "finance-validation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = false
+
+[dependencies]
+finance-shared = { path = "../shared" }

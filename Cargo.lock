@@ -408,6 +408,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "finance-advances"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "finance-financial",
+ "finance-shared",
+]
+
+[[package]]
+name = "finance-analytics"
+version = "0.1.0"
+dependencies = [
+ "finance-shared",
+]
+
+[[package]]
 name = "finance-api"
 version = "0.1.0"
 dependencies = [
@@ -430,6 +446,24 @@ dependencies = [
  "sqlx",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "finance-budget"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "finance-financial",
+ "finance-shared",
+]
+
+[[package]]
+name = "finance-contracts"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "finance-financial",
+ "finance-shared",
 ]
 
 [[package]]
@@ -480,6 +514,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "finance-financial"
+version = "0.1.0"
+dependencies = [
+ "finance-shared",
+]
+
+[[package]]
+name = "finance-forms"
+version = "0.1.0"
+
+[[package]]
 name = "finance-identity"
 version = "0.1.0"
 dependencies = [
@@ -494,6 +539,24 @@ dependencies = [
  "sqlx",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "finance-integration"
+version = "0.1.0"
+
+[[package]]
+name = "finance-knowledge"
+version = "0.1.0"
+dependencies = [
+ "finance-shared",
+]
+
+[[package]]
+name = "finance-matching"
+version = "0.1.0"
+dependencies = [
+ "finance-shared",
 ]
 
 [[package]]
@@ -546,6 +609,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "finance-policy"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "finance-shared",
+]
+
+[[package]]
+name = "finance-risk-engine"
+version = "0.1.0"
+dependencies = [
+ "finance-shared",
+]
+
+[[package]]
+name = "finance-rule-engine"
+version = "0.1.0"
+dependencies = [
+ "finance-shared",
+]
+
+[[package]]
 name = "finance-shared"
 version = "0.1.0"
 dependencies = [
@@ -557,8 +642,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "finance-templates"
+version = "0.1.0"
+dependencies = [
+ "finance-shared",
+]
+
+[[package]]
+name = "finance-validation"
+version = "0.1.0"
+dependencies = [
+ "finance-shared",
+]
+
+[[package]]
 name = "finance-worker"
 version = "0.1.0"
+
+[[package]]
+name = "finance-workflow"
+version = "0.1.0"
+dependencies = [
+ "finance-shared",
+]
 
 [[package]]
 name = "find-msvc-tools"
