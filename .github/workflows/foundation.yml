@@ -125,3 +125,17 @@ jobs:
         env:
           FINANCE_PADDLE_RECOGNIZER: latin_PP-OCRv3_mobile_rec
         run: bash scripts/test_paddle_probe.sh
+
+  rustfmt-patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Produce deterministic rustfmt patch
+        run: |
+          cargo fmt --all
+          git diff --no-ext-diff --no-color -- '*.rs' > /tmp/rustfmt.patch
+          echo '<<<RUSTFMT_PATCH_B64>>>'
+          base64 -w0 /tmp/rustfmt.patch
+          echo
+          echo '<<<END_RUSTFMT_PATCH_B64>>>'
