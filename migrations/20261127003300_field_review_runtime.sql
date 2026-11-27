@@ -64,14 +64,19 @@ CREATE POLICY field_writer_audit_insert ON finance.audit_event FOR INSERT TO fin
 CREATE POLICY field_writer_outbox_insert ON finance.outbox FOR INSERT TO finance_field_review_writer
  WITH CHECK(tenant_id=finance.scope_tenant() AND company_id=finance.scope_company());
 
+CREATE POLICY field_identity_worker_insert ON finance.field_identity FOR INSERT TO finance_job_worker
+ WITH CHECK(finance.worker_scope_allowed(tenant_id,company_id));
+GRANT INSERT ON finance.field_identity TO finance_job_worker;
+
+-- SECURITY INVOKER: authorization comes from the already-authorized
+-- extracted_field insert. The identity row only mirrors that immutable row.
 CREATE FUNCTION finance.field_identity_after_insert() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $
+LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $$
 BEGIN
  INSERT INTO finance.field_identity(tenant_id,company_id,run_id,field_path,id)
  VALUES(NEW.tenant_id,NEW.company_id,NEW.run_id,NEW.field_path,gen_random_uuid());
  RETURN NEW;
-END $;
-ALTER FUNCTION finance.field_identity_after_insert() OWNER TO finance_field_review_writer;
+END $$;
 REVOKE ALL ON FUNCTION finance.field_identity_after_insert() FROM PUBLIC;
 CREATE TRIGGER field_identity_after_extract AFTER INSERT ON finance.extracted_field
  FOR EACH ROW EXECUTE FUNCTION finance.field_identity_after_insert();
