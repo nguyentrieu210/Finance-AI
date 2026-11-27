@@ -158,7 +158,7 @@ GRANT EXECUTE ON FUNCTION finance.workflow_begin_accounting_review(uuid,uuid,uui
  TO finance_runtime;
 
 CREATE FUNCTION finance.workflow_decide_accounting_review(
- t uuid,c uuid,d uuid,v bigint,a uuid,review_id uuid,snapshot_id uuid,
+ t uuid,c uuid,d uuid,v bigint,a uuid,review_id uuid,snap_id uuid,
  decision text,confirmed uuid[],reason text,cmd uuid,corr uuid
 ) RETURNS bigint
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
@@ -166,7 +166,7 @@ DECLARE ds finance.dossier%ROWTYPE; rev uuid; r finance.accounting_review%ROWTYP
  s finance.dossier_snapshot%ROWTYPE; expected uuid[]:=ARRAY[]::uuid[]; submitted uuid[]:=ARRAY[]::uuid[];
  critical_count bigint; confirmed_count bigint; new_version bigint;
 BEGIN
- IF t IS NULL OR c IS NULL OR d IS NULL OR a IS NULL OR review_id IS NULL OR snapshot_id IS NULL
+ IF t IS NULL OR c IS NULL OR d IS NULL OR a IS NULL OR review_id IS NULL OR snap_id IS NULL
  OR cmd IS NULL OR corr IS NULL OR v IS NULL OR v<0 OR decision NOT IN ('ACCEPTED','RETURNED')
  OR confirmed IS NULL OR cardinality(confirmed)>256 OR reason IS NULL OR btrim(reason)='' OR octet_length(reason)>4096
  OR t IS DISTINCT FROM finance.scope_tenant() OR c IS DISTINCT FROM finance.scope_company()
@@ -188,20 +188,20 @@ BEGIN
    AND ra.dossier_id=d AND ra.revision_id=rev AND ra.accountant_id=a)
  THEN RAISE EXCEPTION 'assigned accountant required' USING ERRCODE='23514'; END IF;
  SELECT * INTO r FROM finance.accounting_review WHERE tenant_id=t AND company_id=c AND id=review_id
-   AND dossier_id=d AND snapshot_id=snapshot_id AND reviewer_id=a AND state='PENDING' FOR UPDATE;
+   AND dossier_id=d AND snapshot_id=snap_id AND reviewer_id=a AND state='PENDING' FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION 'pending review missing' USING ERRCODE='23514'; END IF;
- SELECT * INTO s FROM finance.dossier_snapshot WHERE tenant_id=t AND company_id=c AND id=snapshot_id
+ SELECT * INTO s FROM finance.dossier_snapshot WHERE tenant_id=t AND company_id=c AND id=snap_id
    AND dossier_id=d AND revision_id=rev;
  IF NOT FOUND THEN RAISE EXCEPTION 'stale review snapshot' USING ERRCODE='23514'; END IF;
  IF EXISTS(SELECT 1 FROM finance.reconciliation_case rc JOIN finance.handoff h
     ON (h.tenant_id,h.company_id,h.id)=(rc.tenant_id,rc.company_id,rc.handoff_id)
-    WHERE h.tenant_id=t AND h.company_id=c AND h.snapshot_id=snapshot_id AND rc.state='OPEN')
+    WHERE h.tenant_id=t AND h.company_id=c AND h.snapshot_id=snap_id AND rc.state='OPEN')
  THEN RAISE EXCEPTION 'reconciliation remains open' USING ERRCODE='23514'; END IF;
  IF decision='ACCEPTED' THEN
   IF NOT EXISTS(SELECT 1 FROM finance.policy_version p WHERE p.tenant_id=t AND p.company_id=c
       AND p.id=s.policy_id AND p.state='PUBLISHED' AND p.criticality_complete)
   OR NOT EXISTS(SELECT 1 FROM finance.handoff h WHERE h.tenant_id=t AND h.company_id=c
-      AND h.snapshot_id=snapshot_id AND h.state='ACKNOWLEDGED' AND h.external_ref IS NOT NULL)
+      AND h.snapshot_id=snap_id AND h.state='ACKNOWLEDGED' AND h.external_ref IS NOT NULL)
   OR s.check_run_id IS NULL
   OR EXISTS(SELECT 1 FROM finance.check_result x WHERE x.tenant_id=t AND x.company_id=c
       AND x.run_id=s.check_run_id AND x.severity='BLOCK' AND x.outcome NOT IN ('PASS','NOT_APPLICABLE'))
@@ -248,7 +248,7 @@ BEGIN
   INSERT INTO finance.critical_confirmation(
    tenant_id,company_id,snapshot_id,field_path,actor_id,evidence_id,decision_version
   )
-  SELECT t,c,snapshot_id,pc.field_path,a,fd.evidence_ids[1],v
+  SELECT t,c,snap_id,pc.field_path,a,fd.evidence_ids[1],v
   FROM finance.policy_critical_field pc
   JOIN finance.field_identity fi ON fi.tenant_id=t AND fi.company_id=c AND fi.id=ANY(submitted)
   JOIN finance.extracted_field ef ON (ef.tenant_id,ef.company_id,ef.run_id,ef.field_path)=
@@ -268,7 +268,7 @@ BEGIN
   decision_reason=reason,decided_at=clock_timestamp()
  WHERE tenant_id=t AND company_id=c AND id=review_id;
  INSERT INTO finance.review_decision(tenant_id,company_id,id,snapshot_id,actor_id,decision,reason)
- VALUES(t,c,cmd,snapshot_id,a,decision,reason);
+ VALUES(t,c,cmd,snap_id,a,decision,reason);
  new_version:=v+1;
  UPDATE finance.dossier SET status=decision,version=new_version,updated_at=GREATEST(updated_at,clock_timestamp())
  WHERE tenant_id=t AND company_id=c AND id=d;
