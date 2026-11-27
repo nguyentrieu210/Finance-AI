@@ -249,7 +249,7 @@ BEGIN
   AND m.actor_id=a AND m.role='ACCOUNTANT' AND m.active AND m.valid_from<=clock_timestamp()
   AND (m.valid_until IS NULL OR m.valid_until>clock_timestamp()))
  THEN RAISE EXCEPTION 'assigned accountant required' USING ERRCODE='23514'; END IF;
- SELECT ef.*,ocr.* INTO f,o
+ SELECT ef.* INTO f
  FROM finance.field_identity fi
  JOIN finance.extracted_field ef
   ON (ef.tenant_id,ef.company_id,ef.run_id,ef.field_path)=(fi.tenant_id,fi.company_id,fi.run_id,fi.field_path)
@@ -264,6 +264,11 @@ BEGIN
     AND newer.document_id=ocr.document_id AND newer.revision_id=ocr.revision_id
     AND (newer.created_at>ocr.created_at OR (newer.created_at=ocr.created_at AND newer.id>ocr.id)));
  IF NOT FOUND THEN RAISE EXCEPTION 'stale or unknown field' USING ERRCODE='23514'; END IF;
+ SELECT ocr.* INTO STRICT o
+ FROM finance.extraction_run x
+ JOIN finance.ocr_run ocr
+  ON (ocr.tenant_id,ocr.company_id,ocr.id)=(x.tenant_id,x.company_id,x.ocr_run_id)
+ WHERE x.tenant_id=t AND x.company_id=c AND x.id=f.run_id;
  IF EXISTS(SELECT 1 FROM finance.field_decision q WHERE q.tenant_id=t AND q.company_id=c
   AND q.run_id=f.run_id AND q.field_path=f.field_path AND q.dossier_version=v)
  THEN RAISE EXCEPTION 'field already decided at version' USING ERRCODE='23514'; END IF;
