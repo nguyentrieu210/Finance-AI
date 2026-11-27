@@ -818,38 +818,20 @@ async fn scoped_organization_http_real_database() {
             .0,
         StatusCode::FORBIDDEN
     );
-    let (risk_resolve_status, resolved_risk, risk_receipt) = resolve_risk(
-        &app,
-        &review_accountant,
-        risk_id,
-        "risk-resolve",
-        &risk_v0,
-    )
-    .await;
+    let (risk_resolve_status, resolved_risk, risk_receipt) =
+        resolve_risk(&app, &review_accountant, risk_id, "risk-resolve", &risk_v0).await;
     assert_eq!(risk_resolve_status, StatusCode::OK);
     assert_eq!(resolved_risk["state"], "RESOLVED");
     assert!(risk_receipt.as_deref().unwrap().ends_with(":1\""));
-    let risk_replay = resolve_risk(
-        &app,
-        &review_accountant,
-        risk_id,
-        "risk-resolve",
-        &risk_v0,
-    )
-    .await;
+    let risk_replay =
+        resolve_risk(&app, &review_accountant, risk_id, "risk-resolve", &risk_v0).await;
     assert_eq!(risk_replay.0, StatusCode::OK);
     assert_eq!(risk_replay.1, resolved_risk);
     assert_eq!(risk_replay.2, risk_receipt);
     assert_eq!(
-        resolve_risk(
-            &app,
-            &review_accountant,
-            risk_id,
-            "risk-stale",
-            &risk_v0,
-        )
-        .await
-        .0,
+        resolve_risk(&app, &review_accountant, risk_id, "risk-stale", &risk_v0,)
+            .await
+            .0,
         StatusCode::CONFLICT
     );
     assert_eq!(

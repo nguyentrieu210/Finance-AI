@@ -182,17 +182,13 @@ pub(super) async fn resolve_risk(
     if version.target != VersionTarget::Risk || Uuid::from(version.resource_id) != risk {
         return error(StatusCode::BAD_REQUEST, correlation);
     }
-    let proof = match dossiers::authenticate_version(
-        &state,
-        &headers,
-        correlation,
-        Some(version.version),
-    )
-    .await
-    {
-        Ok(proof) => proof,
-        Err(status) => return error(status, correlation),
-    };
+    let proof =
+        match dossiers::authenticate_version(&state, &headers, correlation, Some(version.version))
+            .await
+        {
+            Ok(proof) => proof,
+            Err(status) => return error(status, correlation),
+        };
     let Some(key) = key(&headers) else {
         return error(StatusCode::BAD_REQUEST, correlation);
     };
