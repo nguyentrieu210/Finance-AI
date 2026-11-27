@@ -27,6 +27,15 @@ BEGIN
  PERFORM finance.prototype_policy_transition(t,c,p,checker,'REVOKED');
  IF EXISTS(SELECT 1 FROM finance.prototype_retrieve_knowledge(t,c,'ADVANCE','2027-06-01','advance',m,'[1,0,0]'::finance.vector,20))
  THEN RAISE EXCEPTION 'revoked policy retrieved'; END IF;
- IF has_table_privilege('finance_runtime','finance.knowledge_chunk','SELECT') THEN RAISE EXCEPTION 'fixture knowledge exposed'; END IF;
+ IF NOT has_table_privilege('finance_runtime','finance.knowledge_chunk','SELECT')
+ OR has_table_privilege('finance_runtime','finance.knowledge_chunk','INSERT')
+ OR has_table_privilege('finance_runtime','finance.knowledge_chunk','UPDATE')
+ OR has_table_privilege('finance_runtime','finance.knowledge_chunk','DELETE')
+ OR NOT EXISTS(
+   SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname='finance' AND c.relname='knowledge_chunk'
+   AND c.relrowsecurity AND c.relforcerowsecurity
+ )
+ THEN RAISE EXCEPTION 'knowledge runtime privilege/RLS invariant failed'; END IF;
 END $$;
 SELECT 'PASS: actual pgvector ranking, lexical priority, approved clause source, scope/model/date isolation and revocation';
