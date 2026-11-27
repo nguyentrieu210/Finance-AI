@@ -30,6 +30,7 @@ mod checks;
 mod dashboard;
 mod documents;
 mod dossiers;
+mod policies;
 mod references;
 
 type Hmac256 = Hmac<Sha256>;
@@ -275,6 +276,8 @@ pub fn router(state: OrganizationState) -> Router {
         .route("/v1/dossiers/{dossier_id}/checks", get(checks::list))
         .route("/v1/audit", get(audit::list))
         .route("/v1/dashboard", get(dashboard::get))
+        .route("/v1/policies", get(policies::list))
+        .route("/v1/policies/{item_id}", get(policies::get))
         .route("/v1/contracts", get(references::contracts))
         .route("/v1/advances", get(references::advances))
         .route("/v1/budgets", get(references::budgets))

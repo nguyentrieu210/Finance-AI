@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 //! Synthetic-only domain prototype. No authorization, durable mutation or production claim.
+pub mod repository;
+
 use chrono::NaiveDate;
 use finance_shared::ids::{ActorId, CompanyScope, ResourceId};
 

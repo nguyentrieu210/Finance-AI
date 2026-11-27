@@ -443,6 +443,7 @@ dependencies = [
  "finance-financial",
  "finance-identity",
  "finance-organization",
+ "finance-policy",
  "finance-shared",
  "finance-workflow",
  "hmac",
@@ -667,7 +668,12 @@ name = "finance-policy"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "finance-core",
+ "finance-identity",
+ "finance-permissions",
  "finance-shared",
+ "serde",
+ "sqlx",
  "uuid",
 ]
 

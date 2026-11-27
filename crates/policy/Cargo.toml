@@ -11,3 +11,9 @@ chrono.workspace = true
 
 [dev-dependencies]
 uuid.workspace = true
+
+finance-core = { path = "../core" }
+finance-identity = { path = "../identity" }
+finance-permissions = { path = "../permissions" }
+serde.workspace = true
+sqlx.workspace = true
