@@ -142,8 +142,7 @@ BEGIN
    FROM finance.field_decision q
    WHERE q.tenant_id=f.tenant_id AND q.company_id=f.company_id AND q.run_id=f.run_id
     AND q.field_path=f.field_path AND q.dossier_id=ds.id AND q.revision_id=dr.id
-    AND q.dossier_version=ds.version
-   ORDER BY q.created_at DESC,q.id DESC LIMIT 1
+   ORDER BY q.dossier_version DESC,q.created_at DESC,q.id DESC LIMIT 1
   ) fd ON true
   WHERE ds.tenant_id=t AND ds.company_id=c AND ds.id=d
    AND (only_id IS NULL OR fi.id=only_id)
@@ -270,8 +269,8 @@ BEGIN
   ON (ocr.tenant_id,ocr.company_id,ocr.id)=(x.tenant_id,x.company_id,x.ocr_run_id)
  WHERE x.tenant_id=t AND x.company_id=c AND x.id=f.run_id;
  IF EXISTS(SELECT 1 FROM finance.field_decision q WHERE q.tenant_id=t AND q.company_id=c
-  AND q.run_id=f.run_id AND q.field_path=f.field_path AND q.dossier_version=v)
- THEN RAISE EXCEPTION 'field already decided at version' USING ERRCODE='23514'; END IF;
+  AND q.run_id=f.run_id AND q.field_path=f.field_path AND q.dossier_id=d AND q.revision_id=rev)
+ THEN RAISE EXCEPTION 'current extraction field already decided' USING ERRCODE='23514'; END IF;
  SELECT COALESCE(array_agg(e.id ORDER BY e.block_index,e.id),ARRAY[]::uuid[]) INTO source_evidence
  FROM finance.evidence e WHERE e.tenant_id=t AND e.company_id=c AND e.ocr_run_id=o.id
   AND e.page=f.source_page AND e.block_index=ANY(f.block_indexes);
