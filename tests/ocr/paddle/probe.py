@@ -19,6 +19,9 @@ OPTIONS = {
     "text_detection_model_dir": str(ROOT / DETECT),
     "text_recognition_model_name": RECOGNIZE,
     "text_recognition_model_dir": str(ROOT / RECOGNIZE),
+    # Candidate setting: expand detection crops to retain upper Vietnamese accents.
+    # The exact same synthetic text and Rust acceptance assertions remain in force.
+    "text_det_unclip_ratio": 2.5,
     "use_doc_orientation_classify": False,
     "use_doc_unwarping": False,
     "use_textline_orientation": False,

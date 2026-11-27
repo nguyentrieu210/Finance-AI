@@ -41,6 +41,10 @@ BEGIN
  IF finance.prototype_review_candidate(t,c,d,0,r,'invoice.total',a,review,'CONFIRMED_CANDIDATE','Checked synthetic OCR candidate') IS DISTINCT FROM review
  THEN RAISE EXCEPTION 'review replay mismatch'; END IF;
  BEGIN
+  PERFORM finance.prototype_review_candidate(t,c,d,0,r,'invoice.total',a,review,'CONFIRMED_CANDIDATE','Different review reason');
+  RAISE EXCEPTION 'changed review reason replay accepted';
+ EXCEPTION WHEN unique_violation THEN NULL; END;
+ BEGIN
   PERFORM finance.prototype_preflight(t,c,d,0,owner_id,gen_random_uuid(),day);
   RAISE EXCEPTION 'stale preflight accepted';
  EXCEPTION WHEN check_violation THEN NULL; END;
