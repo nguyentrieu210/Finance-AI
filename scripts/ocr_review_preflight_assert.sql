@@ -1,67 +1,44 @@
--- Uses real OCR evidence created by real_persist.rs, not fabricated extracted fields.
+-- Continue after the runtime HTTP field decision over actual OCR evidence.
 DO $$
-DECLARE t uuid:='00000000-0000-0000-0000-000000000001';c uuid:='00000000-0000-0000-0000-00000000000a';
- d uuid:='00000000-0000-0000-0000-000000001f41';r uuid:='00000000-0000-0000-0000-000000001f44';
- rev uuid:='00000000-0000-0000-0000-000000001f42'; checker uuid:=gen_random_uuid(); unassigned uuid:=gen_random_uuid();
- owner_id uuid:='00000000-0000-0000-0000-0000000003e9';a uuid:=gen_random_uuid();review uuid:=gen_random_uuid();
- check1 uuid:=gen_random_uuid();check2 uuid:=gen_random_uuid();hash1 bytea;hash2 bytea;day date:='2027-01-01';
+DECLARE t uuid:='00000000-0000-0000-0000-000000000001';
+ c uuid:='00000000-0000-0000-0000-00000000000a';
+ d uuid:='00000000-0000-0000-0000-000000001f41';
+ owner_id uuid:='00000000-0000-0000-0000-0000000003e9';
+ accountant uuid:='00000000-0000-0000-0000-000000004001';
+ check_before uuid:='00000000-0000-0000-0000-000000004010';
+ check_after uuid:='00000000-0000-0000-0000-000000004011';
+ hash_before bytea;hash_after bytea;
 BEGIN
- INSERT INTO finance.identity_subject(tenant_id,id,issuer,subject) VALUES(t,a,'https://synthetic.invalid','synthetic-accountant'),(t,checker,'https://synthetic.invalid','synthetic-review-assigner'),(t,unassigned,'https://synthetic.invalid','synthetic-unassigned');
- INSERT INTO finance.membership(tenant_id,company_id,actor_id,role) VALUES(t,c,a,'ACCOUNTANT'),(t,c,owner_id,'ACCOUNTANT'),(t,c,unassigned,'ACCOUNTANT'),(t,c,checker,'FINANCE_APPROVER');
- PERFORM finance.prototype_assign_candidate_review(t,c,d,rev,a,checker);
- BEGIN
-  PERFORM finance.prototype_review_candidate(t,c,d,0,r,'invoice.total',unassigned,review,'CONFIRMED_CANDIDATE','Unassigned review');
-  RAISE EXCEPTION 'unassigned review accepted';
- EXCEPTION WHEN check_violation THEN NULL; END;
- -- A trusted synthetic caller must bind transaction scope; the audit trigger
- -- must reject unscoped or mismatched actor writes, even for the fixture.
+ IF (SELECT version FROM finance.dossier WHERE id=d)<>1
+ OR (SELECT count(*) FROM finance.field_decision WHERE dossier_id=d)<>1
+ OR NOT EXISTS(SELECT 1 FROM finance.field_decision WHERE dossier_id=d AND actor_id=accountant
+  AND disposition='CONFIRMED_CANDIDATE' AND normalized_value='125000'
+  AND cardinality(evidence_ids)>0 AND dossier_version=1)
+ OR (SELECT count(*) FROM finance.audit_event WHERE resource_id=d AND action='FIELD_REVIEWED')<>1
+ OR (SELECT count(*) FROM finance.outbox WHERE resource_id=d AND event_type='FIELD_REVIEWED')<>1
+ THEN RAISE EXCEPTION 'runtime field review receipt/provenance invariant failed'; END IF;
+
  PERFORM set_config('finance.tenant_id',t::text,true);
  PERFORM set_config('finance.company_id',c::text,true);
- PERFORM set_config('finance.actor_id',a::text,true);
- BEGIN
-  PERFORM finance.prototype_preflight(t,c,d,0,owner_id,check1,day);
-  RAISE EXCEPTION 'mismatched audit actor accepted';
- EXCEPTION WHEN insufficient_privilege THEN NULL; END;
- IF EXISTS(SELECT 1 FROM finance.check_run WHERE id=check1) THEN
-  RAISE EXCEPTION 'failed audit left a check run';
- END IF;
  PERFORM set_config('finance.actor_id',owner_id::text,true);
- PERFORM finance.prototype_preflight(t,c,d,0,owner_id,check1,day);
  BEGIN
-  PERFORM finance.prototype_review_candidate(t,c,d,0,r,'invoice.total',owner_id,review,'CONFIRMED_CANDIDATE','Self review');
-  RAISE EXCEPTION 'self review accepted';
- EXCEPTION WHEN check_violation THEN NULL; END;
- BEGIN
-  PERFORM finance.prototype_review_candidate(t,c,d,0,r,'invoice.tax',a,review,'CONFIRMED_CANDIDATE','Unknown tax');
-  RAISE EXCEPTION 'unknown candidate confirmed';
- EXCEPTION WHEN check_violation THEN NULL; END;
- PERFORM set_config('finance.actor_id',a::text,true);
- PERFORM finance.prototype_review_candidate(t,c,d,0,r,'invoice.total',a,review,'CONFIRMED_CANDIDATE','Checked synthetic OCR candidate');
- IF (SELECT normalized_value FROM finance.field_decision WHERE id=review) IS DISTINCT FROM '125000' THEN RAISE EXCEPTION 'confirmed value differs from OCR'; END IF;
- IF finance.prototype_review_candidate(t,c,d,0,r,'invoice.total',a,review,'CONFIRMED_CANDIDATE','Checked synthetic OCR candidate') IS DISTINCT FROM review
- THEN RAISE EXCEPTION 'review replay mismatch'; END IF;
- BEGIN
-  PERFORM finance.prototype_review_candidate(t,c,d,0,r,'invoice.total',a,review,'CONFIRMED_CANDIDATE','Different review reason');
-  RAISE EXCEPTION 'changed review reason replay accepted';
- EXCEPTION WHEN unique_violation THEN NULL; END;
- BEGIN
-  PERFORM finance.prototype_preflight(t,c,d,0,owner_id,gen_random_uuid(),day);
+  PERFORM finance.prototype_preflight(t,c,d,0,owner_id,gen_random_uuid(),'2027-01-01');
   RAISE EXCEPTION 'stale preflight accepted';
  EXCEPTION WHEN check_violation THEN NULL; END;
- PERFORM set_config('finance.actor_id',owner_id::text,true);
- PERFORM finance.prototype_preflight(t,c,d,1,owner_id,check2,day);
- SELECT input_hash INTO hash1 FROM finance.check_run WHERE id=check1;
- SELECT input_hash INTO hash2 FROM finance.check_run WHERE id=check2;
- IF hash1=hash2 OR (SELECT count(*) FROM finance.field_decision)<>1
- OR (SELECT count(*) FROM finance.check_run WHERE blocked)<>2
- OR NOT EXISTS(SELECT 1 FROM finance.check_result WHERE run_id=check2 AND rule_key='scan.release' AND outcome='UNKNOWN' AND severity='BLOCK')
+ PERFORM finance.prototype_preflight(t,c,d,1,owner_id,check_after,'2027-01-01');
+ SELECT input_hash INTO hash_before FROM finance.check_run WHERE id=check_before;
+ SELECT input_hash INTO hash_after FROM finance.check_run WHERE id=check_after;
+ IF hash_before=hash_after
+ OR (SELECT count(*) FROM finance.check_run WHERE dossier_id=d AND blocked)<>2
+ OR NOT EXISTS(SELECT 1 FROM finance.check_result WHERE run_id=check_after
+    AND rule_key='scan.release' AND outcome='UNKNOWN' AND severity='BLOCK')
  OR (SELECT status FROM finance.dossier WHERE id=d)<>'DRAFT'
- OR (SELECT count(*) FROM finance.audit_event WHERE action='SYNTHETIC_FIELD_REVIEWED')<>1
  OR has_table_privilege('finance_runtime','finance.field_decision','INSERT')
- THEN RAISE EXCEPTION 'review/preflight invariant failed'; END IF;
+ OR has_column_privilege('finance_runtime','finance.dossier','version','UPDATE')
+ THEN RAISE EXCEPTION 'field review invalidation/preflight invariant failed'; END IF;
  BEGIN
-  UPDATE finance.field_decision SET reason='changed' WHERE id=review;
-  RAISE EXCEPTION 'decision mutated';
+  UPDATE finance.field_decision SET reason='changed' WHERE dossier_id=d;
+  RAISE EXCEPTION 'field decision mutated';
  EXCEPTION WHEN check_violation THEN NULL; END;
 END $$;
-SELECT 'PASS: actual OCR evidence review, independent accountant, immutable decision, stale preflight rejection and blocked unapproved scan';
+SELECT 'PASS: actual OCR field HTTP review, immutable evidence decision, version invalidation and blocked preflight';

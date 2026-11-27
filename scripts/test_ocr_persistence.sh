@@ -29,7 +29,15 @@ unset pw
 trained="$(find /usr/share/tesseract-ocr -name vie.traineddata -type f -print -quit)"
 test -f "$trained"
 FINANCE_OCR_DB_URL="$url" FINANCE_OCR_WORKER_URL="$worker" FINANCE_OCR_TRAINEDDATA="$trained" cargo test --locked -p finance-extraction --test real_persist -- --ignored --exact real_candidate_persistence
+docker exec -i "$cid" psql -X -U finance_migrator -d finance_ocr -v ON_ERROR_STOP=1 -f - < scripts/field_runtime_fixture.sql
+runtime_pw="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
+identity_pw="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
+printf "CREATE ROLE finance_ocr_runtime_login LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD '%s';\nGRANT finance_runtime TO finance_ocr_runtime_login;\nCREATE ROLE finance_ocr_identity_login LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD '%s';\nGRANT finance_identity_lookup TO finance_ocr_identity_login;\n" "$runtime_pw" "$identity_pw" | docker exec -i "$cid" psql -X -U finance_migrator -d finance_ocr -v ON_ERROR_STOP=1 >/dev/null
+runtime_url="postgresql://finance_ocr_runtime_login:$runtime_pw@$port/finance_ocr?sslmode=disable"
+identity_url="postgresql://finance_ocr_identity_login:$identity_pw@$port/finance_ocr?sslmode=disable"
+unset runtime_pw identity_pw
+FINANCE_OCR_RUNTIME_URL="$runtime_url" FINANCE_OCR_IDENTITY_URL="$identity_url" cargo test --locked -p finance-api --test fields_db -- --ignored --exact actual_ocr_fields_http_review
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_ocr -v ON_ERROR_STOP=1 -f - < scripts/ocr_review_preflight_assert.sql
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_ocr -v ON_ERROR_STOP=1 -f - < scripts/check_read_assert.sql
-unset url worker
+unset url worker runtime_url identity_url
 echo 'PASS: actual OCR row candidates, immutable evidence, source digest and fenced job transaction in PostgreSQL'
