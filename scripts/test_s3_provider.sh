@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 # Disposable versioned object store, no host volume, no real credentials or documents.
-image='quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z'
+image='docker.io/minio/minio:RELEASE.2025-04-22T22-12-26Z'
 export MINIO_ROOT_USER="finance-probe-$(python3 -c 'import secrets; print(secrets.token_hex(6))')"
 export MINIO_ROOT_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
 # Pass secrets by inherited environment, never as command arguments or logs.

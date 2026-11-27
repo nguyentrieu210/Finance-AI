@@ -76,8 +76,8 @@ impl ClamdScanner {
             return Err(ScanError::InvalidOriginal);
         }
         let deadline = Instant::now() + self.timeout;
-        let mut stream = TcpStream::connect_timeout(&self.address, remaining(deadline)?)
-            .map_err(map_io)?;
+        let mut stream =
+            TcpStream::connect_timeout(&self.address, remaining(deadline)?).map_err(map_io)?;
         write_bounded(&mut stream, b"zINSTREAM\0", deadline)?;
         for chunk in bytes.chunks(CHUNK_SIZE) {
             let length = u32::try_from(chunk.len()).map_err(|_| ScanError::InvalidOriginal)?;
@@ -172,7 +172,10 @@ mod tests {
 
     #[test]
     fn scanner_reply_is_strict_and_fail_closed() {
-        assert_eq!(parse_reply(b"stream: OK"), Ok(ScanVerdict::NoSignatureMatch));
+        assert_eq!(
+            parse_reply(b"stream: OK"),
+            Ok(ScanVerdict::NoSignatureMatch)
+        );
         assert_eq!(
             parse_reply(b"stream: SyntheticProbe.UNOFFICIAL FOUND"),
             Ok(ScanVerdict::SignatureDetected)
@@ -196,13 +199,13 @@ mod tests {
 
     #[test]
     fn scanner_endpoint_is_local_and_bounded() {
-        assert!(ClamdScanner::new("127.0.0.1:3310".parse().unwrap(), Duration::from_secs(1)).is_ok());
+        assert!(
+            ClamdScanner::new("127.0.0.1:3310".parse().unwrap(), Duration::from_secs(1)).is_ok()
+        );
         assert!(
             ClamdScanner::new("192.0.2.1:3310".parse().unwrap(), Duration::from_secs(1)).is_err()
         );
-        assert!(
-            ClamdScanner::new("127.0.0.1:3310".parse().unwrap(), Duration::ZERO).is_err()
-        );
+        assert!(ClamdScanner::new("127.0.0.1:3310".parse().unwrap(), Duration::ZERO).is_err());
         assert!(
             ClamdScanner::new("127.0.0.1:3310".parse().unwrap(), Duration::from_secs(61)).is_err()
         );

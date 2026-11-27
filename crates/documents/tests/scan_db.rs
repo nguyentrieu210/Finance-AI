@@ -40,7 +40,8 @@ fn original(bytes: &[u8]) -> Original {
 #[test]
 fn transport_framing_and_original_binding() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let scanner = ClamdScanner::new(listener.local_addr().unwrap(), Duration::from_secs(3)).unwrap();
+    let scanner =
+        ClamdScanner::new(listener.local_addr().unwrap(), Duration::from_secs(3)).unwrap();
     let fixture = original(CLEAN);
     assert_eq!(
         scanner.scan(fixture, MATCHED),
@@ -48,7 +49,9 @@ fn transport_framing_and_original_binding() {
     );
     let server = thread::spawn(move || {
         let (mut socket, _) = listener.accept().unwrap();
-        socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        socket
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
         let mut command = [0_u8; 10];
         socket.read_exact(&mut command).unwrap();
         assert_eq!(&command, b"zINSTREAM\0");
@@ -78,16 +81,16 @@ fn transport_framing_and_original_binding() {
 #[test]
 fn no_response_times_out_without_clean_verdict() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let scanner = ClamdScanner::new(
-        listener.local_addr().unwrap(),
-        Duration::from_millis(150),
-    )
-    .unwrap();
+    let scanner =
+        ClamdScanner::new(listener.local_addr().unwrap(), Duration::from_millis(150)).unwrap();
     let server = thread::spawn(move || {
         let (_socket, _) = listener.accept().unwrap();
         thread::sleep(Duration::from_millis(400));
     });
-    assert_eq!(scanner.scan(original(CLEAN), CLEAN), Err(ScanError::Timeout));
+    assert_eq!(
+        scanner.scan(original(CLEAN), CLEAN),
+        Err(ScanError::Timeout)
+    );
     server.join().unwrap();
 }
 
