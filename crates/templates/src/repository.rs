@@ -97,11 +97,21 @@ async fn source_digest(
     document: Uuid,
     format: &str,
 ) -> Result<String, Error> {
-    Ok(sqlx::query_scalar("SELECT encode(finance.template_source_digest($1,$2),'hex')")
+    match sqlx::query_scalar("SELECT encode(finance.template_source_digest($1,$2),'hex')")
         .bind(document)
         .bind(format)
         .fetch_one(&mut **tx)
-        .await?)
+        .await
+    {
+        Ok(value) => Ok(value),
+        Err(sqlx::Error::Database(error)) if error.code().as_deref() == Some("23514") => {
+            Err(Error::InvalidInput)
+        }
+        Err(sqlx::Error::Database(error)) if error.code().as_deref() == Some("42501") => {
+            Err(Error::Forbidden)
+        }
+        Err(error) => Err(Error::Database(error)),
+    }
 }
 
 pub async fn create(

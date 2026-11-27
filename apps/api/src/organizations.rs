@@ -34,6 +34,7 @@ mod forms;
 mod knowledge;
 mod policies;
 mod references;
+mod templates;
 
 type Hmac256 = Hmac<Sha256>;
 
@@ -284,6 +285,12 @@ pub fn router(state: OrganizationState) -> Router {
         .route(
             "/v1/forms/{item_id}/revise",
             axum::routing::post(forms::revise),
+        )
+        .route("/v1/templates", get(templates::list).post(templates::create))
+        .route("/v1/templates/{item_id}", get(templates::get))
+        .route(
+            "/v1/templates/{item_id}/revise",
+            axum::routing::post(templates::revise),
         )
         .route("/v1/policies", get(policies::list))
         .route("/v1/policies/{item_id}", get(policies::get))

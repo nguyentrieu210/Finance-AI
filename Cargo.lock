@@ -448,6 +448,7 @@ dependencies = [
  "finance-organization",
  "finance-policy",
  "finance-shared",
+ "finance-templates",
  "finance-workflow",
  "hmac",
  "jsonwebtoken",
