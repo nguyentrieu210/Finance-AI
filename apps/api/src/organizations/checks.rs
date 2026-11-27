@@ -4,13 +4,20 @@ use super::{
 };
 use axum::{
     Json,
-    extract::{Path, Query, State, rejection::QueryRejection},
+    extract::{
+        Path, Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use finance_shared::contracts::Principal;
+use finance_shared::{
+    contracts::{Principal, Version},
+    http_contract::{IdempotencyKey, VersionTarget, VersionToken},
+    ids::ResourceId,
+};
 use finance_workflow::checks::{self, Check};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -78,6 +85,74 @@ pub(super) async fn list(
             response
         }
         Ok(None) => error(StatusCode::NOT_FOUND, correlation),
+        Err(e) => error(dossiers::status(e), correlation),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct AcknowledgeBody {
+    result_id: Uuid,
+    reason: String,
+}
+
+pub(super) async fn acknowledge(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(dossier): Path<Uuid>,
+    body: Result<Json<AcknowledgeBody>, JsonRejection>,
+) -> Response {
+    let correlation = random_id();
+    let Some(token) = headers
+        .get("if-finance-version")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| VersionToken::parse(s).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    if token.target != VersionTarget::Dossier || Uuid::from(token.resource_id) != dossier {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let proof =
+        match dossiers::authenticate_version(&state, &headers, correlation, Some(token.version))
+            .await
+        {
+            Ok(proof) => proof,
+            Err(s) => return error(s, correlation),
+        };
+    let Some(key) = headers
+        .get("idempotency-key")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| IdempotencyKey::parse(s).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let input = checks::Acknowledge {
+        dossier,
+        result: body.result_id,
+        acknowledgment: random_id(),
+        reason: &body.reason,
+    };
+    match checks::acknowledge(&state.runtime, &proof, &key, input).await {
+        Ok((row, version)) => {
+            let token = VersionToken {
+                target: VersionTarget::Dossier,
+                resource_id: ResourceId::try_from(dossier).expect("stored dossier"),
+                version: Version::try_from(version).expect("stored version"),
+            };
+            let mut response = Json(row).into_response();
+            response.headers_mut().insert(
+                "finance-version",
+                HeaderValue::from_str(&token.to_string()).expect("canonical"),
+            );
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
         Err(e) => error(dossiers::status(e), correlation),
     }
 }

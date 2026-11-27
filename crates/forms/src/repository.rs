@@ -108,6 +108,7 @@ fn schema(fields: &[DraftField], version: i64) -> Result<Value, Error> {
             .map(|control| json!({"field":control,"equals":true}));
         normalized.push(json!({
             "key": field.path,
+            "label": field.label,
             "type": field.field_type,
             "required": field.required && field.condition_ref.is_none(),
             "required_when_visible": field.required && field.condition_ref.is_some(),

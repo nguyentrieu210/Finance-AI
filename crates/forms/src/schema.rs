@@ -34,6 +34,7 @@ struct Layout {
 #[serde(deny_unknown_fields)]
 struct Field {
     key: String,
+    label: Option<String>,
     #[serde(rename = "type")]
     ty: Type,
     required: bool,
@@ -122,8 +123,14 @@ pub fn compile(bytes: &[u8]) -> Result<Schema, Error> {
     }
     let mut fields = BTreeMap::new();
     let mut order = Vec::new();
+    let mut occupied = BTreeSet::new();
     for field in raw.fields {
         if !key_valid(&field.key) {
+            return Err(Error::InvalidSchema);
+        }
+        if field.label.as_ref().is_some_and(|label| {
+            label.trim().is_empty() || label.len() > 200 || label.chars().any(char::is_control)
+        }) {
             return Err(Error::InvalidSchema);
         }
         if field.required && field.visible_if.is_some() {
@@ -144,6 +151,13 @@ pub fn compile(bytes: &[u8]) -> Result<Schema, Error> {
                 || layout.row > 4095
         }) {
             return Err(Error::InvalidSchema);
+        }
+        if let Some(layout) = &field.layout {
+            for column in layout.column..layout.column + layout.width {
+                if !occupied.insert((layout.row, column)) {
+                    return Err(Error::InvalidSchema);
+                }
+            }
         }
         if field.required_when_visible && (field.visible_if.is_none() || field.required) {
             return Err(Error::InvalidSchema);

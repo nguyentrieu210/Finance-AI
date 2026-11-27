@@ -1286,8 +1286,53 @@ async fn scoped_organization_http_real_database() {
     .await;
     assert_eq!(check_status, StatusCode::OK);
     let current_checks = check_page["items"].as_array().unwrap();
-    assert_eq!(current_checks.len(), 1);
-    assert_eq!(current_checks[0]["reason_code"], "SYNTHETIC_PASS");
+    assert_eq!(current_checks.len(), 2);
+    let pass = current_checks
+        .iter()
+        .find(|x| x["reason_code"] == "SYNTHETIC_PASS")
+        .unwrap();
+    let warning = current_checks
+        .iter()
+        .find(|x| x["severity"] == "WARNING")
+        .unwrap();
+    let ack_uri = format!("/v1/dossiers/{ready_id}/acknowledge");
+    let ack_request = |actor: &str, key: &str, result: &Value| {
+        Request::builder()
+            .method("POST")
+            .uri(ack_uri.as_str())
+            .header(header::AUTHORIZATION, format!("Bearer {actor}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header("idempotency-key", key)
+            .header("if-finance-version", ready_version.as_str())
+            .body(Body::from(
+                json!({"result_id":result,"reason":"Reviewed warning"}).to_string(),
+            ))
+            .unwrap()
+    };
+    let refused = app
+        .clone()
+        .oneshot(ack_request(&requester, "ack-block", &pass["id"]))
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), StatusCode::CONFLICT);
+    let acknowledged = app
+        .clone()
+        .oneshot(ack_request(&requester, "ack-warning", &warning["id"]))
+        .await
+        .unwrap();
+    assert_eq!(acknowledged.status(), StatusCode::OK);
+    let body = to_bytes(acknowledged.into_body(), 1024 * 1024)
+        .await
+        .unwrap();
+    assert_eq!(&serde_json::from_slice::<Value>(&body).unwrap(), warning);
+    let replay = app
+        .clone()
+        .oneshot(ack_request(&requester, "ack-warning", &warning["id"]))
+        .await
+        .unwrap();
+    assert_eq!(replay.status(), StatusCode::OK);
+    let bytes = to_bytes(replay.into_body(), 1024 * 1024).await.unwrap();
+    assert_eq!(body, bytes);
     assert_eq!(
         ready_dossier(
             &app,

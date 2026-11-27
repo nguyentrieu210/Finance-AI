@@ -478,6 +478,10 @@ pub fn router(state: OrganizationState) -> Router {
         )
         .route("/v1/evidence/{evidence_id}", get(documents::evidence))
         .route("/v1/dossiers/{dossier_id}/checks", get(checks::list))
+        .route(
+            "/v1/dossiers/{dossier_id}/acknowledge",
+            axum::routing::post(checks::acknowledge),
+        )
         .route("/v1/dossiers/{dossier_id}/checklist", get(checklist::get))
         .route("/v1/dossiers/{dossier_id}/fields", get(fields::list))
         .route(

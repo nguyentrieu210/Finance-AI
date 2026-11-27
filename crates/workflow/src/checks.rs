@@ -4,9 +4,11 @@ use finance_identity::AuthenticatedCommand;
 use finance_permissions::{GrantError, Role, require_role};
 use finance_shared::{
     contracts::Principal,
+    http_contract::IdempotencyKey,
     ids::{CompanyScope, ResourceScope},
 };
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -76,4 +78,114 @@ pub async fn list(
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(Some(rows))
+}
+
+pub struct Acknowledge<'a> {
+    pub dossier: Uuid,
+    pub result: Uuid,
+    pub acknowledgment: Uuid,
+    pub reason: &'a str,
+}
+
+pub async fn acknowledge(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    input: Acknowledge<'_>,
+) -> Result<(Check, i64), Error> {
+    let version = i64::from(
+        proof
+            .context()
+            .expected_version
+            .ok_or(Error::InvalidInput)?,
+    );
+    if input.dossier.is_nil()
+        || input.result.is_nil()
+        || input.acknowledgment.is_nil()
+        || input.reason.trim().is_empty()
+        || input.reason.len() > 2048
+        || input.reason.chars().any(char::is_control)
+    {
+        return Err(Error::InvalidInput);
+    }
+    let ResourceScope::Company(CompanyScope { tenant, company }) = proof.context().scope else {
+        return Err(Error::Forbidden);
+    };
+    let Principal::User(actor) = proof.context().actor else {
+        return Err(Error::Forbidden);
+    };
+    let (t, c, a): (Uuid, Uuid, Uuid) = (tenant.into(), company.into(), actor.into());
+    let mut hash = Sha256::new();
+    hash.update(b"finance.warning.ack/v1");
+    hash.update(input.dossier.as_bytes());
+    hash.update(input.result.as_bytes());
+    hash.update(version.to_be_bytes());
+    hash.update(input.reason.as_bytes());
+    let hash = hash.finalize().to_vec();
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(|e| match e {
+            GrantError::Forbidden => Error::Forbidden,
+            GrantError::Database(e) => Error::Database(e),
+        })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
+        .bind(format!("{t}/{c}/{a}/warning.ack/{}", key.as_str()))
+        .execute(&mut *tx)
+        .await?;
+    let prior: Option<(Vec<u8>, Uuid)> = sqlx::query_as(
+        "SELECT request_hash,result_id FROM finance.idempotency_record WHERE tenant_id=$1 AND company_id=$2 AND actor_id=$3 AND operation_id='warning.ack' AND key=$4",
+    ).bind(t).bind(c).bind(a).bind(key.as_str()).fetch_optional(&mut *tx).await?;
+    let ack = if let Some((old, ack)) = prior {
+        if old != hash {
+            return Err(Error::Conflict);
+        }
+        ack
+    } else {
+        let command: Uuid = proof.context().command.into();
+        let correlation: Uuid = proof.context().correlation.into();
+        sqlx::query("SELECT finance.workflow_acknowledge_warning($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
+            .bind(t)
+            .bind(c)
+            .bind(a)
+            .bind(input.dossier)
+            .bind(version)
+            .bind(input.result)
+            .bind(input.acknowledgment)
+            .bind(input.reason)
+            .bind(command)
+            .bind(correlation)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_ack_error)?;
+        sqlx::query("INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id,result_version) VALUES($1,$2,$3,'warning.ack',$4,$5,$6,$7)")
+            .bind(t).bind(c).bind(a).bind(key.as_str()).bind(hash).bind(input.acknowledgment)
+            .bind(version).execute(&mut *tx).await?;
+        input.acknowledgment
+    };
+    let receipt = sqlx::query_as::<_, Check>(
+        "SELECT * FROM finance.runtime_warning_receipt($1,$2,$3,$4,$5,$6)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(input.dossier)
+    .bind(ack)
+    .bind(version)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(Error::Forbidden)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok((receipt, version))
+}
+
+fn map_ack_error(error: sqlx::Error) -> Error {
+    if let sqlx::Error::Database(ref db) = error {
+        if matches!(db.code().as_deref(), Some("23514" | "23505")) {
+            return Error::Conflict;
+        }
+    }
+    Error::Database(error)
 }

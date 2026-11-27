@@ -140,8 +140,8 @@ pub async fn request(
         if old != digest {
             return Err(Error::Conflict);
         }
-        let current: i64 = sqlx::query_scalar(
-            "SELECT version FROM finance.dossier WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id=$4",
+        let owned: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM finance.dossier WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id=$4)",
         )
         .bind(tenant)
         .bind(company)
@@ -149,6 +149,9 @@ pub async fn request(
         .bind(dossier)
         .fetch_one(&mut *tx)
         .await?;
+        if !owned {
+            return Err(Error::Forbidden);
+        }
         recheck_authenticated(&mut tx, Some(proof)).await?;
         tx.commit().await?;
         return Ok(Job {
@@ -157,7 +160,7 @@ pub async fn request(
             attempt: 0,
             progress: 0,
             error_code: None,
-            dossier_version: current,
+            dossier_version: version,
         });
     }
     let valid: bool = sqlx::query_scalar(
