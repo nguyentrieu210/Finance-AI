@@ -19,6 +19,16 @@ BEGIN
  PERFORM set_config('finance.company_id',c::text,true);
  PERFORM set_config('finance.actor_id',owner_id::text,true);
  PERFORM finance.prototype_preflight(t,c,d,0,owner_id,check_before,'2027-01-01');
+ INSERT INTO finance.dossier_snapshot(
+  tenant_id,company_id,id,dossier_id,revision_id,input_hash,canonical_manifest_hash
+ ) VALUES(t,c,'00000000-0000-0000-0000-000000004020',d,rev,decode(repeat('40',32),'hex'),decode(repeat('41',32),'hex'));
+ INSERT INTO finance.financial_resource(
+  tenant_id,company_id,id,currency,cap,consumed,coverage_complete,fresh_until
+ ) VALUES(t,c,'00000000-0000-0000-0000-000000004021','VND',200000,0,true,now()+interval '1 day');
+ PERFORM finance.prototype_reserve_finance(
+  t,c,'00000000-0000-0000-0000-000000004022',rev,'VND',125000,
+  ARRAY['00000000-0000-0000-0000-000000004021'::uuid]
+ );
  IF NOT EXISTS(SELECT 1 FROM finance.field_identity fi JOIN finance.extracted_field f
    ON (f.tenant_id,f.company_id,f.run_id,f.field_path)=(fi.tenant_id,fi.company_id,fi.run_id,fi.field_path)
    WHERE fi.tenant_id=t AND fi.company_id=c AND f.field_path='invoice.total'

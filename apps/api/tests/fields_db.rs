@@ -109,5 +109,45 @@ async fn actual_ocr_fields_http_review(){
     let current=after["items"].as_array().unwrap().iter().find(|f|f["path"]=="invoice.total").unwrap();
     assert_eq!(current["state"],"VERIFIED");
     assert_eq!(current["normalized_value"],"125000");
+
+    let mut evidence=after["items"].as_array().unwrap().iter()
+        .flat_map(|f|f["evidence_ids"].as_array().unwrap().iter())
+        .filter_map(|v|v.as_str()).collect::<Vec<_>>();
+    evidence.sort_unstable();evidence.dedup();
+    assert!(evidence.len()>=2);
+    assert_eq!(confirm_match(&app,&requester,dossier,"match-owner-denied",1,evidence[0],evidence[1],"Manual pair check").await.0,StatusCode::FORBIDDEN);
+    let (match_status,matched,match_receipt)=confirm_match(&app,&accountant,dossier,"match-one",1,evidence[0],evidence[1],"Manual pair check").await;
+    assert_eq!(match_status,StatusCode::OK);assert_eq!(matched["state"],"CONFIRMED");
+    assert_eq!(match_receipt.as_deref(),Some("\"v1:dossier:00000000-0000-0000-0000-000000001f41:2\""));
+    let replay=confirm_match(&app,&accountant,dossier,"match-one",1,evidence[0],evidence[1],"Manual pair check").await;
+    assert_eq!(replay.0,StatusCode::OK);assert_eq!(replay.1,matched);assert_eq!(replay.2,match_receipt);
+    assert_eq!(confirm_match(&app,&accountant,dossier,"match-one",1,evidence[0],evidence[1],"Changed reason").await.0,StatusCode::CONFLICT);
+    assert_eq!(get(&app,&format!("/v1/dossiers/{dossier}/matches"),&requester).await.1["items"][0]["state"],"CONFIRMED");
+
+    let (reservation_status,reservations)=get(&app,&format!("/v1/dossiers/{dossier}/reservations"),&requester).await;
+    assert_eq!(reservation_status,StatusCode::OK);assert_eq!(reservations["items"].as_array().unwrap().len(),1);
+    assert_eq!(reservations["items"][0]["amount"]["amount"],"125000.00000000");
+    assert_eq!(reservations["items"][0]["remaining"]["amount"],"125000.00000000");
+    assert_eq!(reservations["items"][0]["state"],"RESERVED");
+    assert_eq!(reservations["items"][0]["version"],0);
+    assert_eq!(get(&app,&format!("/v1/dossiers/{dossier}/reservations"),&auditor).await.0,StatusCode::FORBIDDEN);
     runtime.close().await;lookup.close().await;
+}
+
+async fn confirm_match(
+    app:&Router,token:&str,dossier:&str,key:&str,version:u64,left:&str,right:&str,reason:&str
+)->(StatusCode,Value,Option<String>){
+    let response=app.clone().oneshot(
+        Request::builder().method("POST")
+        .uri(format!("/v1/dossiers/{dossier}/matches"))
+        .header(header::AUTHORIZATION,format!("Bearer {token}"))
+        .header("idempotency-key",key)
+        .header("if-finance-version",format!("\"v1:dossier:{dossier}:{version}\""))
+        .header(header::CONTENT_TYPE,"application/json")
+        .body(Body::from(json!({"left_evidence_id":left,"right_evidence_id":right,"reason":reason}).to_string())).unwrap()
+    ).await.unwrap();
+    let status=response.status();
+    let receipt=response.headers().get("finance-version").and_then(|v|v.to_str().ok()).map(str::to_owned);
+    let bytes=to_bytes(response.into_body(),1024*1024).await.unwrap();
+    (status,serde_json::from_slice(&bytes).unwrap_or_else(|_|json!({})),receipt)
 }

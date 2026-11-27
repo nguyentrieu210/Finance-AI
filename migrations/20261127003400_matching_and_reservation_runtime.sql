@@ -2,6 +2,13 @@
 ALTER TABLE finance.match_decision
  ADD COLUMN dossier_version bigint NOT NULL DEFAULT 0 CHECK(dossier_version BETWEEN 0 AND 9007199254740991);
 
+CREATE UNIQUE INDEX match_evidence_pair_current
+ ON finance.match_result(
+  tenant_id,company_id,dossier_id,revision_id,
+  LEAST(left_evidence_id,right_evidence_id),
+  GREATEST(left_evidence_id,right_evidence_id)
+ );
+
 CREATE ROLE finance_matching_writer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 GRANT USAGE ON SCHEMA finance TO finance_matching_writer;
 GRANT SELECT ON finance.dossier,finance.dossier_revision,finance.membership,finance.review_assignment,
@@ -209,6 +216,7 @@ BEGIN
   ORDER BY s1.sealed_at DESC,s1.id DESC LIMIT 1
  ) s ON true
  WHERE r.tenant_id=t AND r.company_id=c AND ds.id=d AND r.id>after_id
+  AND cardinality(r.resource_ids)=1
  ORDER BY r.id,l.resource_id
  LIMIT n;
 END $$;

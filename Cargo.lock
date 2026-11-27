@@ -447,6 +447,7 @@ dependencies = [
  "finance-identity",
  "finance-integration",
  "finance-knowledge",
+ "finance-matching",
  "finance-organization",
  "finance-policy",
  "finance-risk-engine",
@@ -640,7 +641,13 @@ dependencies = [
 name = "finance-matching"
 version = "0.1.0"
 dependencies = [
+ "finance-core",
+ "finance-identity",
+ "finance-permissions",
  "finance-shared",
+ "serde",
+ "sha2",
+ "sqlx",
  "uuid",
 ]
 

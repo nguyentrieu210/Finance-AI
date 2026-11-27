@@ -9,13 +9,17 @@ DECLARE t uuid:='00000000-0000-0000-0000-000000000001';
  check_after uuid:='00000000-0000-0000-0000-000000004011';
  hash_before bytea;hash_after bytea;
 BEGIN
- IF (SELECT version FROM finance.dossier WHERE id=d)<>1
+ IF (SELECT version FROM finance.dossier WHERE id=d)<>2
  OR (SELECT count(*) FROM finance.field_decision WHERE dossier_id=d)<>1
  OR NOT EXISTS(SELECT 1 FROM finance.field_decision WHERE dossier_id=d AND actor_id=accountant
   AND disposition='CONFIRMED_CANDIDATE' AND normalized_value='125000'
   AND cardinality(evidence_ids)>0 AND dossier_version=1)
  OR (SELECT count(*) FROM finance.audit_event WHERE resource_id=d AND action='FIELD_REVIEWED')<>1
  OR (SELECT count(*) FROM finance.outbox WHERE resource_id=d AND event_type='FIELD_REVIEWED')<>1
+ OR (SELECT count(*) FROM finance.match_decision q JOIN finance.match_result m
+     ON (m.tenant_id,m.company_id,m.id)=(q.tenant_id,q.company_id,q.result_id)
+     WHERE m.dossier_id=d AND q.decision='CONFIRMED' AND q.dossier_version=2)<>1
+ OR (SELECT count(*) FROM finance.audit_event WHERE resource_id=d AND action='MATCH_CONFIRMED')<>1
  THEN RAISE EXCEPTION 'runtime field review receipt/provenance invariant failed'; END IF;
 
  PERFORM set_config('finance.tenant_id',t::text,true);
@@ -25,7 +29,7 @@ BEGIN
   PERFORM finance.prototype_preflight(t,c,d,0,owner_id,gen_random_uuid(),'2027-01-01');
   RAISE EXCEPTION 'stale preflight accepted';
  EXCEPTION WHEN check_violation THEN NULL; END;
- PERFORM finance.prototype_preflight(t,c,d,1,owner_id,check_after,'2027-01-01');
+ PERFORM finance.prototype_preflight(t,c,d,2,owner_id,check_after,'2027-01-01');
  SELECT input_hash INTO hash_before FROM finance.check_run WHERE id=check_before;
  SELECT input_hash INTO hash_after FROM finance.check_run WHERE id=check_after;
  IF hash_before=hash_after

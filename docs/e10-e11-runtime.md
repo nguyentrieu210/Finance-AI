@@ -1,0 +1,4 @@
+# E10/E11 runtime slice
+E10 manual confirmation is an explicit Accountant action over two evidence rows from the same current dossier revision. The reviewer must be assigned and independent of the owner. The pair is canonical-unique regardless of left/right order, the decision is append-only, idempotent and version-fenced, and confirmation increments the dossier version. Pure Rust exact identity/amount/line reconciliation remains separate; fuzzy candidates never become authoritative automatically.
+
+E11 HTTP is intentionally read-only. The public Reservation schema has one resource_id, so the projection exposes only single-resource reservations bound to a sealed snapshot. Multi-resource holds remain available only through the internal sorted-lock transaction kernel rather than being misrepresented through the current contract. Reservation version is the immutable allocation-effect count. No reserve/commit/consume/release HTTP mutation was invented.

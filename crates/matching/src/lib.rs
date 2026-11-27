@@ -3,6 +3,7 @@
 use finance_shared::{ids::CompanyScope, money::Money};
 
 pub mod lines;
+pub mod repository;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Match {
