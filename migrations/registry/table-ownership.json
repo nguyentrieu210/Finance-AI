@@ -148,6 +148,7 @@
         "check_result",
         "rule_simulation",
         "simulation_corpus",
+        "preflight_request",
         "check_acknowledgment"
       ],
       "invariants": "Pinned policy/input hash; immutable outcomes; no override mutation."

@@ -189,3 +189,79 @@ fn map_ack_error(error: sqlx::Error) -> Error {
     }
     Error::Database(error)
 }
+
+#[derive(Serialize)]
+pub struct PreflightJob {
+    pub id: Uuid,
+    pub state: &'static str,
+    pub attempt: i64,
+    pub progress: i64,
+    #[serde(skip)]
+    pub version: i64,
+}
+
+pub async fn request_preflight(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    dossier: Uuid,
+    policy: Uuid,
+    run: Uuid,
+) -> Result<PreflightJob, Error> {
+    let version = i64::from(
+        proof
+            .context()
+            .expected_version
+            .ok_or(Error::InvalidInput)?,
+    );
+    if dossier.is_nil() || policy.is_nil() || run.is_nil() {
+        return Err(Error::InvalidInput);
+    }
+    let ResourceScope::Company(CompanyScope { tenant, company }) = proof.context().scope else {
+        return Err(Error::Forbidden);
+    };
+    let Principal::User(actor) = proof.context().actor else {
+        return Err(Error::Forbidden);
+    };
+    let (t, c, a): (Uuid, Uuid, Uuid) = (tenant.into(), company.into(), actor.into());
+    let command: Uuid = proof.context().command.into();
+    let correlation: Uuid = proof.context().correlation.into();
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(|e| match e {
+            GrantError::Forbidden => Error::Forbidden,
+            GrantError::Database(e) => Error::Database(e),
+        })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let id: Uuid = sqlx::query_scalar(
+        "SELECT finance.runtime_request_preflight($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(dossier)
+    .bind(version)
+    .bind(policy)
+    .bind(run)
+    .bind(command)
+    .bind(correlation)
+    .bind(key.as_str())
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| match e.as_database_error().and_then(|db| db.code()).as_deref() {
+        Some("42501") => Error::Forbidden,
+        Some("22023") => Error::InvalidInput,
+        Some("23514" | "23505") => Error::Conflict,
+        _ => Error::Database(e),
+    })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(PreflightJob {
+        id,
+        state: "QUEUED",
+        attempt: 0,
+        progress: 0,
+        version,
+    })
+}

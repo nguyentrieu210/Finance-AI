@@ -1,4 +1,4 @@
-//! Read-only diagnostic route; runChecks remains closed until authorized worker wiring.
+//! Scoped diagnostic reads, acknowledgment and durable preflight requests.
 use super::{
     OrganizationState, PageQuery, decode_cursor, dossiers, encode_cursor, error, now, random_id,
 };
@@ -144,6 +144,76 @@ pub(super) async fn acknowledge(
                 version: Version::try_from(version).expect("stored version"),
             };
             let mut response = Json(row).into_response();
+            response.headers_mut().insert(
+                "finance-version",
+                HeaderValue::from_str(&token.to_string()).expect("canonical"),
+            );
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Err(e) => error(dossiers::status(e), correlation),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct RunBody {
+    policy_version_id: Uuid,
+}
+
+pub(super) async fn run(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(dossier): Path<Uuid>,
+    body: Result<Json<RunBody>, JsonRejection>,
+) -> Response {
+    let correlation = random_id();
+    let Some(token) = headers
+        .get("if-finance-version")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| VersionToken::parse(s).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    if token.target != VersionTarget::Dossier || Uuid::from(token.resource_id) != dossier {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let proof =
+        match dossiers::authenticate_version(&state, &headers, correlation, Some(token.version))
+            .await
+        {
+            Ok(proof) => proof,
+            Err(s) => return error(s, correlation),
+        };
+    let Some(key) = headers
+        .get("idempotency-key")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| IdempotencyKey::parse(s).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    match checks::request_preflight(
+        &state.runtime,
+        &proof,
+        &key,
+        dossier,
+        body.policy_version_id,
+        random_id(),
+    )
+    .await
+    {
+        Ok(job) => {
+            let token = VersionToken {
+                target: VersionTarget::Dossier,
+                resource_id: ResourceId::try_from(dossier).expect("stored dossier"),
+                version: Version::try_from(job.version).expect("stored version"),
+            };
+            let mut response = (StatusCode::ACCEPTED, Json(job)).into_response();
             response.headers_mut().insert(
                 "finance-version",
                 HeaderValue::from_str(&token.to_string()).expect("canonical"),

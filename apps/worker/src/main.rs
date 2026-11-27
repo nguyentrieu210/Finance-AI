@@ -21,6 +21,7 @@ use tokio::{
 use uuid::Uuid;
 
 const EXPORT_EVENT: &str = "EXPORT_REQUESTED";
+const PREFLIGHT_EVENT: &str = "PREFLIGHT_REQUESTED";
 const RECEIPT_SCHEMA: &str = "finance.export.receipt.v1";
 const REQUEST_SCHEMA: &str = "finance.export.request.v1";
 const MAX_RECEIPT_BYTES: usize = 1024 * 1024;
@@ -336,7 +337,57 @@ async fn settle_failure(pool: &PgPool, lease: Lease, failure: RunFailure) {
     }
 }
 
+async fn process_preflight(pool: &PgPool, lease: Lease) -> Result<(), RunFailure> {
+    let scope = lease.scope();
+    let mut tx = pool.begin().await.map_err(|_| RunFailure::Transient)?;
+    let (t, c): (Uuid, Uuid) = (scope.tenant.into(), scope.company.into());
+    sqlx::query(
+        "SELECT set_config('finance.tenant_id',$1,true),set_config('finance.company_id',$2,true)",
+    )
+    .bind(t.to_string())
+    .bind(c.to_string())
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| RunFailure::Transient)?;
+    sqlx::query("SELECT finance.complete_preflight_job($1,$2,$3,$4,$5)")
+        .bind(t)
+        .bind(c)
+        .bind(lease.job_id)
+        .bind(lease.fence)
+        .bind(lease.worker_id())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| match e.as_database_error().and_then(|db| db.code()).as_deref() {
+            Some("40001") => RunFailure::Stale,
+            Some("42501" | "23514" | "23505" | "P0002") => RunFailure::Permanent,
+            _ => RunFailure::Transient,
+        })?;
+    tx.commit().await.map_err(|_| RunFailure::Transient)?;
+    Ok(())
+}
+
 async fn cycle(pool: &PgPool, config: &Config) -> Result<bool, RunFailure> {
+    jobs::dispatch_event(pool, config.scope, PREFLIGHT_EVENT, 100)
+        .await
+        .map_err(job_failure)?;
+    if let Some(lease) = jobs::claim_event(
+        pool,
+        config.scope,
+        config.worker,
+        config.lease_seconds,
+        PREFLIGHT_EVENT,
+    )
+    .await
+    .map_err(job_failure)?
+    {
+        return match process_preflight(pool, lease).await {
+            Ok(()) => Ok(true),
+            Err(failure) => {
+                settle_failure(pool, lease, failure).await;
+                Err(failure)
+            }
+        };
+    }
     jobs::dispatch_event(pool, config.scope, EXPORT_EVENT, 100)
         .await
         .map_err(job_failure)?;

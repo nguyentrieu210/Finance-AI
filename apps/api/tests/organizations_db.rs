@@ -1930,6 +1930,35 @@ async fn scoped_organization_http_real_database() {
         create_dossier(&app, &requester, "pay-one", "PAYMENT").await,
         left
     );
+    let preflight_uri = format!("/v1/dossiers/{draft_id}/checks");
+    let preflight = |actor: &str, version: u64, key: &str| {
+        Request::builder()
+            .method("POST")
+            .uri(preflight_uri.as_str())
+            .header(header::AUTHORIZATION, format!("Bearer {actor}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header("idempotency-key", key)
+            .header(
+                "if-finance-version",
+                format!("\"v1:dossier:{draft_id}:{version}\""),
+            )
+            .body(Body::from(
+                json!({"policy_version_id":policy_id}).to_string(),
+            ))
+            .unwrap()
+    };
+    let denied = app
+        .clone()
+        .oneshot(preflight(&other_requester, 4, "preflight-denied"))
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+    let stale = app
+        .clone()
+        .oneshot(preflight(&requester, 3, "preflight-stale"))
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
     let (_, updated) = request(&app, &dossier_uri, Some(&requester)).await;
     assert_eq!(updated["version"], 4);
     let (documents_status, documents) = request(&app, &doc_uri, Some(&requester)).await;
