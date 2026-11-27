@@ -10,4 +10,6 @@ finance-documents = { path = "../documents" }
 finance-shared = { path = "../shared" }
 
 [dev-dependencies]
+serde.workspace = true
+serde_json.workspace = true
 uuid.workspace = true

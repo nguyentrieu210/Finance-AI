@@ -487,6 +487,8 @@ version = "0.1.0"
 dependencies = [
  "finance-documents",
  "finance-shared",
+ "serde",
+ "serde_json",
  "uuid",
 ]
 
