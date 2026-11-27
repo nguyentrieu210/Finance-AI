@@ -1803,6 +1803,11 @@ export interface components {
             /** @enum {string} */
             type: "text" | "date" | "decimal" | "money" | "boolean" | "enum";
             required: boolean;
+            source_path?: string;
+            options?: string[];
+            layout_row?: number;
+            layout_column?: number;
+            layout_width?: number;
             condition_ref?: string;
         };
         Transition: {

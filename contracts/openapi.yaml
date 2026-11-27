@@ -10036,6 +10036,27 @@ components:
           - boolean
           - enum
         required: *id008
+        source_path:
+          type: string
+          maxLength: 128
+        options:
+          type: array
+          maxItems: 64
+          items:
+            type: string
+            maxLength: 128
+        layout_row:
+          type: integer
+          minimum: 0
+          maximum: 4095
+        layout_column:
+          type: integer
+          minimum: 0
+          maximum: 11
+        layout_width:
+          type: integer
+          minimum: 1
+          maximum: 12
         condition_ref:
           type: string
       required:

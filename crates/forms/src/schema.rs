@@ -24,6 +24,14 @@ struct Condition {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct Layout {
+    row: u16,
+    column: u8,
+    width: u8,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Field {
     key: String,
     #[serde(rename = "type")]
@@ -32,6 +40,8 @@ struct Field {
     required_when_visible: bool,
     visible_if: Option<Condition>,
     options: Option<Vec<String>>,
+    source_path: Option<String>,
+    layout: Option<Layout>,
 }
 
 #[derive(Deserialize)]
@@ -65,6 +75,17 @@ fn key_valid(key: &str) -> bool {
         && key.len() <= 64
         && key.as_bytes()[0].is_ascii_alphabetic()
         && key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+}
+
+fn source_path_valid(path: &str) -> bool {
+    !path.is_empty()
+        && path.len() <= 128
+        && path.split('.').all(|part| {
+            !part.is_empty()
+                && part
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        })
 }
 
 fn typed(field: &Field, value: &Value) -> bool {
@@ -110,6 +131,22 @@ pub fn compile(bytes: &[u8]) -> Result<Schema, Error> {
         }
         if field.required && field.visible_if.is_some() {
             return Err(Error::HiddenRequired);
+        }
+        if field
+            .source_path
+            .as_deref()
+            .is_some_and(|path| !source_path_valid(path))
+        {
+            return Err(Error::InvalidSchema);
+        }
+        if field.layout.as_ref().is_some_and(|layout| {
+            layout.column >= 12
+                || layout.width == 0
+                || layout.width > 12
+                || u16::from(layout.column) + u16::from(layout.width) > 12
+                || layout.row > 4095
+        }) {
+            return Err(Error::InvalidSchema);
         }
         if field.required_when_visible && (field.visible_if.is_none() || field.required) {
             return Err(Error::InvalidSchema);
