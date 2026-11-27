@@ -80,6 +80,7 @@ pub enum ContractError {
     StaleSnapshot,
     DuplicateConflict,
     InvalidReversal,
+    InvalidAmount,
     SequenceRegression,
 }
 
@@ -138,6 +139,7 @@ pub fn validate_erp_snapshot(
     }
     let mut by_id = BTreeMap::<ResourceId, ErpEvent>::new();
     let mut ordered = Vec::new();
+    let mut remaining = BTreeMap::<ResourceId, Money>::new();
     let mut last_sequence = 0_u64;
     for event in &snapshot.events {
         if event.sequence == 0 {
@@ -152,6 +154,11 @@ pub fn validate_erp_snapshot(
         if event.sequence <= last_sequence {
             return Err(ContractError::SequenceRegression);
         }
+        // The adapter normalizes all event magnitudes to positive amounts;
+        // reversal direction comes from the event kind, not a signed value.
+        if event.amount.amount.decimal() <= 0.into() {
+            return Err(ContractError::InvalidAmount);
+        }
         if event.kind == ErpEventKind::Reversal {
             let Some(target) = event.reverses else {
                 return Err(ContractError::InvalidReversal);
@@ -164,8 +171,20 @@ pub fn validate_erp_snapshot(
             {
                 return Err(ContractError::InvalidReversal);
             }
-        } else if event.reverses.is_some() {
-            return Err(ContractError::InvalidReversal);
+            let balance = remaining
+                .get_mut(&target)
+                .ok_or(ContractError::InvalidReversal)?;
+            if event.amount.amount.decimal() > balance.amount.decimal() {
+                return Err(ContractError::InvalidReversal);
+            }
+            *balance = balance
+                .checked_sub(event.amount)
+                .map_err(|_| ContractError::InvalidReversal)?;
+        } else {
+            if event.reverses.is_some() {
+                return Err(ContractError::InvalidReversal);
+            }
+            remaining.insert(event.external_id, event.amount);
         }
         last_sequence = event.sequence;
         by_id.insert(event.external_id, *event);
