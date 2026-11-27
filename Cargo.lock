@@ -550,6 +550,7 @@ name = "finance-knowledge"
 version = "0.1.0"
 dependencies = [
  "finance-shared",
+ "uuid",
 ]
 
 [[package]]
@@ -614,6 +615,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "finance-shared",
+ "uuid",
 ]
 
 [[package]]
@@ -621,6 +623,7 @@ name = "finance-risk-engine"
 version = "0.1.0"
 dependencies = [
  "finance-shared",
+ "uuid",
 ]
 
 [[package]]

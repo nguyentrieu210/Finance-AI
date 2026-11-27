@@ -7,3 +7,6 @@ publish.workspace = true
 
 [dependencies]
 finance-shared = { path = "../shared" }
+
+[dev-dependencies]
+uuid.workspace = true
