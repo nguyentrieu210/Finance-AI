@@ -2,11 +2,17 @@
 DO $$
 DECLARE t uuid:='00000000-0000-0000-0000-000000000001';c uuid:='00000000-0000-0000-0000-00000000000a';
  d uuid:='00000000-0000-0000-0000-000000001f41';r uuid:='00000000-0000-0000-0000-000000001f44';
+ rev uuid:='00000000-0000-0000-0000-000000001f42'; checker uuid:=gen_random_uuid(); unassigned uuid:=gen_random_uuid();
  owner_id uuid:='00000000-0000-0000-0000-0000000003e9';a uuid:=gen_random_uuid();review uuid:=gen_random_uuid();
  check1 uuid:=gen_random_uuid();check2 uuid:=gen_random_uuid();hash1 bytea;hash2 bytea;day date:='2027-01-01';
 BEGIN
- INSERT INTO finance.identity_subject(tenant_id,id,issuer,subject) VALUES(t,a,'https://synthetic.invalid','synthetic-accountant');
- INSERT INTO finance.membership(tenant_id,company_id,actor_id,role) VALUES(t,c,a,'ACCOUNTANT'),(t,c,owner_id,'ACCOUNTANT');
+ INSERT INTO finance.identity_subject(tenant_id,id,issuer,subject) VALUES(t,a,'https://synthetic.invalid','synthetic-accountant'),(t,checker,'https://synthetic.invalid','synthetic-review-assigner'),(t,unassigned,'https://synthetic.invalid','synthetic-unassigned');
+ INSERT INTO finance.membership(tenant_id,company_id,actor_id,role) VALUES(t,c,a,'ACCOUNTANT'),(t,c,owner_id,'ACCOUNTANT'),(t,c,unassigned,'ACCOUNTANT'),(t,c,checker,'FINANCE_APPROVER');
+ PERFORM finance.prototype_assign_candidate_review(t,c,d,rev,a,checker);
+ BEGIN
+  PERFORM finance.prototype_review_candidate(t,c,d,0,r,'invoice.total',unassigned,review,'CONFIRMED_CANDIDATE','Unassigned review');
+  RAISE EXCEPTION 'unassigned review accepted';
+ EXCEPTION WHEN check_violation THEN NULL; END;
  PERFORM finance.prototype_preflight(t,c,d,0,owner_id,check1,day);
  BEGIN
   PERFORM finance.prototype_review_candidate(t,c,d,0,r,'invoice.total',owner_id,review,'CONFIRMED_CANDIDATE','Self review');

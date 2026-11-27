@@ -1,5 +1,34 @@
 -- Coordinated E09/E15/E18 synthetic fixture only. No live scan release,
 -- no READY transition, no grant to runtime. Preserve immutable observations.
+CREATE TABLE finance.review_assignment (
+ tenant_id uuid NOT NULL,company_id uuid NOT NULL,dossier_id uuid NOT NULL,revision_id uuid NOT NULL,
+ accountant_id uuid NOT NULL,assigned_by uuid NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(tenant_id,company_id,dossier_id,revision_id),
+ FOREIGN KEY(tenant_id,company_id,dossier_id) REFERENCES finance.dossier(tenant_id,company_id,id),
+ FOREIGN KEY(tenant_id,company_id,revision_id) REFERENCES finance.dossier_revision(tenant_id,company_id,id),
+ FOREIGN KEY(tenant_id,accountant_id) REFERENCES finance.identity_subject(tenant_id,id),
+ FOREIGN KEY(tenant_id,assigned_by) REFERENCES finance.identity_subject(tenant_id,id),
+ CHECK(accountant_id<>assigned_by)
+);
+ALTER TABLE finance.review_assignment ENABLE ROW LEVEL SECURITY;
+ALTER TABLE finance.review_assignment FORCE ROW LEVEL SECURITY;
+CREATE TRIGGER review_assignment_immutable BEFORE UPDATE OR DELETE ON finance.review_assignment FOR EACH ROW EXECUTE FUNCTION finance.reject_synthetic_document_mutation();
+CREATE FUNCTION finance.prototype_assign_candidate_review(t uuid,c uuid,d uuid,r uuid,a uuid,checker uuid)
+RETURNS void LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog AS $
+DECLARE ds finance.dossier%ROWTYPE;
+BEGIN
+ IF current_setting('transaction_isolation')<>'read committed' OR a IS NULL OR checker IS NULL OR a=checker
+ THEN RAISE EXCEPTION 'invalid reviewer assignment' USING ERRCODE='23514'; END IF;
+ SELECT * INTO ds FROM finance.dossier WHERE tenant_id=t AND company_id=c AND id=d FOR UPDATE;
+ IF NOT FOUND OR ds.owner_id IN (a,checker) OR ds.status<>'DRAFT'
+ OR NOT EXISTS(SELECT 1 FROM finance.dossier_revision WHERE tenant_id=t AND company_id=c AND dossier_id=d AND id=r AND number=ds.revision)
+ OR NOT EXISTS(SELECT 1 FROM finance.membership WHERE tenant_id=t AND company_id=c AND actor_id=a AND role='ACCOUNTANT' AND active AND valid_from<=clock_timestamp() AND (valid_until IS NULL OR valid_until>clock_timestamp()))
+ OR NOT EXISTS(SELECT 1 FROM finance.membership WHERE tenant_id=t AND company_id=c AND actor_id=checker AND role='FINANCE_APPROVER' AND active AND valid_from<=clock_timestamp() AND (valid_until IS NULL OR valid_until>clock_timestamp()))
+ THEN RAISE EXCEPTION 'review assignment authority' USING ERRCODE='23514'; END IF;
+ INSERT INTO finance.review_assignment(tenant_id,company_id,dossier_id,revision_id,accountant_id,assigned_by) VALUES(t,c,d,r,a,checker);
+END $;
+REVOKE ALL ON FUNCTION finance.prototype_assign_candidate_review(uuid,uuid,uuid,uuid,uuid,uuid) FROM PUBLIC;
 CREATE TABLE finance.field_decision (
  tenant_id uuid NOT NULL,company_id uuid NOT NULL,id uuid NOT NULL,
  run_id uuid NOT NULL,field_path text NOT NULL,dossier_id uuid NOT NULL,revision_id uuid NOT NULL,
@@ -62,6 +91,8 @@ BEGIN
  AND valid_from<=clock_timestamp() AND (valid_until IS NULL OR valid_until>clock_timestamp()))
  THEN RAISE EXCEPTION 'independent accountant required' USING ERRCODE='23514'; END IF;
  SELECT id INTO STRICT rev FROM finance.dossier_revision WHERE tenant_id=t AND company_id=c AND dossier_id=d AND number=ds.revision;
+ IF NOT EXISTS(SELECT 1 FROM finance.review_assignment WHERE tenant_id=t AND company_id=c AND dossier_id=d AND revision_id=rev AND accountant_id=a)
+ THEN RAISE EXCEPTION 'accountant not assigned' USING ERRCODE='23514'; END IF;
  SELECT * INTO prior FROM finance.field_decision WHERE tenant_id=t AND company_id=c AND id=i;
  IF FOUND THEN
   IF (prior.dossier_id,prior.run_id,prior.field_path,prior.actor_id,prior.disposition,prior.reason,prior.dossier_version)
@@ -92,7 +123,7 @@ END $$;
 -- full policy rules remain unapproved; unconditional BLOCK avoids fake readiness.
 CREATE FUNCTION finance.prototype_preflight(t uuid,c uuid,d uuid,v bigint,a uuid,i uuid,day date)
 RETURNS uuid LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog AS $$
-DECLARE ds finance.dossier%ROWTYPE; rev uuid; p uuid; digest bytea; docs jsonb; reviews jsonb; prior finance.check_run%ROWTYPE; item record; present boolean;
+DECLARE ds finance.dossier%ROWTYPE; rev uuid; p uuid; digest bytea; docs jsonb; reviews jsonb; observations jsonb; prior finance.check_run%ROWTYPE; item record; present boolean;
 BEGIN
  IF current_setting('transaction_isolation')<>'read committed' OR day IS NULL OR i IS NULL OR v IS NULL
  THEN RAISE EXCEPTION 'invalid preflight command' USING ERRCODE='23514'; END IF;
@@ -115,7 +146,10 @@ BEGIN
  WHERE u.tenant_id=t AND u.company_id=c AND u.dossier_id=d AND u.revision_id=rev AND u.state<>'CANCELLED';
  SELECT COALESCE(jsonb_agg(jsonb_build_array(id,run_id,field_path,disposition,normalized_value,dossier_version) ORDER BY dossier_version,id),'[]'::jsonb) INTO reviews
  FROM finance.field_decision WHERE tenant_id=t AND company_id=c AND dossier_id=d AND revision_id=rev;
- digest:=sha256(convert_to(jsonb_build_array(d,rev,v,p,day,docs,reviews)::text,'UTF8'));
+ SELECT COALESCE(jsonb_agg(jsonb_build_array(o.id,o.document_id,encode(o.result_digest,'hex'),o.generation,o.fence) ORDER BY o.id),'[]'::jsonb) INTO observations
+ FROM finance.ocr_run o JOIN finance.document_ref f ON (f.tenant_id,f.company_id,f.id)=(o.tenant_id,o.company_id,o.document_id)
+ WHERE o.tenant_id=t AND o.company_id=c AND o.revision_id=rev AND f.dossier_id=d AND f.revision_id=rev;
+ digest:=sha256(convert_to(jsonb_build_array(d,rev,v,p,day,docs,reviews,observations)::text,'UTF8'));
  INSERT INTO finance.check_run(tenant_id,company_id,id,dossier_id,revision_id,dossier_version,actor_id,policy_id,business_day,input_hash,blocked)
  VALUES(t,c,i,d,rev,v,a,p,day,digest,true);
  INSERT INTO finance.check_result VALUES(t,c,i,'policy.effective',CASE WHEN p IS NULL THEN 'UNKNOWN' ELSE 'PASS' END,'BLOCK',CASE WHEN p IS NULL THEN 'MISSING_POLICY' ELSE 'SYNTHETIC_POLICY_FOUND' END);
