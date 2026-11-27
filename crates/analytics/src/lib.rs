@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 pub mod coverage;
 pub mod dashboard;
+pub mod handling;
 
 pub struct Case {
     pub scope: CompanyScope,
