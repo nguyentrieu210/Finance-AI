@@ -134,6 +134,8 @@ jobs:
       - name: Produce deterministic rustfmt patch
         run: |
           cargo fmt --all
-          echo '<<<RUSTFMT_PATCH>>>'
-          git diff --no-ext-diff --no-color -- '*.rs'
-          echo '<<<END_RUSTFMT_PATCH>>>'
+          git diff --no-ext-diff --no-color -- '*.rs' > /tmp/rustfmt.patch
+          echo '<<<RUSTFMT_PATCH_B64>>>'
+          base64 -w0 /tmp/rustfmt.patch
+          echo
+          echo '<<<END_RUSTFMT_PATCH_B64>>>'
