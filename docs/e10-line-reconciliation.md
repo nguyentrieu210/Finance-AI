@@ -1,0 +1,2 @@
+# E10 exact many-to-many line candidates
+Rust domain reconciliation uses explicit source/target line IDs, verified remaining balances as inputs, complete coverage, company scope, item identity and exact units/currency. Bounds, duplicate pairs, excessive amount/quantity and unmatched residuals are explicit. No rounding, implicit conversion, fuzzy matching or authorization. No durable reservation or real source attestation; independent synthetic tests. CI pending.

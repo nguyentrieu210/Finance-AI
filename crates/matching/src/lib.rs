@@ -2,6 +2,8 @@
 //! Synthetic-only domain prototype. No authorization, durable mutation or production claim.
 use finance_shared::{ids::CompanyScope, money::Money};
 
+pub mod lines;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Match {
     Equal,
