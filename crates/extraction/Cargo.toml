@@ -1,0 +1,16 @@
+[package]
+name = "finance-extraction"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = false
+
+[dependencies]
+chrono.workspace = true
+finance-document-intelligence = { path = "../document-intelligence" }
+finance-ocr = { path = "../ocr" }
+finance-shared = { path = "../shared" }
+unicode-normalization = "=0.1.26"
+
+[dev-dependencies]
+finance-documents = { path = "../documents" }

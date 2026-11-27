@@ -83,6 +83,13 @@ fn real_paddle_vietnamese() {
         .map(|block| block.text())
         .collect::<Vec<_>>()
         .join(" ");
+    // Only generated CI fixture text is permitted in this ignored probe.
+    if !text.contains("125000") || !text.contains("Tổng") || !text.contains("thanh toán") {
+        eprintln!(
+            "synthetic OCR diagnostic: {:?}",
+            text.chars().take(256).collect::<String>()
+        );
+    }
     assert!(text.contains("125000"), "synthetic amount not recognized");
     assert!(
         text.contains("Tổng"),

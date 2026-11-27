@@ -91,13 +91,7 @@ fn calendar_date(value: &str, day_first: bool) -> Option<NaiveDate> {
     let [a, b, year] = parts.as_slice() else {
         return None;
     };
-    if !digits(a)
-        || !digits(b)
-        || !digits(year)
-        || a.len() > 2
-        || b.len() > 2
-        || year.len() != 4
-    {
+    if !digits(a) || !digits(b) || !digits(year) || a.len() > 2 || b.len() > 2 || year.len() != 4 {
         return None;
     }
     let a = a.parse().ok()?;

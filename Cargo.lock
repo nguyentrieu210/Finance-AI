@@ -468,6 +468,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "finance-extraction"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "finance-document-intelligence",
+ "finance-documents",
+ "finance-ocr",
+ "finance-shared",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "finance-identity"
 version = "0.1.0"
 dependencies = [
