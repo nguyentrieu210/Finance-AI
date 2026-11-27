@@ -361,6 +361,30 @@ async fn scoped_organization_http_real_database() {
             .iter()
             .all(|item| { item["state"] == "VERIFIED" && item["coverage"] == "COMPLETE" })
     );
+    for item in reference_items {
+        let uri = format!("/v1/references/{}", item["id"].as_str().unwrap());
+        let (detail_status, reference_detail) = request(&app, &uri, Some(&requester)).await;
+        assert_eq!(detail_status, StatusCode::OK);
+        assert_eq!(&reference_detail, item);
+        assert_eq!(
+            request(&app, &uri, Some(&auditor)).await.0,
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            request(&app, &uri, None).await.0,
+            StatusCode::UNAUTHORIZED
+        );
+    }
+    assert_eq!(
+        request(
+            &app,
+            "/v1/references/ffffffff-ffff-ffff-ffff-ffffffffffff",
+            Some(&requester),
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
     let (_, first_reference) = request(&app, "/v1/references?limit=1", Some(&requester)).await;
     let reference_cursor = first_reference["next_cursor"].as_str().unwrap();
     let (next_reference_status, next_reference) = request(
@@ -523,7 +547,7 @@ async fn scoped_organization_http_real_database() {
         .0,
         StatusCode::FORBIDDEN
     );
-    let (revise_workflow_status, revised_workflow, _) = revise_workflow(
+    let (revise_workflow_status, revised_workflow, revised_workflow_token) = revise_workflow(
         &app,
         &policy_admin,
         workflow_id,
@@ -559,6 +583,29 @@ async fn scoped_organization_http_real_database() {
         .0,
         StatusCode::CONFLICT
     );
+    let (third_status, third_workflow, _) = revise_workflow(
+        &app,
+        &policy_admin,
+        workflow_id,
+        "workflow-revise-three",
+        revised_workflow_token.as_deref().unwrap(),
+        ("Synthetic workflow v3", transitions.clone(), "Revision three"),
+    )
+    .await;
+    assert_eq!(third_status, StatusCode::OK);
+    assert_eq!(third_workflow["version"], 3);
+    let (replay_status, replay_body, replay_token) = revise_workflow(
+        &app,
+        &policy_admin,
+        workflow_id,
+        "workflow-revise",
+        workflow_token.as_deref().unwrap(),
+        ("Synthetic workflow v2", transitions.clone(), "Revision"),
+    )
+    .await;
+    assert_eq!(replay_status, StatusCode::OK);
+    assert_eq!(replay_body, revised_workflow);
+    assert_eq!(replay_token, revised_workflow_token);
     let (workflow_list_status, workflow_page) =
         request(&app, "/v1/workflows", Some(&policy_admin)).await;
     assert_eq!(workflow_list_status, StatusCode::OK);
@@ -567,7 +614,7 @@ async fn scoped_organization_http_real_database() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|item| { item["id"] == workflow_id && item["version"] == 2 })
+            .any(|item| { item["id"] == workflow_id && item["version"] == 3 })
     );
     let fields = json!([
         {"path":"advance","label":"Có tạm ứng","type":"boolean","required":true,"source_path":"request.advance","layout_row":0,"layout_column":0,"layout_width":12},

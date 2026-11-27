@@ -143,7 +143,10 @@ fn complete_graph_is_deterministic() {
     for t in &mut b {
         t.guard_refs.reverse();
     }
-    assert_eq!(compile_definition(&a, 1), compile_definition(&b, 1));
+    assert_eq!(
+        compile_definition(&a, 1).unwrap(),
+        compile_definition(&b, 1).unwrap()
+    );
 }
 #[test]
 fn invalid_graph_fails_closed() {
