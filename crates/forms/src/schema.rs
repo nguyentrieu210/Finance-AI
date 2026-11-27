@@ -121,10 +121,7 @@ pub fn compile(bytes: &[u8]) -> Result<Schema, Error> {
                     && options.iter().all(|v| {
                         !v.trim().is_empty() && v.len() <= 128 && !v.chars().any(char::is_control)
                     })
-                    && options.iter().collect::<BTreeSet<_>>().len() == options.len() =>
-            {
-                ()
-            }
+                    && options.iter().collect::<BTreeSet<_>>().len() == options.len() => {}
             (Type::Enum, _) | (_, Some(_)) => return Err(Error::InvalidSchema),
             _ => (),
         }
