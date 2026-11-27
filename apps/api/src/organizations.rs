@@ -559,6 +559,26 @@ pub fn router(state: OrganizationState) -> Router {
         )
         .route("/v1/policies", get(policies::list))
         .route("/v1/policies/{item_id}", get(policies::get))
+        .route(
+            "/v1/policies/{item_id}/submit",
+            axum::routing::post(policies::submit),
+        )
+        .route(
+            "/v1/policies/{item_id}/publish",
+            axum::routing::post(policies::publish),
+        )
+        .route(
+            "/v1/policies/{item_id}/retire",
+            axum::routing::post(policies::retire),
+        )
+        .route(
+            "/v1/policies/{item_id}/revoke",
+            axum::routing::post(policies::revoke),
+        )
+        .route(
+            "/v1/policies/{item_id}/revise",
+            axum::routing::post(policies::revise),
+        )
         .route("/v1/references", get(references::all))
         .route("/v1/references/{item_id}", get(references::get))
         .route("/v1/contracts", get(references::contracts))

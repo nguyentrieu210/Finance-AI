@@ -1,9 +1,10 @@
 //! Authenticated read adapter for published policy versions.
 use finance_core::prototype::{Error as AppError, recheck_authenticated, scoped_transaction};
 use finance_identity::AuthenticatedCommand;
-use finance_permissions::{GrantError, Role, require_role};
+use finance_permissions::{GrantError, Role, lock_roles, require_role};
 use finance_shared::{
     contracts::Principal,
+    http_contract::IdempotencyKey,
     ids::{CompanyScope, ResourceScope},
 };
 use serde::Serialize;
@@ -52,14 +53,15 @@ pub async fn list(
     }
     let (t, c, _) = binding(proof)?;
     let mut tx = scoped_transaction(pool, proof.context()).await?;
-    require_role(&mut tx, proof.context(), Role::Requester)
-        .await
-        .map_err(|e| match e {
-            GrantError::Forbidden => AppError::Forbidden,
-            GrantError::Database(e) => AppError::Database(e),
-        })?;
+    let roles = lock_roles(&mut tx, proof.context()).await.map_err(grant)?;
+    if !roles.contains(&Role::Requester)
+        && !roles.contains(&Role::PolicyAdmin)
+        && !roles.contains(&Role::FinanceApprover)
+    {
+        return Err(AppError::Forbidden);
+    }
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let rows=sqlx::query_as::<_,PublishedPolicy>("SELECT id,company_id,1::bigint AS version,dossier_kind||' policy' AS name,state,to_char(effective_from,'YYYY-MM-DD')||'T00:00:00Z' AS effective_from,to_char(effective_until,'YYYY-MM-DD')||'T00:00:00Z' AS effective_to,encode(source_digest,'hex') AS hash FROM finance.policy_version WHERE tenant_id=$1 AND company_id=$2 AND state='PUBLISHED' AND id>$3 ORDER BY id LIMIT $4")
+    let rows=sqlx::query_as::<_,PublishedPolicy>("SELECT id,company_id,aggregate_version AS version,COALESCE(display_name,dossier_kind||' policy') AS name,state,to_char(effective_from,'YYYY-MM-DD')||'T00:00:00Z' AS effective_from,to_char(effective_until,'YYYY-MM-DD')||'T00:00:00Z' AS effective_to,encode(source_digest,'hex') AS hash FROM finance.policy_version WHERE tenant_id=$1 AND company_id=$2 AND id>$3 ORDER BY id LIMIT $4")
         .bind(t).bind(c).bind(after).bind(limit).fetch_all(&mut *tx).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
@@ -76,14 +78,15 @@ pub async fn get(
     }
     let (t, c, _) = binding(proof)?;
     let mut tx = scoped_transaction(pool, proof.context()).await?;
-    require_role(&mut tx, proof.context(), Role::Requester)
-        .await
-        .map_err(|e| match e {
-            GrantError::Forbidden => AppError::Forbidden,
-            GrantError::Database(e) => AppError::Database(e),
-        })?;
+    let roles = lock_roles(&mut tx, proof.context()).await.map_err(grant)?;
+    if !roles.contains(&Role::Requester)
+        && !roles.contains(&Role::PolicyAdmin)
+        && !roles.contains(&Role::FinanceApprover)
+    {
+        return Err(AppError::Forbidden);
+    }
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let row=sqlx::query_as::<_,PublishedPolicy>("SELECT id,company_id,1::bigint AS version,dossier_kind||' policy' AS name,state,to_char(effective_from,'YYYY-MM-DD')||'T00:00:00Z' AS effective_from,to_char(effective_until,'YYYY-MM-DD')||'T00:00:00Z' AS effective_to,encode(source_digest,'hex') AS hash FROM finance.policy_version WHERE tenant_id=$1 AND company_id=$2 AND state='PUBLISHED' AND id=$3")
+    let row=sqlx::query_as::<_,PublishedPolicy>("SELECT id,company_id,aggregate_version AS version,COALESCE(display_name,dossier_kind||' policy') AS name,state,to_char(effective_from,'YYYY-MM-DD')||'T00:00:00Z' AS effective_from,to_char(effective_until,'YYYY-MM-DD')||'T00:00:00Z' AS effective_to,encode(source_digest,'hex') AS hash FROM finance.policy_version WHERE tenant_id=$1 AND company_id=$2 AND id=$3")
         .bind(t).bind(c).bind(id).fetch_optional(&mut *tx).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
@@ -133,4 +136,110 @@ pub async fn checklist(
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(Some(rows))
+}
+
+fn grant(e: GrantError) -> AppError {
+    match e {
+        GrantError::Forbidden => AppError::Forbidden,
+        GrantError::Database(e) => AppError::Database(e),
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum Change {
+    Submit,
+    Publish,
+    Retire,
+    Revoke,
+    Revise,
+}
+
+impl Change {
+    fn operation(self) -> &'static str {
+        match self {
+            Self::Submit => "policy.submit",
+            Self::Publish => "policy.publish",
+            Self::Retire => "policy.retire",
+            Self::Revoke => "policy.revoke",
+            Self::Revise => "policy.revise",
+        }
+    }
+    fn role(self) -> Role {
+        match self {
+            Self::Submit | Self::Revise => Role::PolicyAdmin,
+            _ => Role::FinanceApprover,
+        }
+    }
+}
+
+pub struct ChangeInput<'a> {
+    pub policy: Uuid,
+    pub new_id: Uuid,
+    pub change: Change,
+    pub reason: &'a str,
+    pub name: Option<&'a str>,
+    pub effective: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+pub async fn change(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    input: ChangeInput<'_>,
+) -> Result<PublishedPolicy, AppError> {
+    let expected = i64::from(
+        proof
+            .context()
+            .expected_version
+            .ok_or(AppError::InvalidInput)?,
+    );
+    if input.policy.is_nil()
+        || input.new_id.is_nil()
+        || input.reason.trim().is_empty()
+        || input.reason.len() > 2048
+        || input.reason.chars().any(char::is_control)
+        || input.name.is_some_and(|name| {
+            name.trim().is_empty() || name.len() > 200 || name.chars().any(char::is_control)
+        })
+        || input
+            .effective
+            .is_some_and(|value| value.time() != chrono::NaiveTime::MIN)
+    {
+        return Err(AppError::InvalidInput);
+    }
+    let (t, c, a) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), input.change.role())
+        .await
+        .map_err(grant)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let command: Uuid = proof.context().command.into();
+    let correlation: Uuid = proof.context().correlation.into();
+    let row = sqlx::query_as::<_, PublishedPolicy>(
+        "SELECT * FROM finance.runtime_policy_change($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(input.policy)
+    .bind(expected)
+    .bind(input.change.operation())
+    .bind(key.as_str())
+    .bind(input.reason)
+    .bind(input.name)
+    .bind(input.effective.map(|value| value.date_naive()))
+    .bind(input.new_id)
+    .bind(command)
+    .bind(correlation)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| match e.as_database_error().and_then(|db| db.code()).as_deref() {
+        Some("42501") => AppError::Forbidden,
+        Some("22023") => AppError::InvalidInput,
+        Some("23514" | "23505") => AppError::Conflict,
+        _ => AppError::Database(e),
+    })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(row)
 }

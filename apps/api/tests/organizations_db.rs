@@ -462,6 +462,32 @@ async fn scoped_organization_http_real_database() {
         request(&app, &format!("/v1/policies/{policy_id}"), Some(&requester)).await;
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(policy["state"], "PUBLISHED");
+    let policy_action = |op: &str, actor: &str, key: &str| {
+        Request::builder()
+            .method("POST")
+            .uri(format!("/v1/policies/{policy_id}/{op}"))
+            .header(header::AUTHORIZATION, format!("Bearer {actor}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header("idempotency-key", key)
+            .header(
+                "if-finance-version",
+                format!("\"v1:policy:{policy_id}:{}\"", policy["version"]),
+            )
+            .body(Body::from(json!({"reason":"Synthetic policy test"}).to_string()))
+            .unwrap()
+    };
+    let denied = app
+        .clone()
+        .oneshot(policy_action("revoke", &requester, "policy-denied"))
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+    let denied = app
+        .clone()
+        .oneshot(policy_action("submit", &requester, "policy-submit-denied"))
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
     assert_eq!(
         request(&app, "/v1/policies", Some(&auditor)).await.0,
         StatusCode::FORBIDDEN

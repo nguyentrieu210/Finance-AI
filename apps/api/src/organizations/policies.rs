@@ -4,17 +4,20 @@ use super::{
 };
 use axum::{
     Json,
-    extract::{Path, Query, State, rejection::QueryRejection},
+    extract::{
+        Path, Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use finance_policy::repository::{self, PublishedPolicy};
 use finance_shared::{
     contracts::{Principal, Version},
-    http_contract::{VersionTarget, VersionToken},
+    http_contract::{IdempotencyKey, VersionTarget, VersionToken},
     ids::ResourceId,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -106,4 +109,178 @@ pub(super) async fn get(
         Ok(None) => error(StatusCode::NOT_FOUND, correlation),
         Err(e) => error(dossiers::status(e), correlation),
     }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Reason {
+    reason: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Publish {
+    reason: String,
+    effective_from: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Revise {
+    name: String,
+    reason: String,
+    effective_from: chrono::DateTime<chrono::Utc>,
+}
+
+async fn change(
+    state: Arc<OrganizationState>,
+    headers: HeaderMap,
+    policy: Uuid,
+    operation: repository::Change,
+    reason: String,
+    name: Option<String>,
+    effective: Option<chrono::DateTime<chrono::Utc>>,
+) -> Response {
+    let correlation = random_id();
+    let Some(token) = headers
+        .get("if-finance-version")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| VersionToken::parse(s).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    if token.target != VersionTarget::Policy || Uuid::from(token.resource_id) != policy {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let proof =
+        match dossiers::authenticate_version(&state, &headers, correlation, Some(token.version))
+            .await
+        {
+            Ok(proof) => proof,
+            Err(s) => return error(s, correlation),
+        };
+    let Some(key) = headers
+        .get("idempotency-key")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| IdempotencyKey::parse(s).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let input = repository::ChangeInput {
+        policy,
+        new_id: random_id(),
+        change: operation,
+        reason: &reason,
+        name: name.as_deref(),
+        effective,
+    };
+    match repository::change(&state.runtime, &proof, &key, input).await {
+        Ok(row) => receipt(row),
+        Err(e) => error(dossiers::status(e), correlation),
+    }
+}
+
+pub(super) async fn submit(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(policy): Path<Uuid>,
+    body: Result<Json<Reason>, JsonRejection>,
+) -> Response {
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, random_id());
+    };
+    change(
+        state,
+        headers,
+        policy,
+        repository::Change::Submit,
+        body.reason,
+        None,
+        None,
+    )
+    .await
+}
+
+pub(super) async fn retire(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(policy): Path<Uuid>,
+    body: Result<Json<Reason>, JsonRejection>,
+) -> Response {
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, random_id());
+    };
+    change(
+        state,
+        headers,
+        policy,
+        repository::Change::Retire,
+        body.reason,
+        None,
+        None,
+    )
+    .await
+}
+
+pub(super) async fn revoke(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(policy): Path<Uuid>,
+    body: Result<Json<Reason>, JsonRejection>,
+) -> Response {
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, random_id());
+    };
+    change(
+        state,
+        headers,
+        policy,
+        repository::Change::Revoke,
+        body.reason,
+        None,
+        None,
+    )
+    .await
+}
+
+pub(super) async fn publish(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(policy): Path<Uuid>,
+    body: Result<Json<Publish>, JsonRejection>,
+) -> Response {
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, random_id());
+    };
+    change(
+        state,
+        headers,
+        policy,
+        repository::Change::Publish,
+        body.reason,
+        None,
+        Some(body.effective_from),
+    )
+    .await
+}
+
+pub(super) async fn revise(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(policy): Path<Uuid>,
+    body: Result<Json<Revise>, JsonRejection>,
+) -> Response {
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, random_id());
+    };
+    change(
+        state,
+        headers,
+        policy,
+        repository::Change::Revise,
+        body.reason,
+        Some(body.name),
+        Some(body.effective_from),
+    )
+    .await
 }
