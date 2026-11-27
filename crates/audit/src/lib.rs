@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 //! Synthetic prototype audit read and offline integrity verification. No public API.
-use finance_core::prototype::{Error, scoped_transaction};
+use finance_core::prototype::{Error, recheck_authenticated, scoped_transaction};
 use finance_shared::{
     contracts::{CommandContext, Principal},
     ids::ResourceScope,
@@ -122,6 +122,23 @@ pub async fn read_page(
     after: i64,
     limit: i64,
 ) -> Result<Vec<Event>, Error> {
+    read_page_inner(pool, ctx, after, limit, None).await
+}
+pub async fn read_page_authenticated(
+    pool: &PgPool,
+    proof: &finance_identity::AuthenticatedCommand,
+    after: i64,
+    limit: i64,
+) -> Result<Vec<Event>, Error> {
+    read_page_inner(pool, proof.context(), after, limit, Some(proof)).await
+}
+async fn read_page_inner(
+    pool: &PgPool,
+    ctx: &CommandContext,
+    after: i64,
+    limit: i64,
+    proof: Option<&finance_identity::AuthenticatedCommand>,
+) -> Result<Vec<Event>, Error> {
     if after < 0 || !(1..=100).contains(&limit) {
         return Err(Error::InvalidInput);
     }
@@ -139,6 +156,7 @@ pub async fn read_page(
             finance_permissions::GrantError::Forbidden => Error::Forbidden,
             finance_permissions::GrantError::Database(e) => Error::Database(e),
         })?;
+    recheck_authenticated(&mut tx, proof).await?;
     let sql = format!(
         "SELECT {EVENT_FIELDS} FROM finance.audit_event WHERE tenant_id=$1 AND company_id=$2 AND sequence>$3 AND action<>'AUDIT_READ' ORDER BY sequence LIMIT $4"
     );
@@ -159,6 +177,7 @@ pub async fn read_page(
     let corr: Uuid = ctx.correlation.into();
     sqlx::query("INSERT INTO finance.audit_event(tenant_id,company_id,id,actor_id,command_id,correlation_id,resource_id,action) VALUES($1,$2,$3,$4,$3,$5,$2,'AUDIT_READ')")
         .bind(t).bind(c).bind(cmd).bind(a).bind(corr).execute(&mut *tx).await?;
+    recheck_authenticated(&mut tx, proof).await?;
     tx.commit().await?;
     Ok(events)
 }

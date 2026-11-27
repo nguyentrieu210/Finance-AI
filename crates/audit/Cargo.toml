@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+finance-identity = { path = "../identity" }
 finance-permissions = { path = "../permissions" }
 finance-core = { path = "../core" }
 finance-shared = { path = "../shared" }

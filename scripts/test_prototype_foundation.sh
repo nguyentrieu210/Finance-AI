@@ -63,5 +63,10 @@ if [[ -n "${FINANCE_ORG_TEST_BIN:-}" ]]; then
 else
  FINANCE_PROTOTYPE_TEST_DATABASE_URL="$runtime_url" FINANCE_AUDIT_TEST_ADMIN_URL="$url" cargo test --locked -p finance-organization --test lifecycle_db -- --ignored --exact organization_real_database
 fi
+if [[ -n "${FINANCE_BINDING_TEST_BIN:-}" ]]; then
+ FINANCE_PROTOTYPE_TEST_DATABASE_URL="$runtime_url" FINANCE_IDENTITY_TEST_DATABASE_URL="$identity_url" FINANCE_AUDIT_TEST_ADMIN_URL="$url" "$FINANCE_BINDING_TEST_BIN" --ignored --exact authenticated_commands_real_database
+else
+ FINANCE_PROTOTYPE_TEST_DATABASE_URL="$runtime_url" FINANCE_IDENTITY_TEST_DATABASE_URL="$identity_url" FINANCE_AUDIT_TEST_ADMIN_URL="$url" cargo test --locked -p finance-organization --test binding_db -- --ignored --exact authenticated_commands_real_database
+fi
 unset url runtime_url worker_url identity_url
 echo 'PASS: real PostgreSQL synthetic prototype atomic command, replay, RLS and scoped FK'

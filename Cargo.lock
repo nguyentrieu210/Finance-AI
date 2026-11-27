@@ -423,6 +423,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "finance-core",
+ "finance-identity",
  "finance-permissions",
  "finance-shared",
  "sha2",
@@ -436,6 +437,7 @@ name = "finance-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "finance-identity",
  "finance-permissions",
  "finance-shared",
  "sha2",
@@ -449,6 +451,7 @@ name = "finance-identity"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "chrono",
  "finance-shared",
  "jsonwebtoken",
  "rand",
@@ -472,10 +475,17 @@ dependencies = [
 name = "finance-organization"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "chrono",
+ "finance-audit",
  "finance-core",
+ "finance-identity",
  "finance-permissions",
  "finance-shared",
+ "jsonwebtoken",
+ "rand",
+ "rsa",
+ "serde_json",
  "sha2",
  "sqlx",
  "tokio",

@@ -3,12 +3,12 @@
 //! No discovery/network transport, login route, session issuance or permission grants.
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use finance_shared::{
-    contracts::Principal,
-    ids::{ActorId, CompanyScope},
+    contracts::{CommandContext, Principal, Version},
+    ids::{ActorId, CommandId, CompanyScope, CorrelationId, ResourceScope},
 };
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::Deserialize;
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use std::{
     collections::HashMap,
     sync::RwLock,
@@ -83,6 +83,7 @@ struct Verified {
     issuer: String,
     subject: String,
     expires: u64,
+    keys_until: u64,
 }
 
 fn now() -> Result<u64, IdentityError> {
@@ -227,6 +228,7 @@ impl Verifier {
             issuer: c.iss,
             subject: c.sub,
             expires: c.exp,
+            keys_until: self.valid_until,
         })
     }
     /// Validate signature and then resolve existing active membership. Scope is a selection,
@@ -281,6 +283,80 @@ impl VerifierStore {
     ) -> Result<Principal, IdentityError> {
         let verified = self.verify_at(token, now()?)?;
         resolve(pool, &verified, scope).await
+    }
+}
+/// Opaque request capability; never deserialize it or accept actor/scope from a request body.
+/// Issuer/subject are kept private. No raw bearer token is retained.
+pub struct AuthenticatedCommand {
+    context: CommandContext,
+    issuer: String,
+    subject: String,
+    valid_until: u64,
+}
+impl AuthenticatedCommand {
+    pub fn context(&self) -> &CommandContext {
+        &self.context
+    }
+    /// Call after current-grant locks and immediately before transaction commit/replay.
+    /// Existing identity row is held by the permission guard; this check is not a grant by itself.
+    pub async fn recheck(&self, tx: &mut Transaction<'_, Postgres>) -> Result<(), IdentityError> {
+        let ResourceScope::Company(scope) = self.context.scope else {
+            return Err(IdentityError::Forbidden);
+        };
+        let Principal::User(actor) = self.context.actor else {
+            return Err(IdentityError::Forbidden);
+        };
+        let (t, c, a): (Uuid, Uuid, Uuid) =
+            (scope.tenant.into(), scope.company.into(), actor.into());
+        let deadline = i64::try_from(self.valid_until).map_err(|_| IdentityError::InvalidToken)?;
+        if now()? >= self.valid_until {
+            return Err(IdentityError::InvalidToken);
+        }
+        let allowed:bool=sqlx::query_scalar("SELECT COALESCE(current_user='finance_runtime' AND current_setting('transaction_isolation')='read committed' AND finance.scope_tenant()=$1 AND finance.scope_company()=$2 AND finance.scope_actor()=$3 AND extract(epoch FROM clock_timestamp())<$6::bigint AND EXISTS(SELECT 1 FROM finance.identity_subject WHERE tenant_id=$1 AND id=$3 AND active AND issuer=$4 AND subject=$5),false)")
+            .bind(t).bind(c).bind(a).bind(&self.issuer).bind(&self.subject).bind(deadline)
+            .fetch_one(&mut **tx).await.map_err(|_|IdentityError::DatabaseUnavailable)?;
+        if !allowed {
+            return Err(IdentityError::Forbidden);
+        }
+        Ok(())
+    }
+}
+impl VerifierStore {
+    /// Trusted server supplies command and correlation IDs; actor comes only from validated JWT + DB.
+    pub async fn authenticate_command(
+        &self,
+        pool: &PgPool,
+        token: &str,
+        scope: CompanyScope,
+        command: CommandId,
+        correlation: CorrelationId,
+        expected_version: Option<Version>,
+    ) -> Result<AuthenticatedCommand, IdentityError> {
+        let verified = self.verify_at(token, now()?)?;
+        let actor = resolve(pool, &verified, scope).await?;
+        let n = now()?;
+        let deadline = verified.expires.min(verified.keys_until);
+        if n >= deadline {
+            return Err(IdentityError::InvalidToken);
+        }
+        let occurred_at = chrono::DateTime::from_timestamp(
+            i64::try_from(n).map_err(|_| IdentityError::InvalidConfig)?,
+            0,
+        )
+        .ok_or(IdentityError::InvalidConfig)?;
+        Ok(AuthenticatedCommand {
+            context: CommandContext {
+                command,
+                correlation,
+                actor,
+                scope: ResourceScope::Company(scope),
+                expected_version,
+                occurred_at,
+            },
+            issuer: verified.issuer,
+            subject: verified.subject,
+            valid_until: deadline,
+        })
     }
 }
 async fn resolve(

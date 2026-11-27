@@ -91,6 +91,32 @@ pub async fn create_unit(
     key: &IdempotencyKey,
     input: &CreateUnit<'_>,
 ) -> Result<Receipt, Error> {
+    create_unit_inner(pool, context, key, input, None).await
+}
+pub async fn create_unit_authenticated(
+    pool: &PgPool,
+    proof: &finance_identity::AuthenticatedCommand,
+    key: &IdempotencyKey,
+    input: &CreateUnit<'_>,
+) -> Result<Receipt, Error> {
+    create_unit_inner(pool, proof.context(), key, input, Some(proof)).await
+}
+pub async fn recheck_authenticated(
+    tx: &mut Transaction<'_, Postgres>,
+    proof: Option<&finance_identity::AuthenticatedCommand>,
+) -> Result<(), Error> {
+    if let Some(proof) = proof {
+        proof.recheck(tx).await.map_err(|_| Error::Forbidden)?;
+    }
+    Ok(())
+}
+async fn create_unit_inner(
+    pool: &PgPool,
+    context: &CommandContext,
+    key: &IdempotencyKey,
+    input: &CreateUnit<'_>,
+    proof: Option<&finance_identity::AuthenticatedCommand>,
+) -> Result<Receipt, Error> {
     if input.id.is_nil()
         || input.parent.is_some_and(|p| p.is_nil() || p == input.id)
         || input.code.trim() != input.code
@@ -128,6 +154,7 @@ pub async fn create_unit(
             finance_permissions::GrantError::Forbidden => Error::Forbidden,
             finance_permissions::GrantError::Database(e) => Error::Database(e),
         })?;
+    recheck_authenticated(&mut tx, proof).await?;
     let request_hash = hash_command(input);
     let prior:Option<(Vec<u8>,Uuid)>=sqlx::query_as("SELECT request_hash,result_id FROM finance.idempotency_record WHERE tenant_id=$1 AND company_id=$2 AND actor_id=$3 AND operation_id='prototype.createOrganizationUnit' AND key=$4")
         .bind(tenant).bind(company).bind(actor).bind(key.as_str()).fetch_optional(&mut *tx).await?;
@@ -135,6 +162,7 @@ pub async fn create_unit(
         if hash != request_hash {
             return Err(Error::Conflict);
         }
+        recheck_authenticated(&mut tx, proof).await?;
         tx.commit().await?;
         return Ok(Receipt::Replayed(id));
     }
@@ -143,6 +171,7 @@ pub async fn create_unit(
         .bind(company)
         .execute(&mut *tx)
         .await?;
+    recheck_authenticated(&mut tx, proof).await?;
     sqlx::query("INSERT INTO finance.organization_unit(tenant_id,company_id,id,parent_id,code,name,kind) VALUES($1,$2,$3,$4,$5,$6,$7)")
         .bind(tenant).bind(company).bind(input.id).bind(input.parent).bind(input.code).bind(input.name).bind(input.kind.as_str()).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO finance.audit_event(tenant_id,company_id,id,actor_id,command_id,correlation_id,resource_id,action) VALUES($1,$2,$3,$4,$3,$5,$6,'ORG_UNIT_CREATED')")
@@ -151,6 +180,7 @@ pub async fn create_unit(
         .bind(tenant).bind(company).bind(command).bind(input.id).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id) VALUES($1,$2,$3,'prototype.createOrganizationUnit',$4,$5,$6)")
         .bind(tenant).bind(company).bind(actor).bind(key.as_str()).bind(request_hash).bind(input.id).execute(&mut *tx).await?;
+    recheck_authenticated(&mut tx, proof).await?;
     tx.commit().await?;
     Ok(Receipt::Created(input.id))
 }

@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+finance-identity = { path = "../identity" }
 finance-core = { path = "../core" }
 finance-permissions = { path = "../permissions" }
 finance-shared = { path = "../shared" }
@@ -16,3 +17,9 @@ sha2 = "=0.10.9"
 [dev-dependencies]
 tokio.workspace = true
 chrono.workspace = true
+finance-audit = { path = "../audit" }
+base64 = "=0.22.1"
+jsonwebtoken = { version = "=9.3.1", default-features = false }
+rsa = "=0.9.10"
+rand = "=0.8.5"
+serde_json.workspace = true
