@@ -1327,7 +1327,13 @@ fn binary_probe(jwks: &str, token: &str) {
     let mut response = String::new();
     stream.take(65536).read_to_string(&mut response).unwrap();
     assert!(response.starts_with("HTTP/1.1 200 "));
-    assert!(response.contains("\"items\"") && response.contains("\"DRAFT\""));
+    let body = response.split_once("\r\n\r\n").unwrap().1;
+    let page: Value = serde_json::from_str(body).unwrap();
+    let items = page["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert!(items[0]["id"].as_str().is_some());
+    assert!(items[0]["kind"].as_str().is_some());
+    assert!(items[0]["status"].as_str().is_some());
     drop(child);
     let denied = process.env("FINANCE_BIND", "0.0.0.0:0").status().unwrap();
     assert_eq!(denied.code(), Some(78));
