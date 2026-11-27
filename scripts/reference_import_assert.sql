@@ -44,19 +44,19 @@ BEGIN
  OR has_table_privilege('finance_runtime','finance.reference_snapshot','UPDATE')
  OR has_table_privilege('finance_runtime','finance.reference_snapshot','DELETE')
  THEN RAISE EXCEPTION 'fixture import mutation exposed'; END IF;
-END $;
+END $$;
 
 BEGIN;
 SELECT set_config('finance.tenant_id','00000000-0000-0000-0000-000000000001',true),
  set_config('finance.company_id','00000000-0000-0000-0000-00000000000a',true),
  set_config('finance.actor_id','00000000-0000-0000-0000-0000000003e9',true);
 SET LOCAL ROLE finance_runtime;
-DO $
+DO $$
 BEGIN
  IF EXISTS(
   SELECT 1 FROM finance.reference_snapshot
   WHERE state<>'APPROVED' OR fresh_until<=statement_timestamp()
  ) THEN RAISE EXCEPTION 'draft revoked or stale reference exposed'; END IF;
-END $;
+END $$;
 ROLLBACK;
 SELECT 'PASS: scoped reference import, incomplete coverage denial, independent checker, approved-fresh read RLS, multi-cap and revocation preserves holds';
