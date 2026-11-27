@@ -49,12 +49,14 @@ fn do_contract_requires_idempotency_and_authoritative_status() {
         }),
         Err(ContractError::MissingAuthoritativeStatusChannel)
     );
-    assert!(validate_do_capabilities(DoCapabilities {
-        external_idempotency: true,
-        signed_webhook: true,
-        authenticated_polling: false,
-    })
-    .is_ok());
+    assert!(
+        validate_do_capabilities(DoCapabilities {
+            external_idempotency: true,
+            signed_webhook: true,
+            authenticated_polling: false,
+        })
+        .is_ok()
+    );
 
     let base = DoReceipt {
         external_id: rid(20),
@@ -62,7 +64,10 @@ fn do_contract_requires_idempotency_and_authoritative_status() {
         source_digest: digest('a'),
         authoritative: false,
     };
-    assert_eq!(status_observation(base), Err(ContractError::UnverifiedStatus));
+    assert_eq!(
+        status_observation(base),
+        Err(ContractError::UnverifiedStatus)
+    );
     assert_eq!(
         status_observation(DoReceipt {
             authoritative: true,
