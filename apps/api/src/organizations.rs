@@ -322,8 +322,14 @@ pub fn router(state: OrganizationState) -> Router {
             "/v1/dossiers/{dossier_id}/exports",
             axum::routing::post(exports::create),
         )
-        .route("/v1/dossiers/{dossier_id}/begin-review", axum::routing::post(reviews::begin))
-        .route("/v1/dossiers/{dossier_id}/review", get(reviews::get).post(reviews::decide))
+        .route(
+            "/v1/dossiers/{dossier_id}/begin-review",
+            axum::routing::post(reviews::begin),
+        )
+        .route(
+            "/v1/dossiers/{dossier_id}/review",
+            get(reviews::get).post(reviews::decide),
+        )
         .route("/v1/review/queue", get(reviews::queue))
         .route("/v1/jobs/{job_id}", get(jobs::get))
         .route("/v1/audit", get(audit::list))

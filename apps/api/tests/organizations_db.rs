@@ -619,9 +619,16 @@ async fn scoped_organization_http_real_database() {
     let review_dossier = "00000000-0000-0000-0000-000000002320";
     let review_snapshot = "00000000-0000-0000-0000-000000002323";
     let review_v0 = format!("\"v1:dossier:{review_dossier}:0\"");
-    let (queue_status, queue) = request(&app, "/v1/review/queue?limit=10", Some(&review_accountant)).await;
+    let (queue_status, queue) =
+        request(&app, "/v1/review/queue?limit=10", Some(&review_accountant)).await;
     assert_eq!(queue_status, StatusCode::OK);
-    assert!(queue["items"].as_array().unwrap().iter().any(|item| item["id"] == review_dossier));
+    assert!(
+        queue["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["id"] == review_dossier)
+    );
     assert_eq!(
         begin_review(
             &app,
@@ -646,8 +653,12 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(begun["status"], "ACCOUNTING_REVIEW");
     assert_eq!(begun["version"], 1);
     assert!(begin_token.as_deref().unwrap().ends_with(":1\""));
-    let (read_status, pending) =
-        request(&app, &format!("/v1/dossiers/{review_dossier}/review"), Some(&requester)).await;
+    let (read_status, pending) = request(
+        &app,
+        &format!("/v1/dossiers/{review_dossier}/review"),
+        Some(&requester),
+    )
+    .await;
     assert_eq!(read_status, StatusCode::OK);
     assert_eq!(pending["decision"], "PENDING");
     assert_eq!(pending["snapshot_id"], review_snapshot);
@@ -703,8 +714,16 @@ async fn scoped_organization_http_real_database() {
         .0,
         StatusCode::CONFLICT
     );
-    let queue_after = request(&app, "/v1/review/queue?limit=10", Some(&review_accountant)).await.1;
-    assert!(!queue_after["items"].as_array().unwrap().iter().any(|item| item["id"] == review_dossier));
+    let queue_after = request(&app, "/v1/review/queue?limit=10", Some(&review_accountant))
+        .await
+        .1;
+    assert!(
+        !queue_after["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["id"] == review_dossier)
+    );
 
     let ready_id = "00000000-0000-0000-0000-000000001800";
     let check_id = "00000000-0000-0000-0000-000000001802";
@@ -1717,7 +1736,6 @@ async fn create_export(
         receipt,
     )
 }
-
 
 async fn begin_review(
     app: &Router,

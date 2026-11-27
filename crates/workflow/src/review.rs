@@ -95,15 +95,15 @@ async fn accountant_dossier(
     d: Uuid,
     a: Uuid,
 ) -> Result<Draft, Error> {
-    Ok(sqlx::query_as::<_, Draft>(
-        "SELECT * FROM finance.runtime_review_dossier($1,$2,$3,$4)",
+    Ok(
+        sqlx::query_as::<_, Draft>("SELECT * FROM finance.runtime_review_dossier($1,$2,$3,$4)")
+            .bind(t)
+            .bind(c)
+            .bind(d)
+            .bind(a)
+            .fetch_one(&mut **tx)
+            .await?,
     )
-    .bind(t)
-    .bind(c)
-    .bind(d)
-    .bind(a)
-    .fetch_one(&mut **tx)
-    .await?)
 }
 
 pub async fn begin(
@@ -353,16 +353,15 @@ pub async fn queue(
         .await
         .map_err(grant)?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let rows = sqlx::query_as::<_, Draft>(
-        "SELECT * FROM finance.runtime_review_queue($1,$2,$3,$4,$5)",
-    )
-    .bind(t)
-    .bind(c)
-    .bind(a)
-    .bind(after)
-    .bind(i32::try_from(limit).map_err(|_| Error::InvalidInput)?)
-    .fetch_all(&mut *tx)
-    .await?;
+    let rows =
+        sqlx::query_as::<_, Draft>("SELECT * FROM finance.runtime_review_queue($1,$2,$3,$4,$5)")
+            .bind(t)
+            .bind(c)
+            .bind(a)
+            .bind(after)
+            .bind(i32::try_from(limit).map_err(|_| Error::InvalidInput)?)
+            .fetch_all(&mut *tx)
+            .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(rows)

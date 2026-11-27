@@ -4,7 +4,10 @@ use super::{
 };
 use axum::{
     Json,
-    extract::{Path, Query, State, rejection::{JsonRejection, QueryRejection}},
+    extract::{
+        Path, Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -90,10 +93,11 @@ pub(super) async fn begin(
     let Some(expected) = token(&headers, dossier) else {
         return error(StatusCode::BAD_REQUEST, correlation);
     };
-    let proof = match dossiers::authenticate_version(&state, &headers, correlation, Some(expected)).await {
-        Ok(proof) => proof,
-        Err(status) => return error(status, correlation),
-    };
+    let proof =
+        match dossiers::authenticate_version(&state, &headers, correlation, Some(expected)).await {
+            Ok(proof) => proof,
+            Err(status) => return error(status, correlation),
+        };
     let Some(key) = key(&headers) else {
         return error(StatusCode::BAD_REQUEST, correlation);
     };
@@ -199,10 +203,8 @@ pub(super) async fn queue(
     let Some(time) = now() else {
         return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
     };
-    let cursor_key: [u8; 32] = Sha256::digest(
-        [b"finance.review.queue/v1".as_slice(), &state.cursor_key].concat(),
-    )
-    .into();
+    let cursor_key: [u8; 32] =
+        Sha256::digest([b"finance.review.queue/v1".as_slice(), &state.cursor_key].concat()).into();
     let after = match query.cursor {
         None => Uuid::nil(),
         Some(value) => match decode_cursor(&cursor_key, state.scope, actor, &value, time) {
@@ -213,9 +215,9 @@ pub(super) async fn queue(
     match review::queue(&state.runtime, &proof, after, limit).await {
         Ok(items) => {
             let next_cursor = if items.len() == limit as usize {
-                items.last().map(|item| {
-                    encode_cursor(&cursor_key, state.scope, actor, item.id, time + 300)
-                })
+                items
+                    .last()
+                    .map(|item| encode_cursor(&cursor_key, state.scope, actor, item.id, time + 300))
             } else {
                 None
             };
