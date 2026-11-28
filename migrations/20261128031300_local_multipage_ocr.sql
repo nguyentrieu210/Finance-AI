@@ -17,7 +17,7 @@ ALTER TABLE finance.extracted_field DROP CONSTRAINT extracted_field_field_path_c
  'advance_settlement.contract_number','advance_settlement.date','advance_settlement.requested',
  'acceptance_record.contract_number','acceptance_record.date','acceptance_record.total',
  'payment_voucher.date','payment_voucher.requested',
- 'invoice.currency','contract.currency','contract_appendix.currency','payment_request.currency','advance_request.currency','advance_settlement.currency','acceptance_record.currency','payment_voucher.currency','advance_settlement.allocations','advance_settlement.applied','advance_settlement.extra','invoice.source_key','contract.installment_key','finance.budget_key'));
+ 'invoice.currency','contract.currency','contract_appendix.currency','payment_request.currency','advance_request.currency','advance_settlement.currency','acceptance_record.currency','payment_voucher.currency','advance_settlement.allocations','advance_settlement.applied','advance_settlement.extra','invoice.source_key','contract.installment_key','finance.budget_key','payment_request.settlement_snapshot','payment_request.beneficiary_key','advance_settlement.beneficiary_key'));
 
 CREATE FUNCTION finance.local_ocr_source(t uuid,c uuid,j uuid,f bigint,w uuid)
 RETURNS TABLE(document_id uuid,revision_id uuid,generation bigint,source_digest bytea,content bytea,object_version text,byte_count bigint,mime text,kind text,event_type text)
@@ -86,9 +86,9 @@ BEGIN
  WHEN 'INVOICE' THEN ARRAY['invoice.number','invoice.date','invoice.supplier','invoice.net','invoice.tax','invoice.total','invoice.currency','invoice.source_key']
  WHEN 'CONTRACT' THEN ARRAY['contract.number','contract.date','contract.supplier','contract.total','contract.currency','contract.installment_key']
  WHEN 'CONTRACT_APPENDIX' THEN ARRAY['contract_appendix.number','contract_appendix.date','contract_appendix.supplier','contract_appendix.total','contract_appendix.currency','contract.installment_key']
- WHEN 'PAYMENT_REQUEST' THEN ARRAY['payment_request.contract_number','payment_request.invoice_number','payment_request.date','payment_request.supplier','payment_request.requested','payment_request.currency','finance.budget_key']
+ WHEN 'PAYMENT_REQUEST' THEN ARRAY['payment_request.contract_number','payment_request.invoice_number','payment_request.date','payment_request.supplier','payment_request.requested','payment_request.currency','finance.budget_key','payment_request.settlement_snapshot','payment_request.beneficiary_key']
  WHEN 'ADVANCE_REQUEST' THEN ARRAY['advance_request.contract_number','advance_request.date','advance_request.requested','advance_request.currency','finance.budget_key']
- WHEN 'ADVANCE_SETTLEMENT' THEN ARRAY['advance_settlement.contract_number','advance_settlement.date','advance_settlement.requested','advance_settlement.currency','advance_settlement.allocations','advance_settlement.applied','advance_settlement.extra']
+ WHEN 'ADVANCE_SETTLEMENT' THEN ARRAY['advance_settlement.contract_number','advance_settlement.date','advance_settlement.requested','advance_settlement.currency','advance_settlement.allocations','advance_settlement.applied','advance_settlement.extra','advance_settlement.beneficiary_key']
  WHEN 'ACCEPTANCE_RECORD' THEN ARRAY['acceptance_record.contract_number','acceptance_record.date','acceptance_record.total','acceptance_record.currency']
  WHEN 'PAYMENT_VOUCHER' THEN ARRAY['payment_voucher.date','payment_voucher.requested','payment_voucher.currency']
  ELSE NULL END;

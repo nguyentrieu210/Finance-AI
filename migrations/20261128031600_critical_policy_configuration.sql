@@ -44,8 +44,8 @@ BEGIN
  IF gate IS NOT NULL THEN
   IF jsonb_typeof(gate) IS DISTINCT FROM 'object' OR octet_length(gate::text)>4096
   OR NOT (gate ?& ARRAY['clause_key','amount_path','currency_path','resource_kinds','resource_keys'])
-  OR (SELECT count(*) FROM jsonb_object_keys(gate)) NOT BETWEEN 5 AND 6
-  OR (gate - ARRAY['clause_key','amount_path','currency_path','resource_kinds','resource_keys','line_match'])<>'{}'::jsonb
+  OR (SELECT count(*) FROM jsonb_object_keys(gate)) NOT BETWEEN 5 AND 7
+  OR (gate - ARRAY['clause_key','amount_path','currency_path','resource_kinds','resource_keys','line_match','extra_settlement'])<>'{}'::jsonb
   OR NOT COALESCE(gate->>'clause_key'=ANY(clause_keys),false)
   OR NOT COALESCE(gate->>'amount_path'=ANY(critical_paths),false)
   OR NOT COALESCE(gate->>'currency_path'=ANY(critical_paths),false)
@@ -66,6 +66,9 @@ BEGIN
     WHERE x.ck=gate->>'clause_key' AND x.fp=gate->'resource_keys'->>k
     AND x.fp NOT IN (gate->>'amount_path',gate->>'currency_path')))
   THEN RAISE EXCEPTION 'finance gate must bind approved clause and critical fields' USING ERRCODE='22023'; END IF;
+  IF gate ? 'extra_settlement' AND (gate->'extra_settlement' IS DISTINCT FROM 'true'::jsonb OR kind<>'PAYMENT' OR gate->>'amount_path'<>'payment_request.requested' OR NOT (gate->'resource_kinds' ? 'BUDGET') OR gate->'resource_kinds' ? 'ADVANCE' OR NOT ('payment_request.settlement_snapshot'=ANY(critical_paths)) OR NOT ('payment_request.beneficiary_key'=ANY(critical_paths))) THEN RAISE EXCEPTION 'extra payment requires linked settlement and separate budget hold' USING ERRCODE='22023'; END IF;
+  IF kind='SETTLEMENT' AND (gate->>'amount_path'<>'advance_settlement.applied' OR gate->'resource_keys'->>'ADVANCE' IS DISTINCT FROM 'advance_settlement.allocations' OR NOT (ARRAY['advance_settlement.requested','advance_settlement.extra','advance_settlement.beneficiary_key'] <@ critical_paths)) THEN RAISE EXCEPTION 'settlement requires applied, requested, extra and beneficiary verification' USING ERRCODE='22023'; END IF;
+  IF gate->'resource_kinds' ? 'CONTRACT' AND NOT (gate ? 'line_match') THEN RAISE EXCEPTION 'contract line policy required' USING ERRCODE='22023'; END IF;
   IF gate ? 'line_match' THEN
    IF jsonb_typeof(gate->'line_match') IS DISTINCT FROM 'object' OR NOT (gate->'line_match' ?& ARRAY['currency','price_tolerance','conversions'])
    OR (SELECT count(*) FROM jsonb_object_keys(gate->'line_match'))<>3

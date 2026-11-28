@@ -105,7 +105,7 @@ pub fn evaluate(material:&serde_json::Value)->Result<Vec<ResultRow>, &'static st
     for row in &material.financial {
         if !financial_seen.insert(&row.path)||row.evidence.len()>64 {return Err("invalid financial facts")}
         if !row.verified||row.evidence.is_empty(){continue}
-        let approved_path=matches!(row.path.as_str(),"reference.fresh"|"advance.overdue"|"matching.complete"|"matching.allocated_value"|"matching.line_count")||row.path.starts_with("finance.")||
+        let approved_path=matches!(row.path.as_str(),"reference.fresh"|"advance.overdue"|"matching.complete"|"matching.allocated_value"|"matching.line_count"|"settlement.extra_verified")||row.path.starts_with("finance.")||
             ["contract.","invoice.","advance.","budget."].iter().any(|prefix|row.path.starts_with(prefix)) &&
             [".remaining",".cap",".consumed",".other_holds"].iter().any(|suffix|row.path.ends_with(suffix));
         if !approved_path{ return Err("unapproved financial fact path") }

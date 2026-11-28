@@ -56,6 +56,7 @@ GRANT EXECUTE ON FUNCTION finance.assert_acceptance_refresh(uuid,uuid,text,jsonb
 -- verified reference schedule. Its quantities are checked again when sealing.
 CREATE FUNCTION finance.verified_acceptance_material(t uuid,c uuid,d uuid,rev uuid,pid uuid,hold_id uuid)
 RETURNS jsonb LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog AS $$
+ #variable_conflict use_column
 DECLARE m finance.line_reconciliation%ROWTYPE; fr finance.financial_resource%ROWTYPE; ln jsonb; canonical jsonb; used numeric; allocated numeric; ev jsonb; claims jsonb:='[]'; ck text; row_data jsonb; source_ev jsonb; line_ev jsonb; total numeric:=0;
 BEGIN
  SELECT x.* INTO fr FROM finance.financial_resource x JOIN finance.reservation_line l ON (l.tenant_id,l.company_id,l.resource_id)=(x.tenant_id,x.company_id,x.id)

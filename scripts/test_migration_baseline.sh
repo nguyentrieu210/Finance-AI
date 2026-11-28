@@ -46,7 +46,7 @@ END $$;
 
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM public._sqlx_migrations) <> 86 OR NOT EXISTS (
+  IF (SELECT count(*) FROM public._sqlx_migrations) <> 87 OR NOT EXISTS (
     SELECT 1 FROM public._sqlx_migrations WHERE version = 20261127000100 AND success AND octet_length(checksum) = 48
   ) THEN RAISE EXCEPTION 'migration ledger mismatch'; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace WHERE e.extname = 'vector' AND n.nspname = 'finance' AND e.extversion = '0.8.0') THEN
@@ -58,7 +58,7 @@ BEGIN
   IF (SELECT rolcanlogin OR rolsuper OR rolbypassrls FROM pg_roles WHERE rolname='finance_invite_dispatcher') THEN
     RAISE EXCEPTION 'invitation dispatcher role has excessive privileges';
   END IF;
-  IF (SELECT count(*) FROM pg_tables WHERE schemaname = 'finance') <> 86 THEN
+  IF (SELECT count(*) FROM pg_tables WHERE schemaname = 'finance') <> 87 THEN
     RAISE EXCEPTION 'unexpected prototype table inventory';
   END IF;
 END $$;

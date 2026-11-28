@@ -138,7 +138,8 @@
       "default_scope": "company",
       "tables": [
         "advance_ref",
-        "settlement_link"
+        "settlement_link",
+        "settlement_extra_claim"
       ],
       "invariants": "Independent verified issue/refund and disjoint consumption."
     },

@@ -212,7 +212,7 @@ fn candidates_for(kind: Kind,pages: &[PageResult], rotations: &[Rotation]) -> Re
         }
         fields.push(json!({"path":path,"state":state,"value":value,"page":source_page,"indexes":indexes}));
     }
-    for path in match kind {Kind::AdvanceSettlement=> &["advance_settlement.allocations","advance_settlement.applied","advance_settlement.extra"][..],Kind::Invoice=>&["invoice.source_key"][..],Kind::Contract|Kind::ContractAppendix=>&["contract.installment_key"][..],Kind::PaymentRequest|Kind::AdvanceRequest=>&["finance.budget_key"][..],_=>&[][..]} {
+    for path in match kind {Kind::AdvanceSettlement=> &["advance_settlement.allocations","advance_settlement.applied","advance_settlement.extra","advance_settlement.beneficiary_key"][..],Kind::Invoice=>&["invoice.source_key"][..],Kind::Contract|Kind::ContractAppendix=>&["contract.installment_key"][..],Kind::PaymentRequest=>&["finance.budget_key","payment_request.settlement_snapshot","payment_request.beneficiary_key"][..],Kind::AdvanceRequest=>&["finance.budget_key"][..],_=>&[][..]} {
         fields.push(json!({"path":path,"state":"UNKNOWN","value":null,"page":null,"indexes":[]}));
     }
     if fields.is_empty() || fields.len()>16 { return Err(RunFailure::Permanent); }

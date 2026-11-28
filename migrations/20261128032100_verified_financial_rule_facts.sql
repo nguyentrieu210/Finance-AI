@@ -3,13 +3,15 @@ ALTER TABLE finance.check_run ADD COLUMN financial_digest bytea CHECK(financial_
 -- includes current independently verified cap facts, not caller supplied totals.
 CREATE OR REPLACE FUNCTION finance.bound_finance_material(t uuid,c uuid,d uuid,rev uuid,pid uuid,v bigint,ids uuid[])
 RETURNS jsonb LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog AS $$
-DECLARE gate jsonb; fields jsonb; amount_row jsonb; currency_row jsonb; n numeric; k uuid; fr finance.financial_resource%ROWTYPE; refs jsonb:='[]'; kinds text[]; expected text[]; cur text; key_row jsonb; key_path text; key_count bigint; advance_plan jsonb; line_amount numeric; advance_total numeric:=0; advance_count integer:=0; plan_key text; split_enabled boolean:=false;
+DECLARE gate jsonb; fields jsonb; amount_row jsonb; currency_row jsonb; n numeric; k uuid; fr finance.financial_resource%ROWTYPE; refs jsonb:='[]'; kinds text[]; expected text[]; cur text; key_row jsonb; key_path text; key_count bigint; advance_plan jsonb; line_amount numeric; advance_total numeric:=0; advance_count integer:=0; plan_key text; split_enabled boolean:=false; required_paths text[]; settlement_kind text; extra_mat jsonb; applied_row jsonb; requested_row jsonb; extra_row jsonb; beneficiary_row jsonb;
 BEGIN
  IF (t,c) IS DISTINCT FROM (finance.scope_tenant(),finance.scope_company()) OR cardinality(ids) NOT BETWEEN 1 AND 32 OR array_position(ids,NULL::uuid) IS NOT NULL THEN RETURN NULL; END IF;
  SELECT pv.finance_gate INTO gate FROM finance.policy_version pv JOIN finance.dossier ds ON (ds.tenant_id,ds.company_id,ds.id)=(t,c,d)
  WHERE (pv.tenant_id,pv.company_id,pv.id)=(t,c,pid) AND pv.state='PUBLISHED' AND pv.criticality_complete AND pv.dossier_kind=ds.kind
  AND pv.effective_from<=(clock_timestamp() AT TIME ZONE 'UTC')::date AND pv.effective_until>(clock_timestamp() AT TIME ZONE 'UTC')::date;
  IF gate IS NULL OR jsonb_typeof(gate->'resource_keys') IS DISTINCT FROM 'object' THEN RETURN NULL; END IF;
+ SELECT ds.kind INTO settlement_kind FROM finance.dossier ds WHERE (ds.tenant_id,ds.company_id,ds.id)=(t,c,d);
+ SELECT array_agg(DISTINCT z ORDER BY z) INTO required_paths FROM unnest(ARRAY[gate->>'amount_path',gate->>'currency_path']||ARRAY(SELECT value FROM jsonb_each_text(gate->'resource_keys'))||CASE WHEN settlement_kind='SETTLEMENT' THEN ARRAY['advance_settlement.applied','advance_settlement.extra','advance_settlement.requested','advance_settlement.beneficiary_key'] WHEN gate->>'extra_settlement'='true' THEN ARRAY['payment_request.settlement_snapshot','payment_request.beneficiary_key'] ELSE ARRAY[]::text[] END) z;
  SELECT jsonb_agg(row.item ORDER BY row.doc,row.path) INTO fields FROM (
  SELECT o.document_id doc,f.field_path path,jsonb_build_object('document',o.document_id,'path',f.field_path,'decision',q.id,'value',q.normalized_value,'evidence',q.evidence_ids,'verified',coalesce(q.disposition IN ('CONFIRMED_CANDIDATE','CORRECTED') AND cardinality(q.evidence_ids)>0,false),'source',encode(b.sha256_digest,'hex')) item
  FROM finance.document_ref dr JOIN finance.document_blob b ON (b.tenant_id,b.company_id,b.id)=(dr.tenant_id,dr.company_id,dr.id)
@@ -22,10 +24,10 @@ BEGIN
  AND q.dossier_version<=v ORDER BY q.dossier_version DESC,q.created_at DESC,q.id DESC LIMIT 1) q ON true
  WHERE (dr.tenant_id,dr.company_id,dr.dossier_id,dr.revision_id)=(t,c,d,rev)
  AND b.scan_state='CLEAN' AND u.state='FINALIZED' AND u.generation=b.generation AND b.sha256_digest=u.declared_sha256 AND o.source_digest=b.sha256_digest
- AND (f.field_path IN (gate->>'amount_path',gate->>'currency_path') OR f.field_path IN (SELECT value FROM jsonb_each_text(gate->'resource_keys')))
+ AND f.field_path=ANY(required_paths)
  AND NOT EXISTS(SELECT 1 FROM finance.ocr_run newer WHERE (newer.tenant_id,newer.company_id,newer.document_id,newer.revision_id)=(o.tenant_id,o.company_id,o.document_id,o.revision_id) AND (newer.created_at,newer.id)>(o.created_at,o.id))
  LIMIT 13) row;
- IF jsonb_array_length(fields) IS DISTINCT FROM 2+(SELECT count(DISTINCT value) FROM jsonb_each_text(gate->'resource_keys')) THEN RETURN NULL; END IF;
+ IF jsonb_array_length(fields) IS DISTINCT FROM cardinality(required_paths) OR EXISTS(SELECT 1 FROM unnest(required_paths) path WHERE (SELECT count(*) FROM jsonb_array_elements(fields) q WHERE q->>'path'=path AND q->>'verified'='true' AND q->>'value' IS NOT NULL)<>1) THEN RETURN NULL; END IF;
  SELECT value INTO amount_row FROM jsonb_array_elements(fields) WHERE value->>'path'=gate->>'amount_path';
  SELECT value INTO currency_row FROM jsonb_array_elements(fields) WHERE value->>'path'=gate->>'currency_path';
  IF amount_row IS NULL OR currency_row IS NULL OR amount_row->>'verified' IS DISTINCT FROM 'true' OR currency_row->>'verified' IS DISTINCT FROM 'true'
@@ -34,6 +36,19 @@ BEGIN
  n:=(amount_row->>'value')::numeric; cur:=currency_row->>'value';
  IF n<=0 OR cur IS NULL OR cur !~ '^[A-Z]{3}$' THEN RETURN NULL; END IF;
  split_enabled:=coalesce(gate->'resource_keys'->>'ADVANCE'='advance_settlement.allocations',false);
+ IF settlement_kind='SETTLEMENT' THEN
+  IF NOT split_enabled OR gate->>'amount_path'<>'advance_settlement.applied' THEN RETURN NULL; END IF;
+  SELECT value INTO applied_row FROM jsonb_array_elements(fields) WHERE value->>'path'='advance_settlement.applied';
+  SELECT value INTO extra_row FROM jsonb_array_elements(fields) WHERE value->>'path'='advance_settlement.extra';
+  SELECT value INTO requested_row FROM jsonb_array_elements(fields) WHERE value->>'path'='advance_settlement.requested';
+  SELECT value INTO beneficiary_row FROM jsonb_array_elements(fields) WHERE value->>'path'='advance_settlement.beneficiary_key';
+  IF EXISTS(SELECT 1 FROM jsonb_array_elements(jsonb_build_array(applied_row,extra_row,requested_row,beneficiary_row)) q WHERE q->>'document' IS DISTINCT FROM amount_row->>'document') OR extra_row->>'value' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$' OR requested_row->>'value' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$' THEN RETURN NULL; END IF;
+  IF n+(extra_row->>'value')::numeric<>(requested_row->>'value')::numeric THEN RETURN NULL; END IF;
+ ELSIF gate->>'extra_settlement'='true' THEN
+  IF settlement_kind<>'PAYMENT' OR gate->>'amount_path'<>'payment_request.requested' THEN RETURN NULL; END IF;
+  extra_mat:=finance.verified_extra_settlement(t,c,d,fields,amount_row,cur,n);
+  IF extra_mat IS NULL THEN RETURN NULL; END IF;
+ END IF;
  IF split_enabled THEN
   SELECT value INTO key_row FROM jsonb_array_elements(fields) WHERE value->>'path'='advance_settlement.allocations';
   IF key_row IS NULL OR key_row->>'verified' IS DISTINCT FROM 'true' OR key_row->>'value' IS NULL THEN RETURN NULL; END IF;
@@ -55,6 +70,7 @@ BEGIN
   IF key_row->>'verified' IS DISTINCT FROM 'true' OR key_row->>'value' IS NULL THEN RETURN NULL; END IF;
   line_amount:=n;
   IF split_enabled AND fr.resource_kind='ADVANCE' THEN
+   IF fr.reference_details->>'beneficiary_key' IS DISTINCT FROM beneficiary_row->>'value' THEN RETURN NULL; END IF;
    plan_key:=(fr.source_key::jsonb)->>1;
    IF jsonb_typeof(advance_plan->plan_key) IS DISTINCT FROM 'string' OR advance_plan->>plan_key !~ '^[0-9]{1,20}([.][0-9]{1,8})?$' THEN RETURN NULL; END IF;
    line_amount:=(advance_plan->>plan_key)::numeric;
@@ -69,7 +85,7 @@ BEGIN
  OR EXISTS(SELECT 1 FROM jsonb_array_elements(refs) z GROUP BY z->>'kind' HAVING count(*)>1 AND (z->>'kind'<>'ADVANCE' OR NOT split_enabled))
  OR (split_enabled AND (advance_total<>n OR advance_count<>(SELECT count(*) FROM jsonb_object_keys(advance_plan))))
  THEN RETURN NULL; END IF;
- RETURN jsonb_build_object('policy',pid,'revision',rev,'amount',n,'currency',cur,'fields',fields,'resources',refs,'split',split_enabled);
+ RETURN jsonb_build_object('policy',pid,'revision',rev,'amount',n,'currency',cur,'fields',fields,'resources',refs,'split',split_enabled,'extra_settlement',extra_mat);
 END $$;
 ALTER FUNCTION finance.bound_finance_material(uuid,uuid,uuid,uuid,uuid,bigint,uuid[]) OWNER TO finance_workflow_writer;
 REVOKE ALL ON FUNCTION finance.bound_finance_material(uuid,uuid,uuid,uuid,uuid,bigint,uuid[]) FROM PUBLIC;
@@ -126,6 +142,9 @@ BEGIN
  matched:=finance.verified_acceptance_material(t,c,d,rev,pid,hold_id);
  IF matched IS NULL THEN RETURN '[]'::jsonb; END IF;
  result:=result||(matched->'facts');
+ IF mat->'extra_settlement'<>'null'::jsonb THEN
+  result:=result||jsonb_build_array(jsonb_build_object('path','settlement.extra_verified','value','true','verified',true,'evidence',mat->'extra_settlement'->'evidence'));
+ END IF;
  IF minimum IS NULL OR jsonb_array_length(all_ev)>64 THEN RETURN '[]'::jsonb; END IF;
  RETURN result||jsonb_build_array(
   jsonb_build_object('path','finance.payable_cap','value',minimum::text,'currency',hold.currency,'verified',true,'evidence',all_ev),

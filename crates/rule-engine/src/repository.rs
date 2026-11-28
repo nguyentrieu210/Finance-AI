@@ -73,6 +73,10 @@ pub(crate) fn registry() -> BTreeMap<String, Type> {
         ("matching.complete", Type::Boolean),
         ("matching.allocated_value", Type::Money(vnd)),
         ("matching.line_count", Type::Decimal),
+        ("settlement.extra_verified", Type::Boolean),
+        ("advance_settlement.applied", Type::Money(vnd)),
+        ("advance_settlement.extra", Type::Money(vnd)),
+        ("advance_settlement.requested", Type::Money(vnd)),
     ]
     .into_iter()
     .map(|(path, ty)| (path.to_owned(), ty))
