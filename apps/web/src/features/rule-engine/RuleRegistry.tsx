@@ -4,6 +4,7 @@ import type { components } from '../../generated/api';
 type Rule=components['schemas']['Rule'];
 type Simulation=components['schemas']['Simulation'];
 type Page={items:Rule[];next_cursor?:string};
+const outcomes=["PASS","FAIL","UNKNOWN","ERROR","NOT_APPLICABLE"] as const;
 const sample=JSON.stringify({rule_id:"invoice_total_positive",version:1,condition:{op:"gt",args:[{ref:"invoice.total"},{literal:"0",value_type:"money",currency:"VND"}]},severity:"BLOCK",waivable:false,clause_id:""},null,2);
 
 export function RuleRegistry(){
@@ -82,6 +83,8 @@ export function RuleRegistry(){
  {selected&&<section><h3>{selected.name} · phiên bản {selected.version}</h3><label>Finance-Version<input readOnly value={version}/></label><details><summary>Tạo phiên bản nháp mới</summary><p>Chỉ chủ sở hữu bản nháp được sửa. Quy tắc đã công bố không thể sửa tại đây.</p><label>Definition<textarea disabled={busy} rows={12} value={revision} onChange={e=>setRevision(e.target.value)}/></label><label>Lý do<input disabled={busy} value={reason} onChange={e=>setReason(e.target.value)}/></label><button disabled={busy||!version||!reason.trim()} onClick={()=>void revise()}>Lưu phiên bản nháp</button></details>
  <label>UUID bộ dữ liệu mô phỏng đã duyệt<input disabled={busy} value={corpus} onChange={e=>setCorpus(e.target.value)}/></label><button disabled={busy||!version||!isUuid(corpus.trim())} onClick={()=>void simulate()}>Mô phỏng rule</button></section>}
  <section><h3>Kết quả mô phỏng</h3><label>UUID kết quả<input disabled={busy} value={simulationId} onChange={e=>{setSimulationId(e.target.value);setSimulation(null);}}/></label><button disabled={busy||!isUuid(simulationId.trim())} onClick={()=>void readSimulation()}>Đọc kết quả</button>
- {simulation&&<table><thead><tr><th>PASS</th><th>FAIL</th><th>UNKNOWN</th><th>ERROR</th><th>NOT_APPLICABLE</th></tr></thead><tbody><tr>{[simulation.pass_count,simulation.fail_count,simulation.unknown_count,simulation.error_count,simulation.not_applicable_count].map((n,i)=><td key={i}>{n??'—'}</td>)}</tr></tbody></table>}</section></>}
+ {simulation&&<table><thead><tr><th>PASS</th><th>FAIL</th><th>UNKNOWN</th><th>ERROR</th><th>NOT_APPLICABLE</th></tr></thead><tbody><tr>{[simulation.pass_count,simulation.fail_count,simulation.unknown_count,simulation.error_count,simulation.not_applicable_count].map((n,i)=><td key={i}>{n??'—'}</td>)}</tr></tbody></table>}
+ {simulation?.comparison&&<section><h4>So sánh phiên bản quy tắc</h4><p>Phiên bản gốc: <code>{simulation.comparison.baseline_rule_version_id}</code> · {simulation.comparison.evaluated} hồ sơ ẩn danh. Hàng là kết quả cũ; cột là kết quả mới.</p><div className="table-wrap"><table><thead><tr><th>Cũ / Mới</th>{outcomes.map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>{simulation.comparison.transitions.map((row,i)=><tr key={i}><th>{outcomes[i]}</th>{row.map((n,j)=><td key={j}>{n}</td>)}</tr>)}</tbody></table></div></section>}
+ </section></>}
  </section>
 }

@@ -11386,6 +11386,34 @@ components:
         unknown_count: *id007
         error_count: *id007
         not_applicable_count: *id007
+        comparison:
+          type: object
+          additionalProperties: false
+          description: Outcome transitions from previous to current version, ordered PASS, FAIL, UNKNOWN, ERROR, NOT_APPLICABLE.
+          properties:
+            baseline_rule_version_id:
+              type: string
+              format: uuid
+            evaluated:
+              type: integer
+              minimum: 0
+              maximum: 5000
+            transitions:
+              type: array
+              minItems: 5
+              maxItems: 5
+              items:
+                type: array
+                minItems: 5
+                maxItems: 5
+                items:
+                  type: integer
+                  minimum: 0
+                  maximum: 5000
+          required:
+          - baseline_rule_version_id
+          - evaluated
+          - transitions
       required:
       - id
       - rule_version_id

@@ -401,6 +401,24 @@ pub struct Simulation {
     pub unknown_count: u32,
     pub error_count: u32,
     pub not_applicable_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comparison: Option<SimulationComparison>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SimulationComparison {
+    pub baseline_rule_version_id: Uuid,
+    pub transitions: [[u32; 5]; 5],
+    pub evaluated: u32,
+}
+
+fn simulation_result(payload: &str, comparison: Option<&str>) -> Result<Simulation, Error> {
+    let mut result: Simulation = serde_json::from_str(payload).map_err(|_| Error::Conflict)?;
+    result.comparison = comparison
+        .map(|json| serde_json::from_str(json).map_err(|_| Error::Conflict))
+        .transpose()?;
+    Ok(result)
 }
 
 #[derive(serde::Deserialize)]
@@ -551,8 +569,8 @@ pub async fn simulate(
         if old != request_hash {
             return Err(Error::Conflict);
         }
-        let payload: String = sqlx::query_scalar(
-            "SELECT result::text FROM finance.rule_simulation WHERE tenant_id=$1 AND company_id=$2 AND id=$3 AND actor_id=$4",
+        let (payload, comparison): (String, Option<String>) = sqlx::query_as(
+            "SELECT result::text,comparison::text FROM finance.rule_simulation WHERE tenant_id=$1 AND company_id=$2 AND id=$3 AND actor_id=$4",
         )
         .bind(t)
         .bind(c)
@@ -561,7 +579,7 @@ pub async fn simulate(
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(Error::Forbidden)?;
-        let result = serde_json::from_str(&payload).map_err(|_| Error::Conflict)?;
+        let result = simulation_result(&payload, comparison.as_deref())?;
         recheck_authenticated(&mut tx, Some(proof)).await?;
         tx.commit().await?;
         return Ok((result, expected));
@@ -591,6 +609,7 @@ pub async fn simulate(
         unknown_count: 0,
         error_count: 0,
         not_applicable_count: 0,
+        comparison: None,
     };
     for fact in &facts {
         match compiler::evaluate(&compiled, fact).outcome {
@@ -615,23 +634,26 @@ pub async fn simulate(
             .map_err(|_| Error::InvalidInput)?;
         let comparison =
             crate::simulator::compare(&old, &compiled, &facts).map_err(|_| Error::InvalidInput)?;
-        Some(
-            serde_json::json!({
-                "baseline_rule_version_id": baseline_id,
-                "transitions": comparison.transitions,
-                "evaluated": comparison.evaluated
-            })
-            .to_string(),
-        )
+        Some(SimulationComparison {
+            baseline_rule_version_id: baseline_id,
+            transitions: comparison.transitions,
+            evaluated: comparison.evaluated,
+        })
     } else {
         None
     };
     let payload = serde_json::to_string(&result).map_err(|_| Error::InvalidInput)?;
+    let comparison_json = comparison
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|_| Error::InvalidInput)?;
+    result.comparison = comparison;
     let command: Uuid = proof.context().command.into();
     let correlation: Uuid = proof.context().correlation.into();
     sqlx::query("INSERT INTO finance.rule_simulation(tenant_id,company_id,id,rule_id,actor_id,corpus_id,corpus_digest,result,comparison) VALUES($1,$2,$3,$4,$5,$6,$7,$8::text::jsonb,$9::text::jsonb)")
         .bind(t).bind(c).bind(result.id).bind(row).bind(a).bind(input.corpus).bind(digest)
-        .bind(payload).bind(comparison).execute(&mut *tx).await?;
+        .bind(payload).bind(comparison_json).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO finance.audit_event(tenant_id,company_id,id,actor_id,command_id,correlation_id,resource_id,action) VALUES($1,$2,$3,$4,$3,$5,$6,'RULE_SIMULATED')")
         .bind(t).bind(c).bind(command).bind(a).bind(correlation).bind(result.id).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO finance.outbox(tenant_id,company_id,id,command_id,resource_id,event_type) VALUES($1,$2,$3,$3,$4,'RULE_SIMULATED')")
@@ -660,8 +682,8 @@ pub async fn get_simulation(
             GrantError::Database(e) => Error::Database(e),
         })?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let payload: Option<String> = sqlx::query_scalar(
-        "SELECT result::text FROM finance.rule_simulation WHERE tenant_id=$1 AND company_id=$2 AND actor_id=$3 AND id=$4",
+    let payload: Option<(String, Option<String>)> = sqlx::query_as(
+        "SELECT result::text,comparison::text FROM finance.rule_simulation WHERE tenant_id=$1 AND company_id=$2 AND actor_id=$3 AND id=$4",
     )
     .bind(t)
     .bind(c)
@@ -670,7 +692,7 @@ pub async fn get_simulation(
     .fetch_optional(&mut *tx)
     .await?;
     let result = payload
-        .map(|json| serde_json::from_str(&json).map_err(|_| Error::Conflict))
+        .map(|(json, comparison)| simulation_result(&json, comparison.as_deref()))
         .transpose()?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;

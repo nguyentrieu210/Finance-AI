@@ -1063,6 +1063,17 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(simulation["pass_count"], 1);
     assert_eq!(simulation["fail_count"], 1);
     assert_eq!(simulation["unknown_count"], 1);
+    assert_eq!(simulation["comparison"]["evaluated"], 3);
+    assert_eq!(
+        simulation["comparison"]["transitions"],
+        json!([
+            [1, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0],
+            [0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0]
+        ])
+    );
     let replay = app
         .clone()
         .oneshot(simulate(&policy_admin, "simulation-one"))

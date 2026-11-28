@@ -2224,6 +2224,13 @@ export interface components {
             unknown_count?: number;
             error_count?: number;
             not_applicable_count?: number;
+            /** @description Outcome transitions from previous to current version, ordered PASS, FAIL, UNKNOWN, ERROR, NOT_APPLICABLE. */
+            comparison?: {
+                /** Format: uuid */
+                baseline_rule_version_id: string;
+                evaluated: number;
+                transitions: number[][];
+            };
         };
         Risk: {
             /** Format: uuid */
