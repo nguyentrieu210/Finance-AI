@@ -27,7 +27,8 @@ export function ReferenceWorkbench({module}:{module:'E12'|'E13'|'E14'}){
   let records:Row[];try{records=rows.map(r=>({source_key:r.source_key.trim(),currency:r.currency.trim().toUpperCase(),cap:r.cap.trim(),consumed:r.consumed.trim(),evidence_ids:ids(r.evidence),details:JSON.parse(r.details) as Record<string,unknown>}))}catch{setStatus('Chi tiết nguồn phải là JSON hợp lệ.');return}
   if(!records.length||records.some(r=>!r.source_key||!/^([A-Z]{3})$/.test(r.currency)||!isAmount(r.cap)||!isAmount(r.consumed)||!r.evidence_ids.length||r.evidence_ids.some(x=>!isUuid(x)))||new Set(records.map(r=>r.source_key)).size!==records.length||new Set(records.flatMap(r=>r.evidence_ids)).size>50){setStatus('Mỗi dòng cần mã nguồn duy nhất, tiền tệ, số tiền chính xác và bằng chứng UUID; tối đa 50 bằng chứng mỗi bản nhập.');return}
   const body=JSON.stringify({document_id:documentId.trim(),kind,coverage,as_of:dates[0].toISOString(),fresh_until:dates[1].toISOString(),records});
-  if(attempt.current?.body!==body)attempt.current={body,key:key('ref-create')};
+  const fingerprint=JSON.stringify(['POST','/v1/references',body]);
+  if(attempt.current?.body!==fingerprint)attempt.current={body:fingerprint,key:key('ref-create')};
   setBusy(true);
   try{const {data}=await api<{id:string}>(credential.current,'/v1/references',{method:'POST',headers:{'Idempotency-Key':attempt.current.key},body});setRefId(data.id);setMaterial(null);setVersion(null);setChecked(false);setStatus('Đã tạo bản nhập '+data.id+'. Chuyển cho người duyệt độc lập.');}
   catch(e){setStatus('Không tạo được: '+errorMessage(e))}finally{setBusy(false)}
@@ -43,9 +44,10 @@ export function ReferenceWorkbench({module}:{module:'E12'|'E13'|'E14'}){
   const ev=ids(evidence);
   if(!ev.length||ev.length>50||ev.some(x=>!isUuid(x))||material.records.some(r=>!r.evidence_ids.some(x=>ev.includes(x)))){setStatus('Phải đối chiếu bằng chứng cho mọi dòng.');return}
   const body=JSON.stringify({reason:reason.trim(),evidence_ids:ev});
-  if(attempt.current?.body!==body)attempt.current={body,key:key('ref-verify')};
+  const path='/v1/references/'+material.id+'/verify';const fingerprint=JSON.stringify(['POST',path,version,body]);
+  if(attempt.current?.body!==fingerprint)attempt.current={body:fingerprint,key:key('ref-verify')};
   setBusy(true);
-  try{await api(credential.current,'/v1/references/'+material.id+'/verify',{method:'POST',headers:{'If-Finance-Version':version,'Idempotency-Key':attempt.current.key},body});setMaterial((await api<Material>(credential.current,'/v1/references/'+material.id+'/material')).data);setChecked(false);setStatus('Đã xác minh độc lập. Nguồn đủ điều kiện xuất hiện trong danh sách giữ hạn mức.')}
+  try{await api(credential.current,path,{method:'POST',headers:{'If-Finance-Version':version,'Idempotency-Key':attempt.current.key},body});setMaterial((await api<Material>(credential.current,'/v1/references/'+material.id+'/material')).data);setChecked(false);setStatus('Đã xác minh độc lập. Nguồn đủ điều kiện xuất hiện trong danh sách giữ hạn mức.')}
   catch(e){setStatus('Xác minh thất bại: '+errorMessage(e))}finally{setBusy(false)}
  }
  return <section><h2>Quản trị nguồn tài chính</h2><div className="actions"><input aria-label="Token" type="password" autoComplete="off" value={token} onChange={e=>setToken(e.target.value)} disabled={busy||Boolean(activeToken)}/><button disabled={busy||!token.trim()||Boolean(activeToken)} onClick={()=>{credential.current=token.trim();setActiveToken(credential.current);setToken('');setStatus('Đã kết nối.')}}>Kết nối</button><button disabled={busy} onClick={clear}>Ngắt</button></div>
