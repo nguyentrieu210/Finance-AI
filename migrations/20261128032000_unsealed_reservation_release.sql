@@ -34,7 +34,7 @@ BEGIN
  THEN RAISE EXCEPTION 'finance approver required' USING ERRCODE='42501'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('finance.reservation.release/v1/'||t::text||'/'||c::text||'/'||a::text||'/'||idem,0));
  PERFORM pg_advisory_xact_lock(hashtextextended('finance.dossier/v1/'||t::text||'/'||c::text||'/'||d::text,0));
- SELECT * INTO ds FROM finance.dossier WHERE (tenant_id,company_id,id)=(t,c,d) FOR UPDATE;
+ SELECT x.* INTO ds FROM finance.dossier x WHERE (x.tenant_id,x.company_id,x.id)=(t,c,d) FOR UPDATE;
  IF NOT FOUND OR ds.owner_id=a THEN RAISE EXCEPTION 'independent finance approver required' USING ERRCODE='42501'; END IF;
  digest:=sha256(convert_to(jsonb_build_array(d,v,i,why)::text,'UTF8'));
  SELECT * INTO prior FROM finance.reservation x WHERE (x.tenant_id,x.company_id,x.release_actor_id,x.release_key)=(t,c,a,idem);

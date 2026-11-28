@@ -38,6 +38,7 @@ BEGIN
   gross:=finance.reference_nonnegative(detail,'base_cap');
   IF jsonb_typeof(detail->'addenda') IS DISTINCT FROM 'array' OR jsonb_array_length(detail->'addenda')>100 THEN RETURN false; END IF;
   FOR amendment IN SELECT value FROM jsonb_array_elements(detail->'addenda') LOOP
+   IF amendment-ARRAY['key','approved_on','effective_on','delta']<>'{}'::jsonb THEN RETURN false; END IF;
    amendment_key:=finance.reference_text(amendment,'key');
    IF amendment_key=ANY(seen) OR finance.reference_date(amendment,'approved_on')>day
     OR amendment->>'delta' IS NULL OR amendment->>'delta' !~ '^-?[0-9]{1,20}([.][0-9]{1,8})?$' THEN RETURN false; END IF;
@@ -55,7 +56,7 @@ BEGIN
   due:=finance.reference_date(detail,'due_date');
   ext:=detail->'extension';
   IF ext IS NOT NULL AND ext<>'null'::jsonb THEN
-   IF jsonb_typeof(ext) IS DISTINCT FROM 'object' OR finance.reference_date(ext,'approved_on')>day OR finance.reference_date(ext,'new_due')<=due THEN RETURN false; END IF;
+   IF jsonb_typeof(ext) IS DISTINCT FROM 'object' OR ext-ARRAY['approved_on','new_due','approval_ref']<>'{}'::jsonb OR finance.reference_date(ext,'approved_on')>day OR finance.reference_date(ext,'new_due')<=due THEN RETURN false; END IF;
    PERFORM finance.reference_text(ext,'approval_ref');
   END IF;
   IF cap<>finance.reference_nonnegative(detail,'issued') OR cap<=0

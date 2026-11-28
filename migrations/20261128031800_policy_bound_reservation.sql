@@ -103,7 +103,7 @@ RETURNS TABLE(id uuid,dossier_version bigint) LANGUAGE plpgsql VOLATILE SECURITY
 DECLARE ds finance.dossier%ROWTYPE; rev uuid; prior finance.reservation%ROWTYPE; mat jsonb; digest bytea; sorted uuid[];
 BEGIN
  IF t IS NULL OR c IS NULL OR a IS NULL OR d IS NULL OR v IS NULL OR pid IS NULL OR i IS NULL OR cmd IS NULL OR corr IS NULL
- OR (t,c,a) IS DISTINCT FROM (finance.scope_tenant(),finance.scope_company(),finance.scope_actor()) OR ids IS NULL OR cardinality(ids) NOT BETWEEN 1 AND 4
+ OR (t,c,a) IS DISTINCT FROM (finance.scope_tenant(),finance.scope_company(),finance.scope_actor()) OR ids IS NULL OR cardinality(ids) NOT BETWEEN 1 AND 32
  OR array_position(ids,NULL::uuid) IS NOT NULL OR why IS NULL OR btrim(why)='' OR octet_length(why)>2048 OR why ~ '[[:cntrl:]]'
  OR idem IS NULL OR idem !~ '^[A-Za-z0-9._~-]{1,128}$' THEN RAISE EXCEPTION 'invalid reservation command' USING ERRCODE='22023'; END IF;
  IF NOT EXISTS(SELECT 1 FROM finance.membership m WHERE (m.tenant_id,m.company_id,m.actor_id)=(t,c,a) AND m.role='FINANCE_APPROVER' AND m.active AND m.valid_from<=clock_timestamp() AND (m.valid_until IS NULL OR m.valid_until>clock_timestamp())) THEN RAISE EXCEPTION 'finance approver required' USING ERRCODE='42501'; END IF;
@@ -111,7 +111,7 @@ BEGIN
  IF cardinality(sorted)<>cardinality(ids) THEN RAISE EXCEPTION 'duplicate resources' USING ERRCODE='22023'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('finance.reservation.bind/v1/'||t::text||'/'||c::text||'/'||a::text||'/'||idem,0));
  PERFORM pg_advisory_xact_lock(hashtextextended('finance.dossier/v1/'||t::text||'/'||c::text||'/'||d::text,0));
- SELECT * INTO ds FROM finance.dossier WHERE (tenant_id,company_id,id)=(t,c,d) FOR UPDATE;
+ SELECT x.* INTO ds FROM finance.dossier x WHERE (x.tenant_id,x.company_id,x.id)=(t,c,d) FOR UPDATE;
  IF NOT FOUND OR ds.owner_id=a THEN RAISE EXCEPTION 'independent finance approver required' USING ERRCODE='42501'; END IF;
  digest:=sha256(convert_to(jsonb_build_array(d,v,pid,sorted,why)::text,'UTF8'));
  SELECT * INTO prior FROM finance.reservation x WHERE (x.tenant_id,x.company_id,x.binding_actor_id,x.binding_key)=(t,c,a,idem);

@@ -190,7 +190,7 @@ BEGIN
  IF p.requested_by IS NULL OR p.dossier_version IS NULL OR d.owner_id<>p.requested_by
  OR d.status<>'READY' OR d.version<>p.dossier_version
  THEN RAISE EXCEPTION 'stale export package' USING ERRCODE='23514'; END IF;
- UPDATE finance.package SET state='READY',manifest_hash=manifest,artifact_count=count,artifact_bytes=total_bytes
+ UPDATE finance.package SET state='READY',manifest_hash=manifest,artifact_count=count,artifact_bytes=total_bytes,artifact_fence=f,artifact_manifest=artifacts
  WHERE tenant_id=t AND company_id=c AND id=p.id;
  PERFORM set_config('finance.actor_id',p.requested_by::text,true);
  new_version:=finance.workflow_exported(t,c,d.id,p.dossier_version,p.requested_by,p.id,j,j);

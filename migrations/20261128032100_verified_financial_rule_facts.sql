@@ -61,7 +61,8 @@ BEGIN
   IF NOT FOUND OR fr.currency<>cur OR NOT fr.coverage_complete OR fr.fresh_until<=clock_timestamp()
   OR NOT COALESCE(finance.reference_details_eligible(fr.resource_kind,fr.reference_details,(clock_timestamp() AT TIME ZONE 'UTC')::date),false)
   OR NOT EXISTS(SELECT 1 FROM finance.reference_snapshot s JOIN finance.source_coverage sc ON (sc.tenant_id,sc.company_id,sc.snapshot_id)=(s.tenant_id,s.company_id,s.id)
-   WHERE (s.tenant_id,s.company_id,s.id)=(t,c,fr.snapshot_id) AND s.state='APPROVED' AND s.source_document_id IS NOT NULL AND s.fresh_until>clock_timestamp() AND sc.resource_kind=fr.resource_kind AND sc.complete)
+   WHERE (s.tenant_id,s.company_id,s.id)=(t,c,fr.snapshot_id) AND s.state='APPROVED' AND s.source_document_id IS NOT NULL AND s.fresh_until>clock_timestamp() AND sc.resource_kind=fr.resource_kind AND sc.complete
+   AND EXISTS(SELECT 1 FROM finance.document_blob b JOIN finance.upload_intent u ON (u.tenant_id,u.company_id,u.id)=(b.tenant_id,b.company_id,b.id) WHERE (b.tenant_id,b.company_id,b.id)=(s.tenant_id,s.company_id,s.source_document_id) AND b.scan_state='CLEAN' AND b.sha256_digest=s.source_digest AND u.state='FINALIZED' AND u.generation=b.generation AND u.declared_sha256=b.sha256_digest))
   THEN RETURN NULL; END IF;
   key_path:=gate->'resource_keys'->>fr.resource_kind;
   SELECT count(*) INTO key_count FROM jsonb_array_elements(fields) fld WHERE fld->>'path'=key_path;
