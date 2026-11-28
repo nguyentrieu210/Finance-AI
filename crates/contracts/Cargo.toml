@@ -1,0 +1,12 @@
+[package]
+name = "finance-contracts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+finance-shared = { path = "../shared" }
+finance-financial = { path = "../financial" }
+chrono.workspace = true
+uuid.workspace = true

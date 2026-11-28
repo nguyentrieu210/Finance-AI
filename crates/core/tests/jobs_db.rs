@@ -43,6 +43,22 @@ async fn durable_jobs_real_database() {
         dispatch(&pool, s, 0).await,
         Err(JobError::InvalidInput)
     ));
+    assert!(matches!(
+        dispatch_event(&pool, s, "bad-event", 10).await,
+        Err(JobError::InvalidInput)
+    ));
+    assert_eq!(
+        dispatch_event(&pool, s, "EXPORT_REQUESTED", 100)
+            .await
+            .unwrap(),
+        0
+    );
+    assert!(
+        claim_event(&pool, s, id(4999), 30, "EXPORT_REQUESTED")
+            .await
+            .unwrap()
+            .is_none()
+    );
     let (a, b) = tokio::join!(dispatch(&pool, s, 100), dispatch(&pool, s, 100));
     assert_eq!(a.unwrap() + b.unwrap(), 2);
     assert_eq!(dispatch(&pool, s, 100).await.unwrap(), 0);

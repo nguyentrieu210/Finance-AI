@@ -1,0 +1,2 @@
+# E17 synthetic approved-clause retrieval
+Real PostgreSQL/pgvector (3-dimensional numeric fixture vectors only), immutable chunks copied exactly from source clause by character range, model digest, policy version, scope, effective date and revocation filtering. Bounded retrieval prioritizes lexical match, then cosine distance with stable tie-break. Exact source clause/page/digest returned. Real DB positive/negative tests, no live embedding inference or RAG/LLM, production vector dimension or runtime grant. CI pending.

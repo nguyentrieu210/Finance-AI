@@ -1,0 +1,18 @@
+[package]
+name = "finance-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono.workspace = true
+finance-core = { path = "../core" }
+finance-identity = { path = "../identity" }
+finance-permissions = { path = "../permissions" }
+finance-shared = { path = "../shared" }
+serde.workspace = true
+sqlx.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]

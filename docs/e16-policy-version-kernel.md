@@ -1,0 +1,2 @@
+# E16 synthetic policy persistence
+Adds policy version, clause and checklist DDL. Scoped parent FKs, frozen clause/checklist content after review, effective period, maker-checker, explicit independent approver check, scope/kind advisory serialization and overlap rejection, revocation and exact effective resolution. Owner-only test functions; no authorization proof, signed actual policy, application publish route, simulation or rule_version binding yet. Real approval must wait D01/D05/D12. All fixture rules unapproved; no pilot or production. SQL assertions pending CI.

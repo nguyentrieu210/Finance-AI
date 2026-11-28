@@ -1,0 +1,3 @@
+# E18 READY and snapshot seal
+
+The READY command is an explicit version-guarded operation, never a generic status patch. It locks the current requester grant and dossier, requires a current non-blocking check run, an effective PUBLISHED policy, PUBLISHED form/template, an active reservation and CLEAN finalized documents. It then seals an immutable dossier snapshot plus member digests, emits audit/outbox records, advances the dossier version and records the idempotency receipt in one PostgreSQL transaction. The HTTP route returns the new Finance-Version; stale retries with another key conflict, while same-key replay returns the original aggregate receipt.

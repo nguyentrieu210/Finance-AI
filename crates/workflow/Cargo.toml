@@ -1,0 +1,24 @@
+[package]
+name = "finance-workflow"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono.workspace = true
+finance-core = { path = "../core" }
+finance-identity = { path = "../identity" }
+finance-permissions = { path = "../permissions" }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "=0.10.9"
+sqlx.workspace = true
+uuid.workspace = true
+finance-shared = { path = "../shared" }
+
+[dev-dependencies]
+finance-financial = { path = "../financial" }
+finance-integration = { path = "../integration" }
+finance-rule-engine = { path = "../rule-engine" }
+finance-validation = { path = "../validation" }

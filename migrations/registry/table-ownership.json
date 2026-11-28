@@ -77,7 +77,8 @@
       "default_scope": "company",
       "tables": [
         "extraction_run",
-        "extracted_field"
+        "extracted_field",
+        "field_identity"
       ],
       "invariants": "Immutable candidates, model/schema provenance."
     },
@@ -146,6 +147,8 @@
         "check_run",
         "check_result",
         "rule_simulation",
+        "simulation_corpus",
+        "preflight_request",
         "check_acknowledgment"
       ],
       "invariants": "Pinned policy/input hash; immutable outcomes; no override mutation."
@@ -156,7 +159,8 @@
       "tables": [
         "policy_version",
         "policy_clause",
-        "checklist_item"
+        "checklist_item",
+        "policy_critical_field"
       ],
       "invariants": "Immutable published versions, maker-checker, effective range."
     },
@@ -179,7 +183,8 @@
         "workflow_version",
         "review_decision",
         "review_assignment",
-        "critical_confirmation"
+        "critical_confirmation",
+        "accounting_review"
       ],
       "invariants": "Scoped aggregate lock, immutable seal, state guards, SoD."
     },

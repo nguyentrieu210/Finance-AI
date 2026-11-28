@@ -1,0 +1,512 @@
+use axum::{
+    Router,
+    body::{Body, to_bytes},
+    http::{Request, StatusCode, header},
+};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use finance_api::organizations::{OrganizationState, router};
+use finance_identity::{Verifier, VerifierStore};
+use finance_shared::ids::{CompanyId, CompanyScope, TenantId};
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
+use rsa::{RsaPrivateKey, pkcs1::EncodeRsaPrivateKey, traits::PublicKeyParts};
+use serde_json::{Value, json};
+use sqlx::postgres::PgPoolOptions;
+use std::time::{SystemTime, UNIX_EPOCH};
+use tower::ServiceExt;
+use uuid::Uuid;
+
+fn id(n: u128) -> Uuid {
+    Uuid::from_u128(n)
+}
+fn now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+async fn get(app: &Router, uri: &str, token: &str) -> (StatusCode, Value) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(uri)
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    (status, serde_json::from_slice(&bytes).unwrap())
+}
+
+async fn decide(
+    app: &Router,
+    token: &str,
+    dossier: &str,
+    key: &str,
+    version: u64,
+    field: &Value,
+    value: &str,
+) -> (StatusCode, Value, Option<String>) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1/dossiers/{dossier}/fields/decisions"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("idempotency-key", key)
+                .header(
+                    "if-finance-version",
+                    format!("\"v1:dossier:{dossier}:{version}\""),
+                )
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "field_id":field["id"],
+                        "value":value,
+                        "reason":"Independent check against actual OCR evidence",
+                        "evidence_ids":field["evidence_ids"],
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let receipt = response
+        .headers()
+        .get("finance-version")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({})),
+        receipt,
+    )
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires disposable PostgreSQL containing actual synthetic OCR persistence"]
+async fn actual_ocr_fields_http_review() {
+    let runtime = PgPoolOptions::new()
+        .max_connections(3)
+        .after_connect(|c, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE finance_runtime").execute(c).await?;
+                Ok(())
+            })
+        })
+        .connect(&std::env::var("FINANCE_OCR_RUNTIME_URL").unwrap())
+        .await
+        .unwrap();
+    let lookup = PgPoolOptions::new()
+        .max_connections(2)
+        .after_connect(|c, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE finance_identity_lookup")
+                    .execute(c)
+                    .await?;
+                Ok(())
+            })
+        })
+        .connect(&std::env::var("FINANCE_OCR_IDENTITY_URL").unwrap())
+        .await
+        .unwrap();
+
+    let private = RsaPrivateKey::new(&mut rand::rngs::OsRng, 2048).unwrap();
+    let jwks=json!({"keys":[{"kty":"RSA","kid":"field-http","alg":"RS256","n":URL_SAFE_NO_PAD.encode(private.n().to_bytes_be()),"e":URL_SAFE_NO_PAD.encode(private.e().to_bytes_be())}]}).to_string();
+    let verifier = VerifierStore::new(
+        Verifier::from_trusted_snapshot(
+            "https://synthetic.invalid",
+            "finance-api",
+            &jwks,
+            now(),
+            600,
+        )
+        .unwrap(),
+    );
+    let signer = EncodingKey::from_rsa_der(private.to_pkcs1_der().unwrap().as_bytes());
+    let mint = |sub: &str| {
+        let mut h = Header::new(Algorithm::RS256);
+        h.typ = Some("at+jwt".into());
+        h.kid = Some("field-http".into());
+        let time = now();
+        encode(&h,&json!({"iss":"https://synthetic.invalid","sub":sub,"aud":"finance-api","iat":time,"exp":time+300}),&signer).unwrap()
+    };
+    let requester = mint("requester");
+    let accountant = mint("field-accountant");
+    let auditor = mint("auditor");
+    let app = router(OrganizationState::synthetic(
+        runtime.clone(),
+        lookup.clone(),
+        verifier,
+        CompanyScope {
+            tenant: TenantId::try_from(id(1)).unwrap(),
+            company: CompanyId::try_from(id(10)).unwrap(),
+        },
+        [89; 32],
+    ));
+    let dossier = "00000000-0000-0000-0000-000000001f41";
+    {
+        let mut tx = runtime.begin().await.unwrap();
+        sqlx::query(
+            "SELECT set_config('finance.tenant_id',$1,true),set_config('finance.company_id',$2,true),set_config('finance.actor_id',$3,true)",
+        )
+        .bind("00000000-0000-0000-0000-000000000001")
+        .bind("00000000-0000-0000-0000-00000000000a")
+        .bind("00000000-0000-0000-0000-0000000003e9")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        let mapped = sqlx::query_as::<_, finance_extraction::repository::Field>(
+            "SELECT * FROM finance.runtime_fields($1,$2,$3,$4,$5,NULL,$6::integer)",
+        )
+        .bind(Uuid::from_u128(1))
+        .bind(Uuid::from_u128(10))
+        .bind(Uuid::parse_str(dossier).unwrap())
+        .bind(Uuid::from_u128(1001))
+        .bind(Uuid::nil())
+        .bind(100_i64)
+        .fetch_all(&mut *tx)
+        .await;
+        assert!(
+            mapped.is_ok(),
+            "runtime_fields SQLx mapping failed: {:?}",
+            mapped.err()
+        );
+        tx.rollback().await.unwrap();
+    }
+    let (dossier_status, dossier_body) =
+        get(&app, &format!("/v1/dossiers/{dossier}"), &requester).await;
+    assert_eq!(
+        dossier_status,
+        StatusCode::OK,
+        "requester dossier auth/read failed first: {dossier_body}"
+    );
+    let (status, page) = get(
+        &app,
+        &format!("/v1/dossiers/{dossier}/fields?limit=100"),
+        &requester,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "field projection failed after dossier auth succeeded: {page}"
+    );
+    let fields = page["items"].as_array().unwrap();
+    assert_eq!(fields.len(), 6);
+    let total = fields
+        .iter()
+        .find(|f| f["path"] == "invoice.total")
+        .unwrap()
+        .clone();
+    assert_eq!(total["state"], "CANDIDATE");
+    assert_eq!(total["normalized_value"], "125000");
+    assert!(!total["evidence_ids"].as_array().unwrap().is_empty());
+    assert_eq!(
+        get(&app, &format!("/v1/dossiers/{dossier}/fields"), &auditor)
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+
+    assert_eq!(
+        decide(
+            &app,
+            &requester,
+            dossier,
+            "field-owner-denied",
+            0,
+            &total,
+            "125000"
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let (decision_status, verified, receipt) = decide(
+        &app,
+        &accountant,
+        dossier,
+        "field-review-one",
+        0,
+        &total,
+        "125000",
+    )
+    .await;
+    assert_eq!(decision_status, StatusCode::OK);
+    assert_eq!(verified["state"], "VERIFIED");
+    assert_eq!(verified["normalized_value"], "125000");
+    assert_eq!(
+        receipt.as_deref(),
+        Some("\"v1:dossier:00000000-0000-0000-0000-000000001f41:1\"")
+    );
+
+    let replay = decide(
+        &app,
+        &accountant,
+        dossier,
+        "field-review-one",
+        0,
+        &total,
+        "125000",
+    )
+    .await;
+    assert_eq!(replay.0, StatusCode::OK);
+    assert_eq!(replay.1, verified);
+    assert_eq!(replay.2, receipt);
+    assert_eq!(
+        decide(
+            &app,
+            &accountant,
+            dossier,
+            "field-review-one",
+            0,
+            &total,
+            "125001"
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        decide(
+            &app,
+            &accountant,
+            dossier,
+            "field-review-stale",
+            0,
+            &total,
+            "125000"
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+
+    let (_, after) = get(
+        &app,
+        &format!("/v1/dossiers/{dossier}/fields?limit=100"),
+        &requester,
+    )
+    .await;
+    let current = after["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["path"] == "invoice.total")
+        .unwrap();
+    assert_eq!(current["state"], "VERIFIED");
+    assert_eq!(current["normalized_value"], "125000");
+
+    let mut evidence = after["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|f| f["evidence_ids"].as_array().unwrap().iter())
+        .filter_map(|v| v.as_str())
+        .collect::<Vec<_>>();
+    evidence.sort_unstable();
+    evidence.dedup();
+    assert!(evidence.len() >= 2);
+    {
+        let mut tx = runtime.begin().await.unwrap();
+        sqlx::query(
+            "SELECT set_config('finance.tenant_id',$1,true),set_config('finance.company_id',$2,true),set_config('finance.actor_id',$3,true)",
+        )
+        .bind("00000000-0000-0000-0000-000000000001")
+        .bind("00000000-0000-0000-0000-00000000000a")
+        .bind("00000000-0000-0000-0000-000000004001")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        let direct = sqlx::query_scalar::<_, i64>(
+            "SELECT finance.runtime_match_confirm($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+        )
+        .bind(Uuid::from_u128(1))
+        .bind(Uuid::from_u128(10))
+        .bind(Uuid::parse_str(dossier).unwrap())
+        .bind(1_i64)
+        .bind(Uuid::from_u128(0x4001))
+        .bind(Uuid::from_u128(0x5001))
+        .bind(Uuid::from_u128(0x5002))
+        .bind(Uuid::parse_str(evidence[0]).unwrap())
+        .bind(Uuid::parse_str(evidence[1]).unwrap())
+        .bind("Direct rollback match probe")
+        .bind(Uuid::from_u128(0x5003))
+        .bind(Uuid::from_u128(0x5004))
+        .fetch_one(&mut *tx)
+        .await;
+        assert!(
+            direct.is_ok(),
+            "runtime_match_confirm DB boundary failed: {:?}",
+            direct.err()
+        );
+        let receipt = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, i64)>(
+            "SELECT * FROM finance.runtime_match_receipt($1,$2,$3,$4,$5)",
+        )
+        .bind(Uuid::from_u128(1))
+        .bind(Uuid::from_u128(10))
+        .bind(Uuid::parse_str(dossier).unwrap())
+        .bind(Uuid::from_u128(0x4001))
+        .bind(Uuid::from_u128(0x5001))
+        .fetch_one(&mut *tx)
+        .await;
+        assert!(
+            receipt.is_ok(),
+            "runtime_match_receipt DB boundary failed: {:?}",
+            receipt.err()
+        );
+        tx.rollback().await.unwrap();
+    }
+    assert_eq!(
+        confirm_match(
+            &app,
+            &requester,
+            dossier,
+            "match-owner-denied",
+            1,
+            (evidence[0], evidence[1]),
+            "Manual pair check"
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let (match_status, matched, match_receipt) = confirm_match(
+        &app,
+        &accountant,
+        dossier,
+        "match-one",
+        1,
+        (evidence[0], evidence[1]),
+        "Manual pair check",
+    )
+    .await;
+    assert_eq!(
+        match_status,
+        StatusCode::OK,
+        "match confirm HTTP failed: {matched}"
+    );
+    assert_eq!(matched["state"], "CONFIRMED");
+    assert_eq!(
+        match_receipt.as_deref(),
+        Some("\"v1:dossier:00000000-0000-0000-0000-000000001f41:2\"")
+    );
+    let replay = confirm_match(
+        &app,
+        &accountant,
+        dossier,
+        "match-one",
+        1,
+        (evidence[0], evidence[1]),
+        "Manual pair check",
+    )
+    .await;
+    assert_eq!(replay.0, StatusCode::OK);
+    assert_eq!(replay.1, matched);
+    assert_eq!(replay.2, match_receipt);
+    assert_eq!(
+        confirm_match(
+            &app,
+            &accountant,
+            dossier,
+            "match-one",
+            1,
+            (evidence[0], evidence[1]),
+            "Changed reason"
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        get(&app, &format!("/v1/dossiers/{dossier}/matches"), &requester)
+            .await
+            .1["items"][0]["state"],
+        "CONFIRMED"
+    );
+
+    let (reservation_status, reservations) = get(
+        &app,
+        &format!("/v1/dossiers/{dossier}/reservations"),
+        &requester,
+    )
+    .await;
+    assert_eq!(reservation_status, StatusCode::OK);
+    assert_eq!(reservations["items"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        reservations["items"][0]["amount"]["amount"],
+        "125000.00000000"
+    );
+    assert_eq!(
+        reservations["items"][0]["remaining"]["amount"],
+        "125000.00000000"
+    );
+    assert_eq!(reservations["items"][0]["state"], "RESERVED");
+    assert_eq!(reservations["items"][0]["version"], 0);
+    assert_eq!(
+        get(
+            &app,
+            &format!("/v1/dossiers/{dossier}/reservations"),
+            &auditor
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    runtime.close().await;
+    lookup.close().await;
+}
+
+async fn confirm_match(
+    app: &Router,
+    token: &str,
+    dossier: &str,
+    key: &str,
+    version: u64,
+    evidence: (&str, &str),
+    reason: &str,
+) -> (StatusCode, Value, Option<String>) {
+    let (left, right) = evidence;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1/dossiers/{dossier}/matches"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("idempotency-key", key)
+                .header(
+                    "if-finance-version",
+                    format!("\"v1:dossier:{dossier}:{version}\""),
+                )
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({"left_evidence_id":left,"right_evidence_id":right,"reason":reason})
+                        .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let receipt = response
+        .headers()
+        .get("finance-version")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({})),
+        receipt,
+    )
+}

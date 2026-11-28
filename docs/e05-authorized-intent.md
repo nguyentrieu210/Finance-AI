@@ -1,0 +1,2 @@
+# E05 synthetic authorized intent
+Adds owner-scoped metadata-only upload-intent repository, exact current draft/revision, canonical versioned replay, locked quota, atomic aggregate version/audit/outbox/receipt. Runtime RLS excludes legacy unattached fixture rows, no grant/blob read or update. Preserves original creation receipt after document version changes. Direct arbitrary SQL by trusted runtime role is not a production security boundary; no real upload, grant, scanner release, or policy approval. Tests pending; GitHub only.

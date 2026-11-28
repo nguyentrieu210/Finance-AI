@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
-//! Synthetic internal organization commands. No public routes.
+//! Authenticated organization and membership commands.
+pub mod memberships;
 use finance_core::prototype::{Error, recheck_authenticated, scoped_transaction};
 use finance_permissions::{GrantError, Role, require_role};
 use finance_shared::{
@@ -208,4 +209,48 @@ async fn list_units_inner(
             version,
         })
         .collect())
+}
+
+pub async fn get_unit_authenticated(
+    pool: &PgPool,
+    proof: &finance_identity::AuthenticatedCommand,
+    id: Uuid,
+) -> Result<Option<Unit>, Error> {
+    if id.is_nil() {
+        return Err(Error::InvalidInput);
+    }
+    let ctx = proof.context();
+    let ResourceScope::Company(scope) = ctx.scope else {
+        return Err(Error::Forbidden);
+    };
+    let (t, c): (Uuid, Uuid) = (scope.tenant.into(), scope.company.into());
+    let mut tx = scoped_transaction(pool, ctx).await?;
+    require_role(&mut tx, ctx, Role::OrgAdmin)
+        .await
+        .map_err(map_grant)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    type UnitRow = (Uuid, Option<Uuid>, String, String, String, bool, i64);
+    let row: Option<UnitRow> = sqlx::query_as(
+        "SELECT id,parent_id,code,name,kind,active,version
+         FROM finance.organization_unit
+         WHERE tenant_id=$1 AND company_id=$2 AND id=$3",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(
+        row.map(|(id, parent, code, name, kind, active, version)| Unit {
+            id,
+            parent,
+            code,
+            name,
+            kind,
+            active,
+            version,
+        }),
+    )
 }

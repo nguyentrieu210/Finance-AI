@@ -16,7 +16,11 @@ port="$(docker port "$cid" 5432/tcp)"
 [[ "$port" =~ ^127\.0\.0\.1:[0-9]+$ ]]
 url="postgresql://finance_migrator:$password@$port/finance_prototype?sslmode=disable"
 unset password
-FINANCE_MIGRATION_DATABASE_URL="$url" "$migrator" --apply
+if ! FINANCE_MIGRATION_DATABASE_URL="$url" "$migrator" --apply; then
+  # Disposable synthetic DB only; migration diagnostics contain no real records.
+  docker logs "$cid" 2>&1 | grep -E 'ERROR:|HINT:|DETAIL:|LINE [0-9]+:' | tail -20 >&2 || true
+  exit 1
+fi
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/prototype_fixture.sql
 runtime_pw="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
 # Ephemeral non-privileged login in this disposable DB. Never share migration credentials.
@@ -69,5 +73,16 @@ else
  FINANCE_PROTOTYPE_TEST_DATABASE_URL="$runtime_url" FINANCE_IDENTITY_TEST_DATABASE_URL="$identity_url" FINANCE_AUDIT_TEST_ADMIN_URL="$url" cargo test --locked -p finance-organization --test binding_db -- --ignored --exact authenticated_commands_real_database
 fi
 bash scripts/test_document_metadata.sh "$cid"
+bash scripts/test_financial_reservation.sh "$cid"
+docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/financial_lifecycle_assert.sql
+docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/dossier_fixture.sql
+FINANCE_PROTOTYPE_TEST_DATABASE_URL="$runtime_url" FINANCE_IDENTITY_TEST_DATABASE_URL="$identity_url" cargo test --locked -p finance-api --test organizations_db -- --ignored --exact scoped_organization_http_real_database
+FINANCE_JOB_TEST_DATABASE_URL="$worker_url" cargo test --locked -p finance-worker --test runtime_db -- --ignored --exact worker_binary_processes_export_with_fenced_adapter_receipt
+docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/dossier_assert.sql
+docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/form_lifecycle_assert.sql
+docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/policy_version_assert.sql
+docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/reference_import_assert.sql
+docker exec -i "$cid" psql -X -U finance_migrator -d finance_prototype -v ON_ERROR_STOP=1 -f - < scripts/knowledge_retrieval_assert.sql
+FINANCE_PROTOTYPE_TEST_DATABASE_URL="$runtime_url" FINANCE_IDENTITY_TEST_DATABASE_URL="$identity_url" cargo test --locked -p finance-api --test organizations_db -- --ignored --exact complete_api_contracts_real_database
 unset url runtime_url worker_url identity_url
 echo 'PASS: real PostgreSQL synthetic prototype atomic command, replay, RLS and scoped FK'

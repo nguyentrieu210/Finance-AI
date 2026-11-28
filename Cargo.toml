@@ -1,5 +1,5 @@
 [workspace]
-members = ["apps/api", "apps/worker", "apps/migrate", "crates/shared", "crates/core", "crates/audit", "crates/identity", "crates/permissions", "crates/organization", "crates/documents"]
+members = ["apps/api", "apps/worker", "apps/migrate", "crates/shared", "crates/core", "crates/audit", "crates/identity", "crates/permissions", "crates/organization", "crates/documents", "crates/ocr", "crates/document-intelligence", "crates/extraction", "crates/validation", "crates/matching", "crates/financial", "crates/contracts", "crates/advances", "crates/budget", "crates/rule-engine", "crates/policy", "crates/knowledge", "crates/workflow", "crates/forms", "crates/templates", "crates/risk-engine", "crates/integration", "crates/analytics"]
 resolver = "2"
 
 [workspace.package]

@@ -4,3 +4,13 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+
+[dependencies]
+finance-core = { path = "../../crates/core" }
+finance-shared = { path = "../../crates/shared" }
+finance-templates = { path = "../../crates/templates" }
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+tokio = { workspace = true, features = ["io-util", "process", "time"] }
+uuid.workspace = true

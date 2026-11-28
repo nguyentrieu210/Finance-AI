@@ -1,0 +1,2 @@
+# E15 rule lifecycle slice
+Rule creation now compiles the bounded Rust DSL before persistence against a frozen pilot field-type registry. A rule can only be inserted by the PolicyAdmin who owns a DRAFT policy and its referenced clause. Runtime RLS exposes drafts only to their author and PUBLISHED rules only to Requesters when the parent policy is PUBLISHED. Policy maker-checker publication atomically promotes rule drafts; policy retirement/revocation retires them. Rule content is immutable, creation is idempotent and audited. Draft rules never become live evaluation inputs.

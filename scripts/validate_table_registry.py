@@ -19,4 +19,12 @@ assert expected<=set(tables),sorted(expected-set(tables))
 assert {'upload_intent','upload_grant'}<=set(tables)
 assert all(g['invariants'] for g in r['groups'])
 assert (root/'migrations'/f"{r['migration_baseline']}_foundation.sql").exists()
-print(f'PASS: {len(tables)} planned tables across 24 owners, all {len(expected)} logical spec entities covered; no DDL/signoff implied.')
+created=set()
+for migration in (root/'migrations').glob('*.sql'):
+    text=migration.read_text()
+    created.update(re.findall(r'CREATE TABLE\s+finance\.([a-z][a-z0-9_]*)',text))
+assert created==set(tables), {
+    'missing_ddl': sorted(set(tables)-created),
+    'unregistered_ddl': sorted(created-set(tables)),
+}
+print(f'PASS: {len(tables)} registered tables across 24 owners exactly match executable DDL; all {len(expected)} logical spec entities covered.')

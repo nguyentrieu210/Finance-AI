@@ -1,0 +1,2 @@
+# Verified reference read slice — E12/E13/E14
+Migration 20 exposes only APPROVED, COMPLETE, non-stale imported financial resources to the authenticated REQUESTER scope. Rust repository reads recheck identity and role inside a scoped transaction; API cursors are actor/scope/kind bound; React panels use the real endpoints. Draft, revoked, stale, incomplete and cross-company rows remain invisible. No reference mutation or ERP network integration is enabled by this slice.

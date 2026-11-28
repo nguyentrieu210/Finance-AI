@@ -19,3 +19,83 @@ INSERT INTO finance.organization_unit(tenant_id,company_id,id,code,name,kind) VA
 
 INSERT INTO finance.identity_subject(tenant_id,id,issuer,subject) VALUES ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-0000000003eb','https://synthetic.invalid','auditor');
 INSERT INTO finance.membership(tenant_id,company_id,actor_id,role) VALUES ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-0000000003eb','AUDITOR');
+
+-- Approved synthetic references for read-only HTTP/RLS tests.
+INSERT INTO finance.reference_snapshot(tenant_id,company_id,id,source_system,external_version,source_digest,as_of,fresh_until,maker_id,state) VALUES
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001200','SYNAPI','FIXTURE1',decode(repeat('12',32),'hex'),now()-interval '1 minute',now()+interval '1 day','00000000-0000-0000-0000-0000000003e8','DRAFT');
+INSERT INTO finance.source_coverage(tenant_id,company_id,snapshot_id,resource_kind,complete,watermark) VALUES
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001200','CONTRACT',true,'FIXTURE'),
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001200','ADVANCE',true,'FIXTURE'),
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001200','BUDGET',true,'FIXTURE');
+INSERT INTO finance.financial_resource(tenant_id,company_id,id,currency,cap,consumed,coverage_complete,fresh_until,snapshot_id,resource_kind,source_key) VALUES
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001210','VND',1000000,100000,true,now()+interval '1 day','00000000-0000-0000-0000-000000001200','CONTRACT','["SYNAPI","CONTRACT-1"]'),
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001211','VND',500000,50000,true,now()+interval '1 day','00000000-0000-0000-0000-000000001200','ADVANCE','["SYNAPI","ADVANCE-1"]'),
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001212','VND',2000000,200000,true,now()+interval '1 day','00000000-0000-0000-0000-000000001200','BUDGET','["SYNAPI","CC1","ACC1"]');
+UPDATE finance.reference_snapshot
+SET state='APPROVED',checker_id='00000000-0000-0000-0000-0000000003e9'
+WHERE tenant_id='00000000-0000-0000-0000-000000000001'
+  AND company_id='00000000-0000-0000-0000-00000000000a'
+  AND id='00000000-0000-0000-0000-000000001200';
+
+-- One non-overlapping PUBLISHED policy for runtime read tests (SETTLEMENT only).
+INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,checker_id,state,effective_from,effective_until,source_digest,published_at,criticality_complete) VALUES
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001600','SETTLEMENT','00000000-0000-0000-0000-0000000003e8','00000000-0000-0000-0000-0000000003e9','PUBLISHED','2026-01-01','2030-01-01',decode(repeat('16',32),'hex'),now(),true);
+
+-- E17 operational diagnostic fixture: insert content while DRAFT, then freeze as PUBLISHED.
+INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,effective_from,effective_until,source_digest)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001700','SETTLEMENT','00000000-0000-0000-0000-0000000003e8',
+'2031-01-01','2032-01-01',decode(repeat('17',32),'hex'));
+INSERT INTO finance.policy_clause(tenant_id,company_id,policy_id,id,clause_key,excerpt,source_digest,source_page)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001700','00000000-0000-0000-0000-000000001701','DIAG',
+'Synthetic settlement retrieval clause',decode(repeat('17',32),'hex'),1);
+INSERT INTO finance.checklist_item(tenant_id,company_id,policy_id,id,clause_id,document_kind,mandatory)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001700','00000000-0000-0000-0000-000000001703',
+'00000000-0000-0000-0000-000000001701','SETTLEMENT_RECEIPT',true);
+INSERT INTO finance.knowledge_chunk(tenant_id,company_id,policy_id,clause_id,id,ordinal,source_start,source_end,excerpt,model_digest,embedding)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001700','00000000-0000-0000-0000-000000001701',
+'00000000-0000-0000-0000-000000001702',0,0,37,'Synthetic settlement retrieval clause',
+decode(repeat('33',32),'hex'),'[1,0,0]'::finance.vector);
+UPDATE finance.policy_version SET state='IN_REVIEW' WHERE id='00000000-0000-0000-0000-000000001700';
+UPDATE finance.policy_version
+SET state='PUBLISHED',checker_id='00000000-0000-0000-0000-0000000003e9',published_at=clock_timestamp()
+WHERE id='00000000-0000-0000-0000-000000001700';
+
+-- E19 form designer fixture: draft policy owned by a PolicyAdmin, separate FinanceApprover checker.
+INSERT INTO finance.identity_subject(tenant_id,id,issuer,subject) VALUES
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-0000000003f0','https://synthetic.invalid','policy-admin'),
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-0000000003f1','https://synthetic.invalid','form-checker');
+INSERT INTO finance.membership(tenant_id,company_id,actor_id,role) VALUES
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-0000000003f0','POLICY_ADMIN'),
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-0000000003f1','FINANCE_APPROVER');
+INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,effective_from,effective_until,source_digest)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001900','PAYMENT','00000000-0000-0000-0000-0000000003f0',
+'2033-01-01','2034-01-01',decode(repeat('19',32),'hex'));
+INSERT INTO finance.policy_clause(tenant_id,company_id,policy_id,id,clause_key,excerpt,source_digest,source_page)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001900','00000000-0000-0000-0000-000000001901','FORM',
+'Synthetic form policy clause',decode(repeat('19',32),'hex'),1);
+INSERT INTO finance.checklist_item(tenant_id,company_id,policy_id,id,clause_id,document_kind,mandatory)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
+'00000000-0000-0000-0000-000000001900','00000000-0000-0000-0000-000000001902',
+'00000000-0000-0000-0000-000000001901','INVOICE',true);
+
+-- E21 waiver fixture: one current FAIL from a PUBLISHED waivable rule.
+INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,effective_from,effective_until,source_digest)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000002100','PAYMENT','00000000-0000-0000-0000-0000000003f0','2035-01-01','2036-01-01',decode(repeat('21',32),'hex'));
+INSERT INTO finance.policy_clause VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000002100','00000000-0000-0000-0000-000000002101','RISK','Synthetic waivable risk rule',decode(repeat('21',32),'hex'),1);
+INSERT INTO finance.checklist_item VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000002100','00000000-0000-0000-0000-000000002102','00000000-0000-0000-0000-000000002101','INVOICE',true);
+UPDATE finance.policy_version SET state='IN_REVIEW' WHERE id='00000000-0000-0000-0000-000000002100';
+UPDATE finance.policy_version SET state='PUBLISHED',checker_id='00000000-0000-0000-0000-0000000003f1',published_at=clock_timestamp() WHERE id='00000000-0000-0000-0000-000000002100';
+INSERT INTO finance.rule_version(tenant_id,company_id,id,policy_id,clause_id,rule_key,version,severity,waivable,state,definition,author_id,checker_id,published_at)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000002103','00000000-0000-0000-0000-000000002100','00000000-0000-0000-0000-000000002101','risk_waivable',1,'WARNING',true,'PUBLISHED','{"rule_id":"risk_waivable","version":1,"condition":{"literal":false,"value_type":"boolean"},"severity":"WARNING","waivable":true,"clause_id":"00000000-0000-0000-0000-000000002101"}','00000000-0000-0000-0000-0000000003f0','00000000-0000-0000-0000-0000000003f1',clock_timestamp());
+INSERT INTO finance.dossier(tenant_id,company_id,id,owner_id,code,kind,status,revision,version) VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000002120','00000000-0000-0000-0000-0000000003e9','RISK-WAIVER','PAYMENT','DRAFT',0,0);
+INSERT INTO finance.dossier_revision(tenant_id,company_id,dossier_id,id,owner_id,number) VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000002120','00000000-0000-0000-0000-000000002121','00000000-0000-0000-0000-0000000003e9',0);
+INSERT INTO finance.check_run(tenant_id,company_id,id,dossier_id,revision_id,dossier_version,actor_id,policy_id,business_day,input_hash,blocked)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000002122','00000000-0000-0000-0000-000000002120','00000000-0000-0000-0000-000000002121',0,'00000000-0000-0000-0000-0000000003e9','00000000-0000-0000-0000-000000002100','2035-06-01',decode(repeat('21',32),'hex'),true);
+INSERT INTO finance.check_result(tenant_id,company_id,run_id,rule_key,outcome,severity,detail_code,id)
+VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000002122','risk_waivable','FAIL','WARNING','RISK_WAIVABLE','00000000-0000-0000-0000-000000002123');

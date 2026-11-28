@@ -1,0 +1,2 @@
+# E21 risk/waiver runtime slice
+Requester risk reads are scoped through dossier snapshots. Waivers can only target a current-version FAIL from a PUBLISHED rule marked waivable; UNKNOWN/ERROR and non-waivable results are rejected. Request binding stores immutable result, revision and input hash. A separate FinanceApprover must decide; approved expiry must be future and bounded to one year. Request and decision are idempotent, audited and outboxed. A waiver never changes the underlying check result.

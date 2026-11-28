@@ -23,6 +23,10 @@ impl Sha256Digest {
         }
         Ok(Self(bytes))
     }
+
+    pub fn as_bytes(self) -> [u8; 32] {
+        self.0
+    }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UploadError {

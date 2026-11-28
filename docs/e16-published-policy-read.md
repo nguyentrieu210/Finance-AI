@@ -1,0 +1,2 @@
+# E16 published-policy runtime read
+Runtime Requesters can list/get only PUBLISHED policy versions in their authenticated company scope. The DB RLS policy denies drafts/review/revoked rows; the Rust adapter re-locks the REQUESTER grant and rechecks identity in the same transaction. HTTP get returns a Finance-Version token. Lifecycle mutations remain governed by the existing maker/checker DB kernel and are not exposed through this read slice.

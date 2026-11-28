@@ -1724,7 +1724,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
-            job_id: string;
+            job_id?: string;
             /** Format: uuid */
             rule_version_id: string;
             /** Format: uuid */
@@ -1733,6 +1733,7 @@ export interface components {
             fail_count?: number;
             unknown_count?: number;
             error_count?: number;
+            not_applicable_count?: number;
         };
         Risk: {
             /** Format: uuid */
@@ -1769,7 +1770,7 @@ export interface components {
             as_of: string;
         };
         Download: {
-            /** Format: uri */
+            /** Format: uri-reference */
             url: string;
             /** Format: date-time */
             expires_at: string;
@@ -1803,6 +1804,11 @@ export interface components {
             /** @enum {string} */
             type: "text" | "date" | "decimal" | "money" | "boolean" | "enum";
             required: boolean;
+            source_path?: string;
+            options?: string[];
+            layout_row?: number;
+            layout_column?: number;
+            layout_width?: number;
             condition_ref?: string;
         };
         Transition: {
@@ -6646,6 +6652,24 @@ export interface operations {
                     /** Format: uuid */
                     company_id: string;
                     name: string;
+                    /** @enum {string} */
+                    dossier_kind: "PAYMENT" | "ADVANCE" | "SETTLEMENT";
+                    /** Format: date-time */
+                    effective_from: string;
+                    /** Format: date-time */
+                    effective_to: string;
+                    /** Format: uuid */
+                    source_document_id: string;
+                    clauses: {
+                        key: string;
+                        /** Format: uuid */
+                        evidence_id: string;
+                    }[];
+                    checklist: {
+                        clause_key: string;
+                        document_kind: string;
+                        mandatory: boolean;
+                    }[];
                 };
             };
         };

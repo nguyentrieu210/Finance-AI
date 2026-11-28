@@ -1,0 +1,2 @@
+# E11/E13/E24 domain extension
+Added explicit gross-to-net deduction handling, scoped settlement planning, corrected overdue calculation (active holds are not confirmed settlement), and deduplicated scoped rule coverage. UNKNOWN/error and unevidenced not-applicable observations cannot increase automated coverage. These functions require trusted inputs and do not replace the E11 PostgreSQL reservation transaction, approved policy, or integrated API/UI. CI pending; no task marked DONE.

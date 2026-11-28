@@ -12,7 +12,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -28,8 +28,16 @@ jobs:
           .venv/bin/openapi-spec-validator contracts/openapi.yaml
           .venv/bin/python scripts/validate_http_contract.py
           .venv/bin/python scripts/validate_table_registry.py
+          .venv/bin/python scripts/validate_system_gates.py
       - name: Rust toolchain
-        run: rustup show
+        run: |
+          rustup toolchain uninstall 1.85.1-x86_64-unknown-linux-gnu || true
+          rustup toolchain install 1.85.1 --profile minimal --component rustfmt --component clippy
+          rustup override set 1.85.1
+          rustc --version
+          cargo --version
+          cargo fmt --version
+          cargo clippy --version
       - name: Rust checks
         run: |
           cargo fmt --all -- --check
@@ -44,11 +52,129 @@ jobs:
           npm run typecheck
           npm test
           npm run build
+          VITE_FINANCE_SYNTHETIC=1 npm run build
+      - name: Install browser integration dependencies
+        run: |
+          .venv/bin/pip install playwright==1.51.0
+          .venv/bin/python -m playwright install --with-deps chromium
       - name: Compose validation
         env:
           FINANCE_DEV_DB_PASSWORD: ci-config-only-not-a-secret
         run: docker compose -f infra/compose.yaml config --quiet
       - name: Real database baseline
         run: bash scripts/test_migration_baseline.sh
-      - name: Prototype database integration
+      - name: Prototype database integration and browser
+        env:
+          FINANCE_BROWSER_PYTHON: ${{ github.workspace }}/.venv/bin/python
+          FINANCE_BROWSER_DIST: ${{ github.workspace }}/apps/web/dist
+          FINANCE_BROWSER_SCRIPT: ${{ github.workspace }}/tests/browser/organization.py
         run: bash scripts/test_prototype_foundation.sh
+      - name: Real ClamAV synthetic scanner probe
+        timeout-minutes: 5
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clamav-daemon
+          bash scripts/test_clamd_probe.sh
+  s3-capability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Real S3 provider capability probe
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -r scripts/s3-probe-requirements.txt
+          bash scripts/test_s3_provider.sh
+  ocr-vietnamese-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install synthetic OCR test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-vie python3-pil fonts-dejavu-core
+      - name: Real Vietnamese OCR and Rust TSV parser
+        run: bash scripts/test_ocr_vietnamese.sh
+  pdf-renderer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Real isolated PDF rendering
+        run: bash scripts/test_pdf_renderer.sh
+  paddle-ocr:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Real isolated PaddleOCR Vietnamese inference
+        run: bash scripts/test_paddle_probe.sh
+  ocr-quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Real image quality and deskew synthetic probe
+        run: bash scripts/test_ocr_quality.sh
+  office-export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Real isolated office export and Rust manifest probe
+        run: bash scripts/test_office_export.sh
+  paddle-ocr-v3-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Real alternate Latin recognition candidate, same Vietnamese acceptance
+        env:
+          FINANCE_PADDLE_RECOGNIZER: latin_PP-OCRv3_mobile_rec
+        run: bash scripts/test_paddle_probe.sh
+
+  restore-drill:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Rust migrator toolchain
+        run: |
+          rustup toolchain install 1.85.1 --profile minimal
+          rustup override set 1.85.1
+          cargo build --locked -p finance-migrate
+      - name: Real PostgreSQL synthetic backup and restore drill
+        run: bash scripts/test_restore_drill.sh
+
+  system-gates:
+    if: ${{ always() }}
+    needs:
+      - verify
+      - restore-drill
+      - s3-capability
+      - ocr-vietnamese-baseline
+      - pdf-renderer
+      - paddle-ocr
+      - ocr-quality
+      - office-export
+      - paddle-ocr-v3-candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      VERIFY_RESULT: ${{ needs.verify.result }}
+      RESTORE_RESULT: ${{ needs['restore-drill'].result }}
+      S3_RESULT: ${{ needs['s3-capability'].result }}
+      OCR_RESULT: ${{ needs['ocr-vietnamese-baseline'].result }}
+      PDF_RESULT: ${{ needs['pdf-renderer'].result }}
+      PADDLE_RESULT: ${{ needs['paddle-ocr'].result }}
+      QUALITY_RESULT: ${{ needs['ocr-quality'].result }}
+      OFFICE_RESULT: ${{ needs['office-export'].result }}
+      PADDLE_V3_RESULT: ${{ needs['paddle-ocr-v3-candidate'].result }}
+    steps:
+      - name: Require every pilot technical gate on this commit
+        run: |
+          for result in "$VERIFY_RESULT" "$RESTORE_RESULT" "$S3_RESULT" "$OCR_RESULT" "$PDF_RESULT" "$PADDLE_RESULT" "$QUALITY_RESULT" "$OFFICE_RESULT" "$PADDLE_V3_RESULT"; do
+            test "$result" = success
+          done
+          echo 'PASS: same-commit foundation, DB/browser, restore, storage, OCR, PDF and office technical gates'
