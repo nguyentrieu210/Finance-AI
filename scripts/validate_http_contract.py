@@ -21,8 +21,10 @@ for path, item in api["paths"].items():
             commands += 1
             if operation.get("x-idempotent") is not True:
                 key = params["Idempotency-Key"]
-                assert key["required"] and key["schema"]["maxLength"] == 128
-                assert key["schema"]["pattern"] == r"^[A-Za-z0-9._~-]+$"
+                assert key["required"] and key["in"] == "header", (path, method)
+                assert key["schema"]["type"] == "string", (path, method)
+                assert key["schema"]["minLength"] == 1 and key["schema"]["maxLength"] == 128, (path, method)
+                assert key["schema"]["pattern"] == r"^[A-Za-z0-9._~-]+$", (path, method)
         if "If-Finance-Version" in params:
             versioned += 1
             assert params["If-Finance-Version"]["required"]
