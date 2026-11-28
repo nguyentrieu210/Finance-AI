@@ -637,6 +637,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/organizations/staff/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "invitations" | "positions" | "departments" | "roles" | "assignments";
+            };
+            cookie?: never;
+        };
+        /** List scoped staff configuration (ORG_ADMIN only) */
+        get: operations["listStaffConfiguration"];
+        put?: never;
+        /** Create or revise scoped configuration; does not grant financial authority */
+        post: operations["saveStaffConfiguration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/memberships": {
         parameters: {
             query?: never;
@@ -1437,6 +1457,32 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Scope-specific staff configuration record. Fields vary by resource kind. */
+        StaffConfigurationRow: {
+            /** Format: uuid */
+            id: string;
+            version: number;
+            name?: string;
+            email?: string;
+            /** @enum {string} */
+            status?: "DRAFT" | "CANCELLED";
+            active?: boolean;
+            /** Format: uuid */
+            actor_id?: string;
+            /** Format: uuid */
+            department_id?: string | null;
+            /** Format: uuid */
+            position_id?: string | null;
+            is_primary?: boolean;
+            /** Format: uuid */
+            role_id?: string;
+            role_version?: number;
+            /** Format: date-time */
+            valid_from?: string;
+            /** Format: date-time */
+            valid_until?: string | null;
+            capabilities?: string[];
+        };
         Error: {
             code: string;
             message: string;
@@ -1670,6 +1716,8 @@ export interface components {
             company_id: string;
             roles: string[];
             active: boolean;
+            display_name?: string;
+            email?: string;
         };
         Reference: {
             /** Format: uuid */
@@ -6234,6 +6282,154 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Error"];
                 };
+            };
+        };
+    };
+    listStaffConfiguration: {
+        parameters: {
+            query?: {
+                after?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                kind: "invitations" | "positions" | "departments" | "roles" | "assignments";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped configuration page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["StaffConfigurationRow"][];
+                        /** Format: uuid */
+                        next_after: string | null;
+                    };
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not an organization administrator */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    saveStaffConfiguration: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                kind: "invitations" | "positions" | "departments" | "roles" | "assignments";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    id: string;
+                    expected_version?: number | null;
+                    /** @description Resource-specific fields. No caller-supplied tenant, company, or acting identity. */
+                    payload: {
+                        name?: string;
+                        active?: boolean;
+                        /** Format: email */
+                        email?: string;
+                        /** Format: uuid */
+                        actor_id?: string;
+                        /** Format: uuid */
+                        department_id?: string | null;
+                        /** Format: uuid */
+                        position_id?: string | null;
+                        is_primary?: boolean;
+                        capabilities?: ("READ_OWN" | "READ_ASSIGNED" | "READ_DEPARTMENT" | "READ_COMPANY" | "WRITE_OWN" | "REVIEW_ASSIGNED" | "CONFIRM_DEPARTMENT" | "APPROVE_ASSIGNED")[];
+                        /** Format: uuid */
+                        role_id?: string;
+                        role_version?: number;
+                        /** Format: date-time */
+                        valid_until?: string | null;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Versioned mutation receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        version: number;
+                    };
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -1,0 +1,21 @@
+[Unit]
+Description=Nam Viet Finance Rust pilot API
+After=network-online.target docker.service
+Wants=network-online.target
+ConditionPathExists=/etc/namviet-finance/pilot.env
+
+[Service]
+Type=simple
+DynamicUser=yes
+EnvironmentFile=/etc/namviet-finance/pilot.env
+ExecStart=/usr/local/lib/namviet-finance/finance-api --pilot
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

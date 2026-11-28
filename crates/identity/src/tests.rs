@@ -219,6 +219,50 @@ async fn identity_real_database() {
         .connect(&std::env::var("FINANCE_AUDIT_TEST_ADMIN_URL").unwrap())
         .await
         .unwrap();
+    // Isolated fixture only: signed claims populate the existing identity.
+    let mut profile_claims = serde_json::json!({
+        "iss":"https://synthetic.invalid","sub":"requester","aud":"finance-api",
+        "iat":n,"exp":n+180,"given_name":"An","family_name":"Nguyen",
+        "email":"an@example.invalid","email_verified":true
+    });
+    let profile_token = token("k", &profile_claims, "at+jwt");
+    assert!(
+        v.authenticate(&pool, &profile_token, scope(1, 10))
+            .await
+            .is_ok()
+    );
+    let read_profile = || {
+        sqlx::query_as::<_, (Option<String>, Option<String>, Option<i64>)>(
+        "SELECT display_name,email,profile_issued_at FROM finance.identity_subject WHERE tenant_id=$1 AND id=$2")
+        .bind(id(1)).bind(id(1001)).fetch_one(&admin)
+    };
+    let expected = (
+        Some("Nguyen An".to_owned()),
+        Some("an@example.invalid".to_owned()),
+        Some(n as i64),
+    );
+    assert_eq!(read_profile().await.unwrap(), expected);
+    profile_claims["iat"] = json!(n - 1);
+    profile_claims["email"] = json!("old@example.invalid");
+    assert!(
+        v.authenticate(&pool, &token("k", &profile_claims, "at+jwt"), scope(1, 10))
+            .await
+            .is_ok()
+    );
+    assert_eq!(read_profile().await.unwrap(), expected);
+    profile_claims["iat"] = json!(n);
+    profile_claims["email_verified"] = json!(false);
+    assert!(
+        v.authenticate(&pool, &token("k", &profile_claims, "at+jwt"), scope(1, 10))
+            .await
+            .is_ok()
+    );
+    assert_eq!(read_profile().await.unwrap(), expected);
+    assert_eq!(
+        v.authenticate(&pool, &profile_token, scope(1, 11)).await,
+        Err(IdentityError::Forbidden)
+    );
+    assert_eq!(read_profile().await.unwrap(), expected);
     sqlx::query("UPDATE finance.membership SET active=false WHERE tenant_id=$1 AND company_id=$2 AND actor_id=$3").bind(id(1)).bind(id(10)).bind(id(1001)).execute(&admin).await.unwrap();
     assert_eq!(
         v.authenticate(&pool, &t, scope(1, 10)).await,
@@ -257,4 +301,46 @@ fn atomic_rotation_rejects_old_and_rollback_snapshot() {
         store.verify_at(&old_token, 271),
         Err(IdentityError::ExpiredKeys)
     ));
+}
+
+#[test]
+fn verified_profile_uses_only_signed_verified_claims() {
+    let v = verifier("key1");
+    let mut c = claims();
+    c["given_name"] = json!("An");
+    c["family_name"] = json!("Nguyen");
+    c["email"] = json!("an@example.invalid");
+    c["email_verified"] = json!(true);
+    let proof = v.verify_at(&token("key1", &c, "at+jwt"), 150).unwrap();
+    let p = proof.profile.unwrap();
+    assert_eq!(p.display_name.as_deref(), Some("Nguyen An"));
+    assert_eq!(p.email, "an@example.invalid");
+    assert_eq!(p.issued_at, 100);
+    c["email_verified"] = json!(false);
+    assert!(
+        v.verify_at(&token("key1", &c, "at+jwt"), 150)
+            .unwrap()
+            .profile
+            .is_none()
+    );
+    c["email_verified"] = json!(true);
+    c["email"] = json!("bad email");
+    assert!(
+        v.verify_at(&token("key1", &c, "at+jwt"), 150)
+            .unwrap()
+            .profile
+            .is_none()
+    );
+    c["email"] = json!("an@example.invalid");
+    c["given_name"] = json!("x".repeat(201));
+    assert!(
+        v.verify_at(&token("key1", &c, "at+jwt"), 150)
+            .unwrap()
+            .profile
+            .unwrap()
+            .display_name
+            .is_none()
+    );
+    c["iss"] = json!("https://wrong.invalid");
+    assert!(v.verify_at(&token("key1", &c, "at+jwt"), 150).is_err());
 }

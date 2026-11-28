@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { components } from './generated/api';
 import './style.css';
+import { Workspace } from './product/Workspace';
 import { Drafts } from './features/workflow/Drafts';
 import { AuditLog } from './features/audit/AuditLog';
 import { Dashboard } from './features/analytics/Dashboard';
@@ -106,7 +107,7 @@ function App() {
   const name = groups.flatMap(g => [...g.items]).find(i => i[0] === selected)?.[1] ?? '';
   return <div className="shell">
     <aside aria-label="Điều hướng phân hệ">
-      <div className="brand">FINANCE<span>AI</span><small>CONTROL PLATFORM</small></div>
+      <div className="brand">Payment <span>&amp;Advanced NV</span><small>CONTROL PLATFORM</small></div>
       {groups.map(group => <div className="nav-group" key={group.name}><h2>{group.name}</h2>
         {group.items.map(([id,label]) => <button key={id} aria-current={selected === id ? 'page' : undefined} onClick={() => { if (selected !== id) clear(); select(id); }}><span>{id}</span>{label}</button>)}
       </div>)}
@@ -114,7 +115,7 @@ function App() {
     <div className="workspace">
       <header><span>Không gian quản trị</span><span className="environment">TECHNICAL PREVIEW</span></header>
       <main>
-        <p className="eyebrow">FINANCE AI / {selected}</p>
+        <p className="eyebrow">Payment &amp;Advanced NV / {selected}</p>
         <h1>{name}</h1>
         <p className="subtitle">Nền tảng kiểm soát hồ sơ tài chính. Chưa được phê duyệt vận hành thực tế.</p>
         {selected === 'E04' && sandbox ? <section aria-labelledby="org-title">
@@ -136,4 +137,4 @@ function App() {
 }
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing app root');
-createRoot(root).render(<StrictMode><App /></StrictMode>);
+createRoot(root).render(<StrictMode>{sandbox ? <App /> : <Workspace />}</StrictMode>);

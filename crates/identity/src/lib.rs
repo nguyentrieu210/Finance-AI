@@ -69,6 +69,11 @@ struct Claims {
     exp: u64,
     iat: u64,
     nbf: Option<u64>,
+    name: Option<String>,
+    given_name: Option<String>,
+    family_name: Option<String>,
+    email: Option<String>,
+    email_verified: Option<bool>,
 }
 /// Trusted caller supplies fixed issuer/audience and snapshot fetched out of band.
 pub struct Verifier {
@@ -84,6 +89,38 @@ struct Verified {
     subject: String,
     expires: u64,
     keys_until: u64,
+    profile: Option<VerifiedProfile>,
+}
+struct VerifiedProfile {
+    display_name: Option<String>,
+    email: String,
+    issued_at: i64,
+}
+fn verified_profile(c: &Claims) -> Option<VerifiedProfile> {
+    if c.email_verified != Some(true) {
+        return None;
+    }
+    let email = c.email.as_deref()?.trim();
+    if !bounded_text(email, 320) || !email.contains('@') || email.chars().any(char::is_whitespace) {
+        return None;
+    }
+    let name = [c.family_name.as_deref(), c.given_name.as_deref()]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let display_name = if name.is_empty() {
+        c.name.as_deref().unwrap_or("").trim().to_owned()
+    } else {
+        name
+    };
+    Some(VerifiedProfile {
+        display_name: bounded_text(&display_name, 200).then_some(display_name),
+        email: email.to_owned(),
+        issued_at: i64::try_from(c.iat).ok()?,
+    })
 }
 
 fn now() -> Result<u64, IdentityError> {
@@ -224,7 +261,9 @@ impl Verifier {
         {
             return Err(IdentityError::InvalidToken);
         }
+        let profile = verified_profile(&c);
         Ok(Verified {
+            profile,
             issuer: c.iss,
             subject: c.sub,
             expires: c.exp,
@@ -274,6 +313,33 @@ impl VerifierStore {
             .read()
             .map_err(|_| IdentityError::InvalidConfig)?
             .verify_at(token, now)
+    }
+    /// Accept an issued invitation only as a pending claim. No Principal or membership
+    /// is produced. The trusted server supplies company scope; email comes from JWT.
+    pub async fn claim_invitation(
+        &self,
+        pool: &PgPool,
+        token: &str,
+        scope: CompanyScope,
+    ) -> Result<Option<Uuid>, IdentityError> {
+        let verified = self.verify_at(token, now()?)?;
+        let profile = verified.profile.as_ref().ok_or(IdentityError::Forbidden)?;
+        let deadline = i64::try_from(verified.expires.min(verified.keys_until))
+            .map_err(|_| IdentityError::InvalidToken)?;
+        let (t,c):(Uuid,Uuid)=(scope.tenant.into(),scope.company.into());
+        let mut tx=pool.begin().await.map_err(|_|IdentityError::DatabaseUnavailable)?;
+        let role:bool=sqlx::query_scalar("SELECT current_user='finance_identity_lookup' AND NOT rolsuper AND NOT rolbypassrls AND NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=session_user AND (rolsuper OR rolbypassrls OR rolcreaterole)) FROM pg_roles WHERE rolname=current_user").fetch_one(&mut *tx).await.map_err(|_|IdentityError::DatabaseUnavailable)?;
+        if !role { return Err(IdentityError::Forbidden); }
+        sqlx::query("SELECT set_config('finance.tenant_id',$1,true),set_config('finance.company_id',$2,true),set_config('finance.identity_issuer',$3,true),set_config('finance.identity_subject',$4,true)")
+            .bind(t.to_string()).bind(c.to_string()).bind(&verified.issuer).bind(&verified.subject)
+            .execute(&mut *tx).await.map_err(|_|IdentityError::DatabaseUnavailable)?;
+        let result:Option<Uuid>=sqlx::query_scalar("SELECT finance.staff_onboarding_claim($1,$2,$3,$4,$5,$6,$7,$8)")
+            .bind(t).bind(c).bind(&verified.issuer).bind(&verified.subject)
+            .bind(&profile.email).bind(&profile.display_name).bind(profile.issued_at).bind(deadline)
+            .fetch_one(&mut *tx).await.map_err(|_|IdentityError::DatabaseUnavailable)?;
+        if now()? >= verified.expires.min(verified.keys_until) { return Err(IdentityError::InvalidToken); }
+        tx.commit().await.map_err(|_|IdentityError::DatabaseUnavailable)?;
+        Ok(result)
     }
     pub async fn authenticate(
         &self,
@@ -380,6 +446,17 @@ async fn resolve(
         .bind(t).bind(c).bind(&identity.issuer).bind(&identity.subject).bind(expires).fetch_optional(&mut *tx).await.map_err(|_|IdentityError::DatabaseUnavailable)?;
     let actor = ActorId::try_from(actor.ok_or(IdentityError::Forbidden)?)
         .map_err(|_| IdentityError::Forbidden)?;
+    // A signed, verified email is profile metadata, never an identity key or grant.
+    // The identity role can update only display columns on its scoped active identity.
+    if let Some(profile) = &identity.profile {
+        let actor_id: Uuid = actor.into();
+        let deadline = i64::try_from(identity.expires.min(identity.keys_until))
+            .map_err(|_| IdentityError::InvalidToken)?;
+        sqlx::query("UPDATE finance.identity_subject SET display_name=COALESCE($5,display_name),email=$6,profile_issued_at=$7 WHERE tenant_id=$1 AND id=$2 AND issuer=$3 AND subject=$4 AND active AND (profile_issued_at IS NULL OR profile_issued_at<$7) AND extract(epoch FROM clock_timestamp())<$8::bigint AND EXISTS (SELECT 1 FROM finance.membership m WHERE m.tenant_id=$1 AND m.company_id=$9 AND m.actor_id=$2 AND m.active AND m.valid_from<=statement_timestamp() AND (m.valid_until IS NULL OR m.valid_until>statement_timestamp()))")
+            .bind(t).bind(actor_id).bind(&identity.issuer).bind(&identity.subject)
+            .bind(&profile.display_name).bind(&profile.email).bind(profile.issued_at).bind(deadline).bind(c)
+            .execute(&mut *tx).await.map_err(|_|IdentityError::DatabaseUnavailable)?;
+    }
     tx.commit()
         .await
         .map_err(|_| IdentityError::DatabaseUnavailable)?;

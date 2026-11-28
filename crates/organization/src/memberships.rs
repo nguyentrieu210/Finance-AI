@@ -19,6 +19,8 @@ pub struct Membership {
     pub roles: Vec<String>,
     pub active: bool,
     pub version: i64,
+    pub display_name: Option<String>,
+    pub email: Option<String>,
 }
 
 fn binding(proof: &AuthenticatedCommand) -> Result<(Uuid, Uuid, Uuid), Error> {
@@ -92,7 +94,7 @@ async fn read_one(
     id: Uuid,
 ) -> Result<Option<Membership>, Error> {
     Ok(sqlx::query_as::<_, Membership>(
-        "SELECT * FROM finance.runtime_memberships($1,$2,$3,$4,$5,$6)",
+        "SELECT * FROM finance.runtime_membership_profiles($1,$2,$3,$4,$5,$6)",
     )
     .bind(t)
     .bind(c)
@@ -120,7 +122,7 @@ pub async fn list(
         .map_err(grant)?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     let rows = sqlx::query_as::<_, Membership>(
-        "SELECT * FROM finance.runtime_memberships($1,$2,$3,$4,$5,$6)",
+        "SELECT * FROM finance.runtime_membership_profiles($1,$2,$3,$4,$5,$6)",
     )
     .bind(t)
     .bind(c)

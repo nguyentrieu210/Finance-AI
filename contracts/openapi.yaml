@@ -4305,6 +4305,152 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /v1/organizations/staff/{kind}:
+    parameters:
+    - name: kind
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [invitations, positions, departments, roles, assignments]
+    get:
+      operationId: listStaffConfiguration
+      tags: [E02, E03]
+      summary: List scoped staff configuration (ORG_ADMIN only)
+      x-release-gate: pilot
+      parameters:
+      - name: after
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+      responses:
+        '200':
+          description: Scoped configuration page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_after]
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StaffConfigurationRow'
+                  next_after:
+                    type: [string, 'null']
+                    format: uuid
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Not an organization administrator
+        '503':
+          description: Dependency unavailable
+    post:
+      operationId: saveStaffConfiguration
+      tags: [E02, E03]
+      summary: Create or revise scoped configuration; does not grant financial authority
+      x-release-gate: pilot
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [id, payload]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                expected_version:
+                  type: [integer, 'null']
+                  minimum: 0
+                  maximum: 9007199254740990
+                payload:
+                  type: object
+                  description: Resource-specific fields. No caller-supplied tenant, company, or acting identity.
+                  additionalProperties: false
+                  properties:
+                    name:
+                      type: string
+                      maxLength: 200
+                    active:
+                      type: boolean
+                    email:
+                      type: string
+                      format: email
+                    actor_id:
+                      type: string
+                      format: uuid
+                    department_id:
+                      type: [string, 'null']
+                      format: uuid
+                    position_id:
+                      type: [string, 'null']
+                      format: uuid
+                    is_primary:
+                      type: boolean
+                    capabilities:
+                      type: array
+                      maxItems: 8
+                      uniqueItems: true
+                      items:
+                        type: string
+                        enum: [READ_OWN, READ_ASSIGNED, READ_DEPARTMENT, READ_COMPANY, WRITE_OWN, REVIEW_ASSIGNED, CONFIRM_DEPARTMENT, APPROVE_ASSIGNED]
+                    role_id:
+                      type: string
+                      format: uuid
+                    role_version:
+                      type: integer
+                      minimum: 0
+                    valid_until:
+                      type: [string, 'null']
+                      format: date-time
+      responses:
+        '200':
+          description: Versioned mutation receipt
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [id, version]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  version:
+                    type: integer
+                    minimum: 0
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Forbidden
+        '409':
+          description: Conflict
+        '503':
+          description: Dependency unavailable
   /v1/memberships:
     get:
       operationId: listMemberships
@@ -9100,6 +9246,52 @@ components:
       type: openIdConnect
       openIdConnectUrl: https://identity.example.invalid/.well-known/openid-configuration
   schemas:
+    StaffConfigurationRow:
+      type: object
+      description: Scope-specific staff configuration record. Fields vary by resource kind.
+      required: [id, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          minimum: 0
+        name:
+          type: string
+        email:
+          type: string
+        status:
+          type: string
+          enum: [DRAFT, CANCELLED]
+        active:
+          type: boolean
+        actor_id:
+          type: string
+          format: uuid
+        department_id:
+          type: [string, 'null']
+          format: uuid
+        position_id:
+          type: [string, 'null']
+          format: uuid
+        is_primary:
+          type: boolean
+        role_id:
+          type: string
+          format: uuid
+        role_version:
+          type: integer
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: [string, 'null']
+          format: date-time
+        capabilities:
+          type: array
+          items:
+            type: string
     Error:
       type: object
       additionalProperties: false
@@ -9743,6 +9935,12 @@ components:
           items:
             type: string
         active: *id008
+        display_name:
+          type: string
+          maxLength: 200
+        email:
+          type: string
+          maxLength: 320
       required:
       - id
       - subject_id

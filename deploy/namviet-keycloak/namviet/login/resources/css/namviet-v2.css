@@ -1,0 +1,75 @@
+:root{
+ --nv-bg:#f4f6f9;--nv-card:#fff;--nv-text:#202b3b;--nv-muted:#66758a;--nv-line:#dfe4eb;--nv-input:#fff;--nv-red:#b51e34;
+ --pf-v5-global--FontFamily--text:system-ui,-apple-system,"Segoe UI",sans-serif;
+ --pf-v5-global--FontFamily--heading:var(--pf-v5-global--FontFamily--text);
+ --pf-v5-global--primary-color--100:var(--nv-red);--pf-v5-global--Color--100:var(--nv-text);--pf-v5-global--Color--200:var(--nv-muted);
+}
+html.login-pf,body#keycloak-bg{min-height:100dvh;margin:0;background:var(--nv-bg)!important;color:var(--nv-text);font-family:var(--pf-v5-global--FontFamily--text)}
+body#keycloak-bg .pf-v5-c-login{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px 16px}
+body#keycloak-bg .pf-v5-c-login__container{display:flex;flex-direction:column;gap:0;width:min(100%,408px);max-width:none;margin:0;padding:0;background:var(--nv-card);border:1px solid var(--nv-line);border-radius:10px;overflow:hidden;box-shadow:0 4px 18px #11182708}
+#kc-header.pf-v5-c-login__header{display:block;width:100%;margin:0;padding:16px 24px;border-bottom:1px solid var(--nv-line);background:var(--nv-card);min-height:0}
+#kc-header-wrapper{display:flex;align-items:center;gap:12px;margin:0;padding:0;text-align:left;white-space:normal;color:var(--nv-text)!important;font-size:18px;line-height:1.25;font-weight:750;text-transform:none;letter-spacing:-.025em}
+#kc-header-wrapper:before{content:"";width:56px;height:56px;flex:0 0 56px;background:url(../img/namviet-mark.png) center/contain no-repeat}
+body#keycloak-bg .pf-v5-c-login__main{width:100%;max-width:none;min-width:0;margin:0;padding:20px 24px 24px;background:var(--nv-card);box-shadow:none;color:var(--nv-text)}
+body#keycloak-bg .pf-v5-c-login__main-header{padding:0 0 14px;gap:8px}
+#kc-page-title{font-size:21px;line-height:1.3;font-weight:750;letter-spacing:-.025em;color:var(--nv-text);margin:0}
+body#keycloak-bg .pf-v5-c-login__main-body{padding:0}
+body#keycloak-bg .pf-v5-c-form{--pf-v5-c-form--GridGap:10px;gap:10px}
+body#keycloak-bg .pf-v5-c-form__label-text{font-size:13px;font-weight:650;color:var(--nv-text)}
+body#keycloak-bg .pf-v5-c-form-control{min-height:38px;border:1px solid var(--nv-line);border-radius:5px;background:var(--nv-input);color:var(--nv-text);--pf-v5-c-form-control--Color:var(--nv-text)}
+body#keycloak-bg .pf-v5-c-form-control:focus-within{outline:2px solid var(--nv-red);outline-offset:1px}
+body#keycloak-bg input:not([type=submit]),body#keycloak-bg select{font-size:14px;color:var(--nv-text);background:var(--nv-input)}
+body#keycloak-bg .pf-v5-c-button.pf-m-control{min-height:38px;background:var(--nv-input);color:var(--nv-muted);border-radius:5px}
+body#keycloak-bg .pf-v5-c-button.pf-m-primary{background:var(--nv-red);border-radius:5px;min-height:38px;font-size:13px;font-weight:650;padding:8px 12px;color:white}
+body#keycloak-bg .pf-v5-c-button.pf-m-primary:hover{background:#98182b}
+body#keycloak-bg a{color:var(--nv-red);font-size:13px;font-weight:600}
+body#keycloak-bg .pf-v5-c-login__main-footer{padding:8px 0 0}
+body#keycloak-bg .pf-v5-c-login__main-footer-band{background:transparent;border-top:1px solid var(--nv-line);padding:12px 0 0;margin-top:12px;font-size:13px;color:var(--nv-muted)}
+body#keycloak-bg .pf-v5-c-alert{font-size:12px;border-radius:5px}
+#kc-social-providers{border-top:1px solid var(--nv-line);margin-top:12px;padding-top:12px}
+#kc-social-providers h2{font-size:12px;color:var(--nv-muted)}
+#kc-social-providers a{border:1px solid var(--nv-line);border-radius:5px;color:var(--nv-text);background:var(--nv-input);min-height:38px}
+@media(prefers-color-scheme:dark){:root{--nv-bg:#10151e;--nv-card:#19212d;--nv-text:#e5eaf1;--nv-muted:#a3b1c5;--nv-line:#303c4d;--nv-input:#202a38;--nv-red:#d83d54}}
+@media(max-width:460px){#kc-header.pf-v5-c-login__header{padding:14px 16px}body#keycloak-bg .pf-v5-c-login__main{padding:16px}#kc-header-wrapper{font-size:16px}}
+html[data-nv-theme=light]{--nv-bg:#f4f6f9;--nv-card:#fff;--nv-text:#202b3b;--nv-muted:#66758a;--nv-line:#dfe4eb;--nv-input:#fff;--nv-red:#b51e34}
+html[data-nv-theme=dark]{--nv-bg:#10151e;--nv-card:#19212d;--nv-text:#e5eaf1;--nv-muted:#a3b1c5;--nv-line:#303c4d;--nv-input:#202a38;--nv-red:#d83d54}
+
+/* One visual language with the Finance application; no PatternFly blue accent. */
+:root{
+ --pf-v5-global--primary-color--100:var(--nv-red);
+ --pf-v5-global--primary-color--200:var(--nv-red);
+ --pf-v5-global--link--Color:var(--nv-red);
+ --pf-v5-global--link--Color--hover:var(--nv-red);
+ --pf-v5-global--active-color--100:var(--nv-red);
+ --pf-v5-c-login__main--BorderTopColor:transparent;
+ --pf-v5-c-login__main--BorderTopWidth:0;
+}
+body#keycloak-bg .pf-v5-c-login__container,
+body#keycloak-bg .pf-v5-c-login__main{border-top:0!important;background-image:none!important}
+body#keycloak-bg .pf-v5-c-login__container{border:1px solid var(--nv-line)!important}
+body#keycloak-bg .pf-v5-c-login__main::before,
+body#keycloak-bg .pf-v5-c-login__main::after,
+body#keycloak-bg .pf-v5-c-login__container::before,
+body#keycloak-bg .pf-v5-c-login__container::after{display:none!important;content:none!important}
+body#keycloak-bg .pf-v5-c-login__main-header{border:0!important;box-shadow:none!important}
+#kc-header.pf-v5-c-login__header{border:0!important;border-bottom:1px solid var(--nv-line)!important;padding:14px 24px}
+#kc-header-wrapper{font-size:17px;letter-spacing:-.025em}
+#kc-header-wrapper:before{width:48px;height:48px;flex-basis:48px}
+body#keycloak-bg .pf-v5-c-login__main-header-utilities,#kc-locale,#login-select-toggle{display:none!important}
+body#keycloak-bg .pf-v5-c-form-control::before,body#keycloak-bg .pf-v5-c-form-control::after{border-color:var(--nv-line);border-radius:5px}
+body#keycloak-bg .pf-v5-c-form-control:focus-within::after{border-color:var(--nv-red)!important}
+body#keycloak-bg .pf-v5-c-button:focus-visible,body#keycloak-bg a:focus-visible{outline:2px solid var(--nv-red);outline-offset:2px}
+body#keycloak-bg .pf-v5-c-login__main-footer-band{font-size:12px;display:flex;justify-content:center;align-items:center;text-align:center}
+.nv-auth-theme-toggle{position:fixed;right:16px;top:14px;width:32px;height:32px;display:grid;place-items:center;color:var(--nv-muted);background:var(--nv-card);border:1px solid var(--nv-line);border-radius:5px;cursor:pointer}
+
+#kc-header-wrapper{font-family:system-ui,sans-serif;font-size:15px;font-weight:750;line-height:1.2;letter-spacing:-.02em;gap:10px}
+#kc-header-wrapper:before{width:44px;height:44px;flex-basis:44px}
+#kc-header.pf-v5-c-login__header{padding:12px 24px}
+body#keycloak-bg .pf-v5-c-login__container{border-radius:7px}
+body#keycloak-bg a.nv-auth-restart{display:flex;align-items:center;justify-content:center;background:var(--nv-red);color:#fff;min-height:38px;border-radius:5px;margin-top:14px;padding:8px 12px;text-decoration:none}
+html.nv-auth-embedded,html.nv-auth-embedded body#keycloak-bg{min-height:0!important;height:auto!important;background:var(--nv-card)!important}
+html.nv-auth-embedded body#keycloak-bg .pf-v5-c-login{min-height:0!important;padding:0!important;display:block}
+html.nv-auth-embedded body#keycloak-bg .pf-v5-c-login__container{display:block;width:100%;border:0!important;border-radius:0;box-shadow:none;margin:0}
+html.nv-auth-embedded #kc-header{display:none!important}
+html.nv-auth-embedded body#keycloak-bg .pf-v5-c-login__main{padding:16px!important}
+html.nv-auth-embedded #kc-page-title{font-size:17px}

@@ -29,6 +29,10 @@ struct Item {
     company_id: Uuid,
     roles: Vec<String>,
     active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    email: Option<String>,
 }
 
 impl From<Membership> for Item {
@@ -39,6 +43,8 @@ impl From<Membership> for Item {
             company_id: value.company_id,
             roles: value.roles,
             active: value.active,
+            display_name: value.display_name,
+            email: value.email,
         }
     }
 }
