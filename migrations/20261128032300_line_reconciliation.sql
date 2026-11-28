@@ -34,6 +34,7 @@ BEGIN
  OR jsonb_typeof(body->'sources') IS DISTINCT FROM 'array' OR jsonb_typeof(body->'targets') IS DISTINCT FROM 'array' OR jsonb_typeof(body->'allocations') IS DISTINCT FROM 'array'
  OR body->>'reason' IS NULL OR octet_length(body->>'reason') NOT BETWEEN 1 AND 2048 OR btrim(body->>'reason')=''
  OR jsonb_typeof(body->'coverage_complete') IS DISTINCT FROM 'boolean'
+ OR body-ARRAY['sources','targets','allocations','reason','coverage_complete']<>'{}'::jsonb
  THEN RAISE EXCEPTION 'invalid matching command' USING ERRCODE='22023'; END IF;
  IF jsonb_array_length(body->'sources') NOT BETWEEN 1 AND 256 OR jsonb_array_length(body->'targets') NOT BETWEEN 1 AND 256 OR jsonb_array_length(body->'allocations')>1024
  THEN RAISE EXCEPTION 'matching bounds' USING ERRCODE='22023'; END IF;
@@ -56,7 +57,7 @@ BEGIN
  OR (SELECT count(DISTINCT x->>'evidence_id') FROM jsonb_array_elements(all_lines) x)<>jsonb_array_length(all_lines)
  THEN RAISE EXCEPTION 'duplicate line identity or evidence' USING ERRCODE='23514'; END IF;
  FOR ln IN SELECT value FROM jsonb_array_elements(all_lines) LOOP
-  IF ln->>'id' IS NULL OR octet_length(ln->>'id') NOT BETWEEN 1 AND 128 OR ln->>'item' IS NULL OR octet_length(ln->>'item') NOT BETWEEN 1 AND 128
+  IF ln-ARRAY['id','evidence_id','item','unit','quantity','unit_price','value','currency']<>'{}'::jsonb OR ln->>'id' IS NULL OR octet_length(ln->>'id') NOT BETWEEN 1 AND 128 OR ln->>'item' IS NULL OR octet_length(ln->>'item') NOT BETWEEN 1 AND 128
   OR ln->>'unit' IS NULL OR octet_length(ln->>'unit') NOT BETWEEN 1 AND 32 OR ln->>'currency' IS DISTINCT FROM policy->>'currency'
   OR ln->>'quantity' IS NULL OR ln->>'quantity' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$'
   OR ln->>'unit_price' IS NULL OR ln->>'unit_price' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$'
@@ -80,7 +81,7 @@ BEGIN
  FOR ed IN SELECT value FROM jsonb_array_elements(body->'allocations') LOOP
   SELECT x INTO src FROM jsonb_array_elements(body->'sources') x WHERE x->>'id'=ed->>'source';
   SELECT x INTO dst FROM jsonb_array_elements(body->'targets') x WHERE x->>'id'=ed->>'target';
-  IF src IS NULL OR dst IS NULL OR src->>'item' IS DISTINCT FROM dst->>'item' OR ed->>'source_quantity' IS NULL OR ed->>'source_quantity' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$'
+  IF ed-ARRAY['source','target','source_quantity','target_quantity']<>'{}'::jsonb OR src IS NULL OR dst IS NULL OR src->>'item' IS DISTINCT FROM dst->>'item' OR ed->>'source_quantity' IS NULL OR ed->>'source_quantity' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$'
   OR ed->>'target_quantity' IS NULL OR ed->>'target_quantity' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$' THEN RAISE EXCEPTION 'invalid matching edge' USING ERRCODE='23514'; END IF;
   sq:=(ed->>'source_quantity')::numeric; tq:=(ed->>'target_quantity')::numeric;
   numerator:=1; denominator:=1;

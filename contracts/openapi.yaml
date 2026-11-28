@@ -5451,8 +5451,7 @@ paths:
                       type: boolean
                       enum: [true]
                     line_match:
-                      type: object
-                      additionalProperties: true
+                      $ref: '#/components/schemas/LineMatchingPolicy'
                     resource_kinds:
                       type: array
                       minItems: 1
@@ -9088,8 +9087,7 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object
-                  additionalProperties: true
+                  $ref: '#/components/schemas/ReconciliationHistory'
         '401': {description: Unauthenticated}
         '403': {description: Forbidden}
         '503': {description: Dependency unavailable}
@@ -9151,8 +9149,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
+                $ref: '#/components/schemas/ReconciliationReceipt'
         '400': {description: Invalid input}
         '401': {description: Unauthenticated}
         '403': {description: Forbidden}
@@ -10560,6 +10557,164 @@ components:
       - waivable
       - clause_id
       - definition
+    LineMatchingPolicy:
+      type: object
+      additionalProperties: false
+      required: [currency, price_tolerance, conversions]
+      properties:
+        currency: {type: string}
+        price_tolerance: {type: string}
+        conversions:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required: [from, to, numerator, denominator]
+            properties:
+              from: {type: string}
+              to: {type: string}
+              numerator: {type: string}
+              denominator: {type: string}
+    ReconciliationMaterial:
+      type: object
+      additionalProperties: false
+      required: [sources, targets, allocations, reason, coverage_complete]
+      properties:
+        sources:
+          type: array
+          items: {$ref: '#/components/schemas/ReconciliationLine'}
+        targets:
+          type: array
+          items: {$ref: '#/components/schemas/ReconciliationLine'}
+        allocations:
+          type: array
+          items: {$ref: '#/components/schemas/ReconciliationEdge'}
+        reason: {type: string}
+        coverage_complete: {type: boolean}
+    ReconciliationReceipt:
+      type: object
+      additionalProperties: false
+      required: [id, dossier_version, policy_id, outcome, residuals, price_difference, advisory_only]
+      properties:
+        id: {type: string, format: uuid}
+        dossier_version: {type: integer}
+        policy_id: {type: string, format: uuid}
+        outcome: {type: string, enum: [MATCHED, FAIL, UNKNOWN]}
+        price_difference: {type: boolean}
+        advisory_only: {type: boolean}
+        residuals:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, side, remaining_quantity, remaining_value, evidence_id]
+            properties:
+              id: {type: string}
+              side: {type: string, enum: [SOURCE, TARGET]}
+              remaining_quantity: {type: string}
+              remaining_value: {type: string}
+              evidence_id: {type: string, format: uuid}
+    ReconciliationHistory:
+      type: object
+      additionalProperties: false
+      required: [result, material, actor_id, created_at, stale]
+      properties:
+        result: {$ref: '#/components/schemas/ReconciliationReceipt'}
+        material: {$ref: '#/components/schemas/ReconciliationMaterial'}
+        actor_id: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        stale: {type: boolean}
+    FinancialReferenceDetails:
+      oneOf:
+      - $ref: '#/components/schemas/ContractReferenceDetails'
+      - $ref: '#/components/schemas/AdvanceReferenceDetails'
+      - $ref: '#/components/schemas/BudgetReferenceDetails'
+      - $ref: '#/components/schemas/InvoiceReferenceDetails'
+    ContractReferenceDetails:
+      type: object
+      additionalProperties: false
+      required: [contract_key, installment_key, vendor_key, effective_from, effective_until, base_cap, addenda, installment_gross, retention, advance_deduction, paid]
+      properties:
+        contract_key: {type: string}
+        installment_key: {type: string}
+        vendor_key: {type: string}
+        effective_from: {type: string, format: date}
+        effective_until: {type: string, format: date}
+        base_cap: {type: string}
+        installment_gross: {type: string}
+        retention: {type: string}
+        advance_deduction: {type: string}
+        paid: {type: string}
+        addenda:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [key, approved_on, effective_on, delta]
+            properties:
+              key: {type: string}
+              approved_on: {type: string, format: date}
+              effective_on: {type: string, format: date}
+              delta: {type: string}
+        acceptance_lines:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [key, item, unit, quantity, unit_price, value]
+            properties:
+              key: {type: string}
+              item: {type: string}
+              unit: {type: string}
+              quantity: {type: string}
+              unit_price: {type: string}
+              value: {type: string}
+    AdvanceReferenceDetails:
+      type: object
+      additionalProperties: false
+      required: [beneficiary_key, purpose, issued_on, due_date, issued, settled, refunded]
+      properties:
+        beneficiary_key: {type: string}
+        purpose: {type: string}
+        issued_on: {type: string, format: date}
+        due_date: {type: string, format: date}
+        issued: {type: string}
+        settled: {type: string}
+        refunded: {type: string}
+        extension:
+          type: [object, 'null']
+          additionalProperties: false
+          required: [approved_on, new_due, approval_ref]
+          properties:
+            approved_on: {type: string, format: date}
+            new_due: {type: string, format: date}
+            approval_ref: {type: string}
+    BudgetReferenceDetails:
+      type: object
+      additionalProperties: false
+      required: [cost_center, account, budget_version, period_start, period_end, approved_limit, external_unmatched_commitments, actual, disjoint_verified]
+      properties:
+        cost_center: {type: string}
+        account: {type: string}
+        budget_version: {type: string}
+        period_start: {type: string, format: date}
+        period_end: {type: string, format: date}
+        approved_limit: {type: string}
+        external_unmatched_commitments: {type: string}
+        actual: {type: string}
+        disjoint_verified: {type: boolean, enum: [true]}
+    InvoiceReferenceDetails:
+      type: object
+      additionalProperties: false
+      required: [issuer, series, number, invoice_date, eligible_total, paid]
+      properties:
+        issuer: {type: string}
+        series: {type: string}
+        number: {type: string}
+        invoice_date: {type: string, format: date}
+        eligible_total: {type: string}
+        paid: {type: string}
     ReconciliationLine:
       type: object
       required: [id, evidence_id, item, unit, quantity, unit_price, value, currency]
@@ -10600,8 +10755,7 @@ components:
             type: string
             format: uuid
         details:
-          type: object
-          additionalProperties: true
+          $ref: '#/components/schemas/FinancialReferenceDetails'
       required: [source_key, currency, cap, consumed, evidence_ids, details]
     PaymentImportRow:
       type: object
@@ -10753,8 +10907,7 @@ components:
               type: boolean
               enum: [true]
             line_match:
-              type: object
-              additionalProperties: true
+              $ref: '#/components/schemas/LineMatchingPolicy'
           required: [clause_key, amount_path, currency_path, resource_kinds, resource_keys]
         clauses:
           type: array

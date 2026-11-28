@@ -119,7 +119,7 @@ CREATE POLICY s3_workflow_scan_update ON finance.document_blob FOR UPDATE TO fin
  USING(finance.worker_scope_allowed(tenant_id,company_id) AND scan_state='QUARANTINED')
  WITH CHECK(finance.worker_scope_allowed(tenant_id,company_id) AND scan_state IN ('CLEAN','REJECTED'));
 CREATE FUNCTION finance.complete_s3_scan(t uuid,c uuid,j uuid,f bigint,w uuid,doc uuid,g bigint,v text,h text,verdict text,engine text)
-RETURNS void LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $
+RETURNS void LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE dossier uuid; revision uuid;
 BEGIN
  IF NOT finance.worker_scope_allowed(t,c)

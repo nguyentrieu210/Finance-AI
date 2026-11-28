@@ -30,7 +30,7 @@ FINANCE_MIGRATION_DATABASE_URL="$url" "$migrator" --apply
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_baseline -v ON_ERROR_STOP=1 <<'SQL'
 CREATE ROLE finance_probe NOLOGIN;
 -- New endpoints remain SECURITY DEFINER with scoped, non-login owners.
-DO $ DECLARE sig text; fn oid; BEGIN
+DO $$ DECLARE sig text; fn oid; BEGIN
  FOREACH sig IN ARRAY ARRAY['finance.runtime_reservation_ledger(uuid,uuid,uuid,uuid,uuid,integer)',
  'finance.runtime_reference_import_material(uuid,uuid,uuid,uuid)',
  'finance.runtime_reservable_resources(uuid,uuid,uuid,uuid,integer)',
