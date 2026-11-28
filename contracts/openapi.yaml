@@ -5447,6 +5447,9 @@ paths:
                       type: object
                       additionalProperties:
                         type: string
+                    extra_settlement:
+                      type: boolean
+                      enum: [true]
                     line_match:
                       type: object
                       additionalProperties: true
@@ -9066,6 +9069,96 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /v1/dossiers/{dossier_id}/line-reconciliations:
+    get:
+      operationId: listLineReconciliations
+      tags: [E10]
+      summary: Current and historical independently confirmed line reconciliations
+      x-release-gate: pilot
+      parameters:
+      - name: dossier_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Authorized bounded history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+        '401': {description: Unauthenticated}
+        '403': {description: Forbidden}
+        '503': {description: Dependency unavailable}
+    post:
+      operationId: reconcileDossierLines
+      tags: [E10]
+      summary: Store evidence-bound manual many-to-many line reconciliation
+      x-release-gate: pilot
+      parameters:
+      - name: dossier_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema: {type: string, minLength: 1, maxLength: 128}
+      - name: If-Finance-Version
+        in: header
+        required: true
+        schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [policy_id, material]
+              properties:
+                policy_id: {type: string, format: uuid}
+                material:
+                  type: object
+                  required: [sources, targets, allocations, reason, coverage_complete]
+                  properties:
+                    sources:
+                      type: array
+                      minItems: 1
+                      maxItems: 256
+                      items: {$ref: '#/components/schemas/ReconciliationLine'}
+                    targets:
+                      type: array
+                      minItems: 1
+                      maxItems: 256
+                      items: {$ref: '#/components/schemas/ReconciliationLine'}
+                    allocations:
+                      type: array
+                      maxItems: 1024
+                      items: {$ref: '#/components/schemas/ReconciliationEdge'}
+                    reason: {type: string, minLength: 1, maxLength: 2048}
+                    coverage_complete: {type: boolean}
+      responses:
+        '200':
+          description: Immutable reconciliation receipt (not payment approval)
+          headers:
+            Finance-Version:
+              required: true
+              schema: {type: string}
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400': {description: Invalid input}
+        '401': {description: Unauthenticated}
+        '403': {description: Forbidden}
+        '409': {description: Conflict}
+        '422': {description: Business guard failed}
+        '503': {description: Dependency unavailable}
   /v1/dossiers/{dossier_id}/payment-observations:
     post:
       operationId: recordPaymentObservation
@@ -10467,6 +10560,28 @@ components:
       - waivable
       - clause_id
       - definition
+    ReconciliationLine:
+      type: object
+      required: [id, evidence_id, item, unit, quantity, unit_price, value, currency]
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        evidence_id: {type: string, format: uuid}
+        item: {type: string}
+        unit: {type: string}
+        quantity: {type: string}
+        unit_price: {type: string}
+        value: {type: string}
+        currency: {type: string}
+    ReconciliationEdge:
+      type: object
+      additionalProperties: false
+      required: [source, target, source_quantity, target_quantity]
+      properties:
+        source: {type: string}
+        target: {type: string}
+        source_quantity: {type: string}
+        target_quantity: {type: string}
     ReferenceImportRow:
       type: object
       additionalProperties: false
@@ -10634,6 +10749,9 @@ components:
               type: object
               additionalProperties:
                 type: string
+            extra_settlement:
+              type: boolean
+              enum: [true]
             line_match:
               type: object
               additionalProperties: true

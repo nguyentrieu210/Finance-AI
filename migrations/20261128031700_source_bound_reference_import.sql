@@ -132,6 +132,7 @@ BEGIN
   AND m.role='FINANCE_APPROVER' AND m.active AND m.valid_from<=clock_timestamp() AND (m.valid_until IS NULL OR m.valid_until>clock_timestamp()))
  THEN RAISE EXCEPTION 'finance approver required' USING ERRCODE='42501'; END IF;
 
+ PERFORM pg_advisory_xact_lock(hashtextextended('finance.reference.verify/v1/'||t::text||'/'||c::text||'/'||a::text||'/'||idem,0));
  digest:=sha256(convert_to('reference.verify:'||ref_id::text||':'||v::text||':'||reason||':'||array_to_string(ev_ids,','),'UTF8'));
  SELECT * INTO existing FROM finance.idempotency_record
   WHERE (tenant_id,company_id,actor_id,operation_id,key)=(t,c,a,'reference.verify',idem);

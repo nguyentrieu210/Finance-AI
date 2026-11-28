@@ -1451,6 +1451,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/dossiers/{dossier_id}/line-reconciliations": {
+        parameters: {query?: never; header?: never; path?: never; cookie?: never};
+        get: operations["listLineReconciliations"];
+        put?: never;
+        post: operations["reconcileDossierLines"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/dossiers/{dossier_id}/payment-observations": {
         parameters: {
             query?: never;
@@ -1793,6 +1804,8 @@ export interface components {
             clause_id: string;
             definition: components["schemas"]["rule-dsl.schema"];
         };
+        ReconciliationLine: {id:string;evidence_id:string;item:string;unit:string;quantity:string;unit_price:string;value:string;currency:string};
+        ReconciliationEdge: {source:string;target:string;source_quantity:string;target_quantity:string};
         ReferenceImportRow: {
             source_key: string;
             currency: string;
@@ -1845,6 +1858,7 @@ export interface components {
                 currency_path: string;
                 resource_kinds: string[];
                 resource_keys: Record<string,string>;
+                extra_settlement?: true;
                 line_match?: Record<string,unknown>;
             } | null;
             clauses: {key: string; id: string; excerpt: string; page: number}[];
@@ -7644,7 +7658,8 @@ export interface operations {
                         currency_path: string;
                         resource_kinds: ("CONTRACT" | "INVOICE" | "ADVANCE" | "BUDGET")[];
                         resource_keys: Record<string,string>;
-                        line_match?: Record<string,unknown>;
+                        extra_settlement?: true;
+                line_match?: Record<string,unknown>;
                     };
                 };
             };
@@ -11673,6 +11688,16 @@ export interface operations {
                 };
             };
         };
+    };
+    listLineReconciliations: {
+        parameters: {path:{dossier_id:string};query?:never;header?:never;cookie?:never};
+        requestBody?: never;
+        responses: {200:{headers:{[name:string]:unknown};content:{"application/json":Record<string,unknown>[]}};401:{content?:never};403:{content?:never};503:{content?:never}};
+    };
+    reconcileDossierLines: {
+        parameters:{path:{dossier_id:string};header:{"Idempotency-Key":string;"If-Finance-Version":string};query?:never;cookie?:never};
+        requestBody:{content:{"application/json":{policy_id:string;material:{sources:components["schemas"]["ReconciliationLine"][];targets:components["schemas"]["ReconciliationLine"][];allocations:components["schemas"]["ReconciliationEdge"][];reason:string;coverage_complete:boolean}}}};
+        responses:{200:{headers:{"Finance-Version":string;[name:string]:unknown};content:{"application/json":Record<string,unknown>}};400:{content?:never};401:{content?:never};403:{content?:never};409:{content?:never};422:{content?:never};503:{content?:never}};
     };
     recordPaymentObservation: {
         parameters: {

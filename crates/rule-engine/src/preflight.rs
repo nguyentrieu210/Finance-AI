@@ -159,6 +159,17 @@ mod tests {
     use super::*;
     use serde_json::json;
     #[test]
+    fn unverified_overdue_or_matching_fact_stays_unknown(){
+        let mut material=json!({"rules":[{"id":"00000000-0000-0000-0000-000000000001","name":"overdue","version":1,"severity":"BLOCK",
+          "definition":{"rule_id":"overdue","version":1,"severity":"BLOCK","waivable":false,"clause_id":"00000000-0000-0000-0000-000000000002",
+          "condition":{"op":"not","args":[{"ref":"advance.overdue"}]}}}],"fields":[],"financial":[{"path":"advance.overdue","value":"false","verified":false,"evidence":["00000000-0000-0000-0000-000000000003"]}]});
+        assert_eq!(evaluate(&material).unwrap()[0].outcome,"UNKNOWN");
+        material["financial"][0]["verified"]=json!(true);
+        assert_eq!(evaluate(&material).unwrap()[0].outcome,"PASS");
+        material["financial"][0]["value"]=json!("true");
+        assert_eq!(evaluate(&material).unwrap()[0].outcome,"FAIL");
+    }
+    #[test]
     fn amount_without_currency_and_conflicting_invoice_remain_unknown(){
         let material=json!({"rules":[{"id":"00000000-0000-0000-0000-000000000001","name":"amount","version":1,"severity":"BLOCK",
             "definition":{"rule_id":"amount","version":1,"severity":"BLOCK","waivable":false,"clause_id":"00000000-0000-0000-0000-000000000002",

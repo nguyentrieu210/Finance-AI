@@ -81,7 +81,7 @@ BEGIN
  SELECT item INTO row_data FROM finance.reference_snapshot s CROSS JOIN LATERAL jsonb_array_elements(s.import_payload) item WHERE (s.tenant_id,s.company_id,s.id)=(t,c,fr.snapshot_id) AND jsonb_build_array('MANUAL_API',item->>'source_key')::text=fr.source_key;
  IF row_data IS NULL THEN RETURN NULL; END IF;
  SELECT coalesce(jsonb_agg(DISTINCT x ORDER BY x),'[]') INTO ev FROM (
- SELECT to_jsonb(ln->>'evidence_id') x FROM jsonb_array_elements((m.material->'sources')||(m.material->'targets')) ln
+ SELECT to_jsonb(z->>'evidence_id') x FROM jsonb_array_elements((m.material->'sources')||(m.material->'targets')) z
  UNION ALL SELECT x FROM jsonb_array_elements(row_data->'evidence_ids') x) e;
  IF jsonb_array_length(ev) NOT BETWEEN 1 AND 64 THEN RETURN NULL; END IF;
  FOR ln IN SELECT value FROM jsonb_array_elements(m.material->'sources') ORDER BY value->>'id' LOOP
