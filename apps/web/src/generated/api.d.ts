@@ -1452,9 +1452,16 @@ export interface paths {
         trace?: never;
     };
     "/v1/dossiers/{dossier_id}/line-reconciliations": {
-        parameters: {query?: never; header?: never; path?: never; cookie?: never};
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current and historical independently confirmed line reconciliations */
         get: operations["listLineReconciliations"];
         put?: never;
+        /** Store evidence-bound manual many-to-many line reconciliation */
         post: operations["reconcileDossierLines"];
         delete?: never;
         options?: never;
@@ -1804,52 +1811,223 @@ export interface components {
             clause_id: string;
             definition: components["schemas"]["rule-dsl.schema"];
         };
-        ReconciliationLine: {id:string;evidence_id:string;item:string;unit:string;quantity:string;unit_price:string;value:string;currency:string};
-        ReconciliationEdge: {source:string;target:string;source_quantity:string;target_quantity:string};
+        LineMatchingPolicy: {
+            currency: string;
+            price_tolerance: string;
+            conversions: {
+                from: string;
+                to: string;
+                numerator: string;
+                denominator: string;
+            }[];
+        };
+        ReconciliationMaterial: {
+            sources: components["schemas"]["ReconciliationLine"][];
+            targets: components["schemas"]["ReconciliationLine"][];
+            allocations: components["schemas"]["ReconciliationEdge"][];
+            reason: string;
+            coverage_complete: boolean;
+        };
+        ReconciliationReceipt: {
+            /** Format: uuid */
+            id: string;
+            dossier_version: number;
+            /** Format: uuid */
+            policy_id: string;
+            /** @enum {string} */
+            outcome: "MATCHED" | "FAIL" | "UNKNOWN";
+            price_difference: boolean;
+            advisory_only: boolean;
+            residuals: {
+                id: string;
+                /** @enum {string} */
+                side: "SOURCE" | "TARGET";
+                remaining_quantity: string;
+                remaining_value: string;
+                /** Format: uuid */
+                evidence_id: string;
+            }[];
+        };
+        ReconciliationHistory: {
+            result: components["schemas"]["ReconciliationReceipt"];
+            material: components["schemas"]["ReconciliationMaterial"];
+            /** Format: uuid */
+            actor_id: string;
+            /** Format: date-time */
+            created_at: string;
+            stale: boolean;
+        };
+        FinancialReferenceDetails: components["schemas"]["ContractReferenceDetails"] | components["schemas"]["AdvanceReferenceDetails"] | components["schemas"]["BudgetReferenceDetails"] | components["schemas"]["InvoiceReferenceDetails"];
+        ContractReferenceDetails: {
+            contract_key: string;
+            installment_key: string;
+            vendor_key: string;
+            /** Format: date */
+            effective_from: string;
+            /** Format: date */
+            effective_until: string;
+            base_cap: string;
+            installment_gross: string;
+            retention: string;
+            advance_deduction: string;
+            paid: string;
+            addenda: {
+                key: string;
+                /** Format: date */
+                approved_on: string;
+                /** Format: date */
+                effective_on: string;
+                delta: string;
+            }[];
+            acceptance_lines?: {
+                key: string;
+                item: string;
+                unit: string;
+                quantity: string;
+                unit_price: string;
+                value: string;
+            }[];
+        };
+        AdvanceReferenceDetails: {
+            beneficiary_key: string;
+            purpose: string;
+            /** Format: date */
+            issued_on: string;
+            /** Format: date */
+            due_date: string;
+            issued: string;
+            settled: string;
+            refunded: string;
+            extension?: {
+                /** Format: date */
+                approved_on: string;
+                /** Format: date */
+                new_due: string;
+                approval_ref: string;
+            } | null;
+        };
+        BudgetReferenceDetails: {
+            cost_center: string;
+            account: string;
+            budget_version: string;
+            /** Format: date */
+            period_start: string;
+            /** Format: date */
+            period_end: string;
+            approved_limit: string;
+            external_unmatched_commitments: string;
+            actual: string;
+            /** @enum {boolean} */
+            disjoint_verified: true;
+        };
+        InvoiceReferenceDetails: {
+            issuer: string;
+            series: string;
+            number: string;
+            /** Format: date */
+            invoice_date: string;
+            eligible_total: string;
+            paid: string;
+        };
+        ReconciliationLine: {
+            id: string;
+            /** Format: uuid */
+            evidence_id: string;
+            item: string;
+            unit: string;
+            quantity: string;
+            unit_price: string;
+            value: string;
+            currency: string;
+        };
+        ReconciliationEdge: {
+            source: string;
+            target: string;
+            source_quantity: string;
+            target_quantity: string;
+        };
         ReferenceImportRow: {
             source_key: string;
             currency: string;
             cap: string;
             consumed: string;
             evidence_ids: string[];
-            details: Record<string,unknown>;
+            details: components["schemas"]["FinancialReferenceDetails"];
         };
-        PaymentImportRow: {source_key: string; reservation_id: string; currency: string; amount: string; event_kind: "CONSUME" | "REVERSE"; reverses?: string | null; occurred_at: string; allocations?: Record<string,string>; evidence_ids: string[]};
+        PaymentImportRow: {
+            source_key: string;
+            /** Format: uuid */
+            reservation_id: string;
+            currency: string;
+            amount: string;
+            /** @enum {string} */
+            event_kind: "CONSUME" | "REVERSE";
+            reverses?: string | null;
+            /** Format: date-time */
+            occurred_at: string;
+            allocations?: {
+                [key: string]: string;
+            };
+            evidence_ids: string[];
+        };
         ReferenceMaterial: {
+            /** Format: uuid */
             id: string;
+            /** Format: uuid */
             document_id: string;
             source_digest: string;
             kind: string;
             coverage: string;
+            /** Format: date-time */
             as_of: string;
+            /** Format: date-time */
             fresh_until: string;
             state: string;
+            /** Format: uuid */
             maker_id: string;
             records: (components["schemas"]["ReferenceImportRow"] | components["schemas"]["PaymentImportRow"])[];
-            payment_events?: {id:string;source_key:string;reservation_id:string;event_kind:string;amount:string;currency:string;observed:boolean}[];
             evidence_ids: string[];
+            payment_events?: {
+                /** Format: uuid */
+                id: string;
+                source_key: string;
+                /** Format: uuid */
+                reservation_id: string;
+                event_kind: string;
+                amount: string;
+                currency: string;
+                observed: boolean;
+            }[];
         };
         ReservableResource: {
+            /** Format: uuid */
             id: string;
             kind: string;
             source_key: string;
+            /** Format: uuid */
             snapshot_id: string;
             currency: string;
             cap: string;
             consumed: string;
             held: string;
             available: string;
+            /** Format: date-time */
             fresh_until: string;
         };
         PolicyConfiguration: {
+            /** Format: uuid */
             id: string;
+            /** Format: uuid */
             company_id: string;
             version: number;
             name: string;
             state: string;
             dossier_kind: string;
+            /** Format: date */
             effective_from: string;
+            /** Format: date */
             effective_to: string;
+            /** Format: uuid */
             author_id: string;
             criticality_complete: boolean;
             finance_gate: {
@@ -1857,13 +2035,29 @@ export interface components {
                 amount_path: string;
                 currency_path: string;
                 resource_kinds: string[];
-                resource_keys: Record<string,string>;
+                resource_keys: {
+                    [key: string]: string;
+                };
+                /** @enum {boolean} */
                 extra_settlement?: true;
-                line_match?: Record<string,unknown>;
+                line_match?: components["schemas"]["LineMatchingPolicy"];
             } | null;
-            clauses: {key: string; id: string; excerpt: string; page: number}[];
-            critical_fields: {clause_key: string; field_path: string}[];
-            checklist: {clause_key: string; document_kind: string; mandatory: boolean}[];
+            clauses: {
+                key: string;
+                /** Format: uuid */
+                id: string;
+                excerpt: string;
+                page: number;
+            }[];
+            critical_fields: {
+                clause_key: string;
+                field_path: string;
+            }[];
+            checklist: {
+                clause_key: string;
+                document_kind: string;
+                mandatory: boolean;
+            }[];
         };
         Reservation: {
             /** Format: uuid */
@@ -7656,10 +7850,13 @@ export interface operations {
                         clause_key: string;
                         amount_path: string;
                         currency_path: string;
-                        resource_kinds: ("CONTRACT" | "INVOICE" | "ADVANCE" | "BUDGET")[];
-                        resource_keys: Record<string,string>;
+                        resource_keys: {
+                            [key: string]: string;
+                        };
+                        /** @enum {boolean} */
                         extra_settlement?: true;
-                line_match?: Record<string,unknown>;
+                        line_match?: components["schemas"]["LineMatchingPolicy"];
+                        resource_kinds: ("CONTRACT" | "INVOICE" | "ADVANCE" | "BUDGET")[];
                     };
                 };
             };
@@ -11690,14 +11887,129 @@ export interface operations {
         };
     };
     listLineReconciliations: {
-        parameters: {path:{dossier_id:string};query?:never;header?:never;cookie?:never};
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dossier_id: string;
+            };
+            cookie?: never;
+        };
         requestBody?: never;
-        responses: {200:{headers:{[name:string]:unknown};content:{"application/json":Record<string,unknown>[]}};401:{content?:never};403:{content?:never};503:{content?:never}};
+        responses: {
+            /** @description Authorized bounded history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReconciliationHistory"][];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
     };
     reconcileDossierLines: {
-        parameters:{path:{dossier_id:string};header:{"Idempotency-Key":string;"If-Finance-Version":string};query?:never;cookie?:never};
-        requestBody:{content:{"application/json":{policy_id:string;material:{sources:components["schemas"]["ReconciliationLine"][];targets:components["schemas"]["ReconciliationLine"][];allocations:components["schemas"]["ReconciliationEdge"][];reason:string;coverage_complete:boolean}}}};
-        responses:{200:{headers:{"Finance-Version":string;[name:string]:unknown};content:{"application/json":Record<string,unknown>}};400:{content?:never};401:{content?:never};403:{content?:never};409:{content?:never};422:{content?:never};503:{content?:never}};
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Finance-Version": string;
+            };
+            path: {
+                dossier_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    policy_id: string;
+                    material: {
+                        sources: components["schemas"]["ReconciliationLine"][];
+                        targets: components["schemas"]["ReconciliationLine"][];
+                        allocations: components["schemas"]["ReconciliationEdge"][];
+                        reason: string;
+                        coverage_complete: boolean;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Immutable reconciliation receipt (not payment approval) */
+            200: {
+                headers: {
+                    "Finance-Version": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReconciliationReceipt"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Business guard failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
     };
     recordPaymentObservation: {
         parameters: {
