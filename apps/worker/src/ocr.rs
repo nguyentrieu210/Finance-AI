@@ -20,6 +20,7 @@ pub(super) struct Config {
     binary: PathBuf,
     tessdata: PathBuf,
     model_digest: [u8; 32],
+    binary_digest: [u8; 32],
 }
 
 impl Config {
@@ -38,7 +39,12 @@ impl Config {
         }
         let bytes = fs::read(model).map_err(|_| "OCR traineddata unreadable")?;
         let model_digest = Sha256::digest(bytes).into();
-        Ok(Some(Self { binary, tessdata, model_digest }))
+        let metadata = fs::metadata(&binary).map_err(|_| "OCR executable missing")?;
+        if !metadata.is_file() || metadata.len() == 0 || metadata.len() > 100 * 1024 * 1024 {
+            return Err("OCR executable size invalid");
+        }
+        let binary_digest = Sha256::digest(fs::read(&binary).map_err(|_| "OCR executable unreadable")?).into();
+        Ok(Some(Self { binary, tessdata, model_digest, binary_digest }))
     }
 }
 
@@ -193,7 +199,11 @@ pub(super) async fn process(pool: &PgPool, config: &Config, lease: Lease, lease_
         }
     };
     let (blocks, fields) = candidates(&tsv,width,height)?;
-    let config_digest = Sha256::digest(format!("tesseract/vie/psm6/{width}x{height}/rows.v1"));
+    let mut configuration = Sha256::new();
+    configuration.update(b"finance.synthetic.ocr/v1");
+    configuration.update(config.binary_digest);
+    configuration.update(format!("tesseract/vie/psm6/{width}x{height}/rows.v1"));
+    let config_digest = configuration.finalize();
     let scope = lease.scope();
     let (t,c): (Uuid,Uuid) = (scope.tenant.into(),scope.company.into());
     let mut tx = pool.begin().await.map_err(db_failure)?;

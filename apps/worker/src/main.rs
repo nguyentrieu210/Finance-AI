@@ -362,10 +362,10 @@ async fn settle_failure(pool: &PgPool, lease: Lease, failure: RunFailure) {
         return;
     };
     match jobs::fail(pool, lease, kind).await {
-        Ok(FailureResult::Retry) => eprintln!("finance-worker: export retry scheduled"),
-        Ok(FailureResult::Dead) => eprintln!("finance-worker: export moved to dead letter"),
-        Err(JobError::StaleLease) => eprintln!("finance-worker: stale export failure ignored"),
-        Err(_) => eprintln!("finance-worker: failed to persist export failure"),
+        Ok(FailureResult::Retry) => eprintln!("finance-worker: job retry scheduled"),
+        Ok(FailureResult::Dead) => eprintln!("finance-worker: job moved to dead letter"),
+        Err(JobError::StaleLease) => eprintln!("finance-worker: stale job failure ignored"),
+        Err(_) => eprintln!("finance-worker: failed to persist job failure"),
     }
 }
 

@@ -46,7 +46,7 @@ CREATE FUNCTION finance.complete_synthetic_invoice_ocr(t uuid,c uuid,j uuid,f bi
 RETURNS uuid LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE jobrow finance.job%ROWTYPE; b finance.document_blob%ROWTYPE; p jsonb; entry jsonb; idx integer:=0;
  rect integer[]; ref_ids integer[]; page_no integer; field_count integer:=0; run_id uuid:=j;
- payload_digest bytea;
+ payload_digest bytea; dossier uuid;
 BEGIN
  IF t IS DISTINCT FROM finance.scope_tenant() OR c IS DISTINCT FROM finance.scope_company()
  OR NOT finance.worker_scope_allowed(t,c)
@@ -64,6 +64,13 @@ BEGIN
  THEN RAISE EXCEPTION 'stale OCR lease' USING ERRCODE='40001'; END IF;
  IF NOT EXISTS(SELECT 1 FROM finance.outbox WHERE tenant_id=t AND company_id=c AND id=j AND resource_id=doc AND event_type='OCR_REQUESTED')
  THEN RAISE EXCEPTION 'wrong OCR job source' USING ERRCODE='23514'; END IF;
+ -- Lock the owner aggregate before checking the current revision and writing.
+ SELECT r.dossier_id INTO dossier FROM finance.document_ref r
+  WHERE (r.tenant_id,r.company_id,r.id,r.revision_id)=(t,c,doc,rev);
+ IF NOT FOUND THEN RAISE EXCEPTION 'wrong OCR revision' USING ERRCODE='23514'; END IF;
+ PERFORM 1 FROM finance.dossier d
+  WHERE (d.tenant_id,d.company_id,d.id)=(t,c,dossier) FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'wrong OCR dossier' USING ERRCODE='23514'; END IF;
  SELECT * INTO b FROM finance.document_blob WHERE tenant_id=t AND company_id=c AND id=doc;
  IF NOT FOUND OR b.generation<>g OR b.sha256_digest<>source OR b.storage_backend<>'SYNTHETIC_DB_ONLY'
  OR b.scan_state<>'CLEAN' OR b.mime<>'image/png'
