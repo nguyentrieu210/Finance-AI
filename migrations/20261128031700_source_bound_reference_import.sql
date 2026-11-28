@@ -19,6 +19,7 @@ CREATE FUNCTION finance.runtime_create_reference_bound(
  t uuid,c uuid,a uuid,doc uuid,kind text,as_of_ts timestamptz,coverage text,idem text,ref_id uuid,cmd uuid,corr uuid,fresh_ts timestamptz,records jsonb
 ) RETURNS TABLE(id uuid,state text,attempt bigint,progress bigint)
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
+#variable_conflict use_column
 DECLARE digest bytea; existing finance.idempotency_record%ROWTYPE; payload jsonb; fresh timestamptz; source_hash bytea; item jsonb; all_evidence uuid[];
 BEGIN
  IF t IS NULL OR c IS NULL OR a IS NULL OR doc IS NULL OR as_of_ts IS NULL OR ref_id IS NULL OR cmd IS NULL OR corr IS NULL
@@ -116,6 +117,7 @@ CREATE OR REPLACE FUNCTION finance.runtime_verify_reference(
  t uuid,c uuid,a uuid,ref_id uuid,v bigint,reason text,ev_ids uuid[],idem text,cmd uuid,corr uuid
 ) RETURNS TABLE(id uuid,kind text,source_key text,as_of text,coverage text,state text,evidence_ids uuid[],version bigint)
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
+#variable_conflict use_column
 DECLARE
  digest bytea; existing finance.idempotency_record%ROWTYPE; r finance.reference_snapshot%ROWTYPE;
  rkind text; rcov text; asof_txt text; payload jsonb; ev_count bigint;

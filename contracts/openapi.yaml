@@ -2601,7 +2601,7 @@ paths:
                 resource_ids:
                   type: array
                   minItems: 1
-                  maxItems: 4
+                  maxItems: 32
                   uniqueItems: true
                   items:
                     type: string
@@ -5443,6 +5443,13 @@ paths:
                       type: string
                     currency_path:
                       type: string
+                    resource_keys:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    line_match:
+                      type: object
+                      additionalProperties: true
                     resource_kinds:
                       type: array
                       minItems: 1
@@ -5460,6 +5467,7 @@ paths:
                   - amount_path
                   - currency_path
                   - resource_kinds
+                  - resource_keys
               required:
               - company_id
               - name
@@ -6811,30 +6819,9 @@ paths:
                   type: array
                   maxItems: 10000
                   items:
-                    type: object
-                    additionalProperties: false
-                    properties:
-                      source_key:
-                        type: string
-                      currency:
-                        type: string
-                      cap:
-                        type: string
-                      consumed:
-                        type: string
-                      evidence_ids:
-                        type: array
-                        minItems: 1
-                        maxItems: 50
-                        items:
-                          type: string
-                          format: uuid
-                    required:
-                    - source_key
-                    - currency
-                    - cap
-                    - consumed
-                    - evidence_ids
+                    oneOf:
+                    - $ref: '#/components/schemas/ReferenceImportRow'
+                    - $ref: '#/components/schemas/PaymentImportRow'
               required:
               - document_id
               - kind
@@ -10497,7 +10484,28 @@ components:
           items:
             type: string
             format: uuid
-      required: [source_key, currency, cap, consumed, evidence_ids]
+        details:
+          type: object
+          additionalProperties: true
+      required: [source_key, currency, cap, consumed, evidence_ids, details]
+    PaymentImportRow:
+      type: object
+      additionalProperties: false
+      properties:
+        source_key: {type: string}
+        reservation_id: {type: string, format: uuid}
+        currency: {type: string}
+        amount: {type: string}
+        event_kind: {type: string, enum: [CONSUME, REVERSE]}
+        reverses: {type: [string, 'null']}
+        occurred_at: {type: string, format: date-time}
+        allocations:
+          type: object
+          additionalProperties: {type: string}
+        evidence_ids:
+          type: array
+          items: {type: string, format: uuid}
+      required: [source_key, reservation_id, currency, amount, event_kind, occurred_at, evidence_ids]
     ReferenceMaterial:
       type: object
       additionalProperties: false
@@ -10528,7 +10536,9 @@ components:
         records:
           type: array
           items:
-            $ref: '#/components/schemas/ReferenceImportRow'
+            oneOf:
+            - $ref: '#/components/schemas/ReferenceImportRow'
+            - $ref: '#/components/schemas/PaymentImportRow'
         evidence_ids:
           type: array
           items:
@@ -10606,7 +10616,14 @@ components:
               type: array
               items:
                 type: string
-          required: [clause_key, amount_path, currency_path, resource_kinds]
+            resource_keys:
+              type: object
+              additionalProperties:
+                type: string
+            line_match:
+              type: object
+              additionalProperties: true
+          required: [clause_key, amount_path, currency_path, resource_kinds, resource_keys]
         clauses:
           type: array
           items:

@@ -23,6 +23,7 @@ CREATE POLICY line_blob_read ON finance.document_blob FOR SELECT TO finance_matc
 CREATE POLICY line_upload_read ON finance.upload_intent FOR SELECT TO finance_matching_writer USING(tenant_id=finance.scope_tenant() AND company_id=finance.scope_company());
 CREATE FUNCTION finance.runtime_line_reconcile(t uuid,c uuid,a uuid,d uuid,v bigint,pid uuid,body jsonb,idem text,i uuid,cmd uuid,corr uuid)
 RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
+#variable_conflict use_column
 DECLARE ds finance.dossier%ROWTYPE; rev uuid; policy jsonb; digest bytea; prior finance.line_reconciliation%ROWTYPE;
  ln jsonb; ed jsonb; src jsonb; dst jsonb; conv jsonb; all_lines jsonb; ids text[]; evidence uuid; side text; quantity numeric; unit_price numeric; value numeric;
  sq numeric; tq numeric; allocated numeric; numerator numeric; denominator numeric; tolerance numeric; used_qty numeric; used_value numeric;

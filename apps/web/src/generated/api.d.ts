@@ -1799,7 +1799,9 @@ export interface components {
             cap: string;
             consumed: string;
             evidence_ids: string[];
+            details: Record<string,unknown>;
         };
+        PaymentImportRow: {source_key: string; reservation_id: string; currency: string; amount: string; event_kind: "CONSUME" | "REVERSE"; reverses?: string | null; occurred_at: string; allocations?: Record<string,string>; evidence_ids: string[]};
         ReferenceMaterial: {
             id: string;
             document_id: string;
@@ -1810,7 +1812,7 @@ export interface components {
             fresh_until: string;
             state: string;
             maker_id: string;
-            records: components["schemas"]["ReferenceImportRow"][];
+            records: (components["schemas"]["ReferenceImportRow"] | components["schemas"]["PaymentImportRow"])[];
             evidence_ids: string[];
         };
         ReservableResource: {
@@ -1841,6 +1843,8 @@ export interface components {
                 amount_path: string;
                 currency_path: string;
                 resource_kinds: string[];
+                resource_keys: Record<string,string>;
+                line_match?: Record<string,unknown>;
             } | null;
             clauses: {key: string; id: string; excerpt: string; page: number}[];
             critical_fields: {clause_key: string; field_path: string}[];
@@ -7638,6 +7642,8 @@ export interface operations {
                         amount_path: string;
                         currency_path: string;
                         resource_kinds: ("CONTRACT" | "INVOICE" | "ADVANCE" | "BUDGET")[];
+                        resource_keys: Record<string,string>;
+                        line_match?: Record<string,unknown>;
                     };
                 };
             };
@@ -9148,13 +9154,7 @@ export interface operations {
                     coverage: "COMPLETE" | "PARTIAL" | "UNKNOWN";
                     /** Format: date-time */
                     fresh_until?: string;
-                    records?: {
-                        source_key: string;
-                        currency: string;
-                        cap: string;
-                        consumed: string;
-                        evidence_ids: string[];
-                    }[];
+                    records?: (components["schemas"]["ReferenceImportRow"] | components["schemas"]["PaymentImportRow"])[];
                 };
             };
         };

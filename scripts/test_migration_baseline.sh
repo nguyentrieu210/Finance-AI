@@ -42,7 +42,7 @@ DO $ DECLARE sig text; fn oid; BEGIN
  END LOOP;
  IF has_function_privilege('finance_runtime','finance.runtime_create_reference(uuid,uuid,uuid,uuid,text,timestamptz,text,text,uuid,uuid,uuid)','EXECUTE')
  THEN RAISE EXCEPTION 'legacy fabricated reference API still executable'; END IF;
-END $;
+END $$;
 
 DO $$
 BEGIN
@@ -64,7 +64,7 @@ BEGIN
 END $$;
 SELECT current_setting('server_version') AS postgres_version;
 SQL
-for fixture in tests/sql/staff_administration.sql tests/sql/staff_onboarding.sql; do
+for fixture in tests/sql/staff_administration.sql tests/sql/staff_onboarding.sql scripts/typed_finance_reference_assert.sql; do
   docker exec -i "$cid" psql -X -U finance_migrator -d finance_baseline -v ON_ERROR_STOP=1 -f - < "$fixture"
 done
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_baseline -v ON_ERROR_STOP=1 <<'SQL'

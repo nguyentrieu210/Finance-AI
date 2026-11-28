@@ -1,3 +1,4 @@
+ALTER TABLE finance.check_run ADD COLUMN financial_digest bytea CHECK(financial_digest IS NULL OR octet_length(financial_digest)=32);
 -- E10-E15: bind each cap to a confirmed document identity. The rule input
 -- includes current independently verified cap facts, not caller supplied totals.
 CREATE OR REPLACE FUNCTION finance.bound_finance_material(t uuid,c uuid,d uuid,rev uuid,pid uuid,v bigint,ids uuid[])
@@ -84,7 +85,7 @@ BEGIN
  SELECT * INTO STRICT hold FROM finance.reservation x WHERE (x.tenant_id,x.company_id,x.id)=(t,c,hold_id);
  mat:=finance.bound_finance_material(t,c,d,rev,pid,v,hold.resource_ids);
  IF mat IS NULL THEN RETURN '[]'::jsonb; END IF;
- SELECT coalesce(jsonb_agg(DISTINCT e),'[]'::jsonb) INTO amount_ev
+ SELECT coalesce(jsonb_agg(DISTINCT e ORDER BY e),'[]'::jsonb) INTO amount_ev
  FROM jsonb_array_elements(mat->'fields') fld CROSS JOIN LATERAL jsonb_array_elements(fld->'evidence') e;
  FOR k IN SELECT z FROM unnest(hold.resource_ids) z ORDER BY z LOOP
   SELECT * INTO STRICT fr FROM finance.financial_resource x WHERE (x.tenant_id,x.company_id,x.id)=(t,c,k);
@@ -96,7 +97,7 @@ BEGIN
   SELECT coalesce(sum(coalesce(l.line_remaining,r.remaining)),0) INTO held FROM finance.reservation_line l
    JOIN finance.reservation r ON (r.tenant_id,r.company_id,r.id)=(l.tenant_id,l.company_id,l.reservation_id)
    WHERE (l.tenant_id,l.company_id,l.resource_id)=(t,c,k) AND r.id<>hold_id AND r.state IN ('RESERVED','COMMITTED','PARTIAL');
-  SELECT coalesce(jsonb_agg(DISTINCT e),'[]'::jsonb) INTO ev
+  SELECT coalesce(jsonb_agg(DISTINCT e ORDER BY e),'[]'::jsonb) INTO ev
    FROM jsonb_array_elements((row_data->'evidence_ids')||amount_ev) e;
   IF jsonb_array_length(ev)>64 THEN RETURN '[]'::jsonb; END IF;
   prefix:=lower(fr.resource_kind);
@@ -108,9 +109,9 @@ BEGIN
    jsonb_build_object('path',prefix||'.consumed','value',fr.consumed::text,'currency',fr.currency,'verified',true,'evidence',ev),
    jsonb_build_object('path',prefix||'.other_holds','value',held::text,'currency',fr.currency,'verified',true,'evidence',ev));
  END LOOP;
- SELECT coalesce(jsonb_agg(DISTINCT e),'[]'::jsonb) INTO all_ev FROM jsonb_array_elements(all_ev) e;
+ SELECT coalesce(jsonb_agg(DISTINCT e ORDER BY e),'[]'::jsonb) INTO all_ev FROM jsonb_array_elements(all_ev) e;
  SELECT coalesce(jsonb_agg(jsonb_build_object('path',g.path,'value',g.amount::text,'currency',hold.currency,'verified',true,'evidence',g.evidence) ORDER BY g.path),'[]'::jsonb) INTO grouped FROM (
- SELECT x->>'path' path,sum((x->>'value')::numeric) amount,(SELECT coalesce(jsonb_agg(DISTINCT ev),'[]'::jsonb) FROM jsonb_array_elements(result) z CROSS JOIN LATERAL jsonb_array_elements(z->'evidence') ev WHERE z->>'path'=x->>'path') evidence
+ SELECT x->>'path' path,sum((x->>'value')::numeric) amount,(SELECT coalesce(jsonb_agg(DISTINCT ev ORDER BY ev),'[]'::jsonb) FROM jsonb_array_elements(result) z CROSS JOIN LATERAL jsonb_array_elements(z->'evidence') ev WHERE z->>'path'=x->>'path') evidence
  FROM jsonb_array_elements(result) x GROUP BY x->>'path') g;
  SELECT min((x->>'value')::numeric) INTO minimum FROM jsonb_array_elements(grouped) x WHERE x->>'path' LIKE '%.remaining';
  result:=grouped;
@@ -232,8 +233,8 @@ BEGIN
  revision_version:=p.dossier_version;
  IF NOT blocked THEN revision_version:=revision_version+1; END IF;
  digest:=sha256(convert_to(jsonb_build_array(material,structural,results)::text,'UTF8'));
- INSERT INTO finance.check_run(tenant_id,company_id,id,dossier_id,revision_id,dossier_version,actor_id,policy_id,business_day,input_hash,blocked)
- VALUES(t,c,p.run_id,p.dossier_id,p.revision_id,revision_version,p.actor_id,p.policy_id,p.business_day,digest,blocked);
+ INSERT INTO finance.check_run(tenant_id,company_id,id,dossier_id,revision_id,dossier_version,actor_id,policy_id,business_day,input_hash,blocked,financial_digest)
+ VALUES(t,c,p.run_id,p.dossier_id,p.revision_id,revision_version,p.actor_id,p.policy_id,p.business_day,digest,blocked,sha256(convert_to((material->'financial')::text,'UTF8')));
  FOR item IN SELECT value FROM jsonb_array_elements(structural) LOOP
  INSERT INTO finance.check_result(tenant_id,company_id,run_id,rule_key,outcome,severity,detail_code)
  VALUES(t,c,p.run_id,item.value->>'key',item.value->>'outcome',item.value->>'severity',item.value->>'detail');

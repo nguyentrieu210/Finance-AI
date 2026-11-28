@@ -69,6 +69,7 @@ pub fn evaluate(material:&serde_json::Value)->Result<Vec<ResultRow>, &'static st
             let mut evidence=field.evidence.clone();
             let value=match ty {
                 Type::Date=>compiler::parse_date(raw).ok().map(Value::Date),
+                Type::Decimal=>Amount::parse(raw).ok().map(Value::Decimal),
                 Type::Text if raw.len()<=256&&!raw.chars().any(char::is_control)=>Some(Value::Text(Arc::from(raw))),
                 Type::Money(expected) => {
                     let currency_path=format!("{}.currency",path.split('.').next().unwrap_or_default());

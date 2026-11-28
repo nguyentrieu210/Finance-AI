@@ -302,6 +302,7 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'published template unavailable' USING ERRCODE='23514'; END IF;
  reservation_id:=finance.current_bound_reservation(t,c,d,rev,cr.policy_id,v);
  IF reservation_id IS NULL THEN RAISE EXCEPTION 'active reservation required' USING ERRCODE='23514'; END IF;
+ IF cr.business_day IS DISTINCT FROM (clock_timestamp() AT TIME ZONE 'UTC')::date OR cr.financial_digest IS DISTINCT FROM sha256(convert_to(finance.runtime_verified_financial_facts(t,c,d,rev,cr.policy_id,v)::text,'UTF8')) THEN RAISE EXCEPTION 'financial facts changed; rerun preflight' USING ERRCODE='23514'; END IF;
  IF EXISTS(SELECT 1 FROM finance.upload_intent u WHERE u.tenant_id=t AND u.company_id=c
    AND u.dossier_id=d AND u.revision_id=rev AND u.state<>'CANCELLED'
    AND (u.state<>'FINALIZED' OR NOT EXISTS(SELECT 1 FROM finance.document_blob b
