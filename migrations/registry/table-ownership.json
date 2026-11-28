@@ -127,6 +127,7 @@
         "vendor_ref",
         "contract_ref",
         "contract_line",
+        "acceptance_claim",
         "invoice_ref",
         "invoice_line"
       ],

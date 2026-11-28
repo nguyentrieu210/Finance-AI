@@ -43,6 +43,7 @@ BEGIN
    seen:=array_append(seen,amendment_key);
    IF finance.reference_date(amendment,'effective_on')<=day THEN gross:=gross+(amendment->>'delta')::numeric; END IF;
   END LOOP;
+  IF detail ? 'acceptance_lines' AND NOT COALESCE(finance.valid_acceptance_lines(detail->'acceptance_lines'),false) THEN RETURN false; END IF;
   deduction:=finance.reference_nonnegative(detail,'retention')+finance.reference_nonnegative(detail,'advance_deduction');
   IF gross<0 OR cap<>least(gross,finance.reference_nonnegative(detail,'installment_gross'))-deduction
    OR used<>finance.reference_nonnegative(detail,'paid') THEN RETURN false; END IF;

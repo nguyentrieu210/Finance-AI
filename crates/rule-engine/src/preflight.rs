@@ -105,13 +105,14 @@ pub fn evaluate(material:&serde_json::Value)->Result<Vec<ResultRow>, &'static st
     for row in &material.financial {
         if !financial_seen.insert(&row.path)||row.evidence.len()>64 {return Err("invalid financial facts")}
         if !row.verified||row.evidence.is_empty(){continue}
-        let approved_path=row.path=="reference.fresh"||row.path.starts_with("finance.")||
+        let approved_path=matches!(row.path.as_str(),"reference.fresh"|"advance.overdue"|"matching.complete"|"matching.allocated_value"|"matching.line_count")||row.path.starts_with("finance.")||
             ["contract.","invoice.","advance.","budget."].iter().any(|prefix|row.path.starts_with(prefix)) &&
             [".remaining",".cap",".consumed",".other_holds"].iter().any(|suffix|row.path.ends_with(suffix));
         if !approved_path{ return Err("unapproved financial fact path") }
         let value=match types.get(&row.path){
             Some(Type::Money(currency)) if row.currency==Some(*currency)=>Amount::parse(&row.value).ok().map(|amount|Value::Money(Money{amount,currency:*currency})),
-            Some(Type::Boolean) if row.path=="reference.fresh"&&row.currency.is_none()&&row.value=="true"=>Some(Value::Boolean(true)),
+            Some(Type::Boolean) if row.currency.is_none()=>match row.value.as_str(){"true"=>Some(Value::Boolean(true)),"false"=>Some(Value::Boolean(false)),_=>None},
+            Some(Type::Decimal) if row.currency.is_none()=>Amount::parse(&row.value).ok().map(Value::Decimal),
             _=>None,
         };
         facts.insert(row.path.clone(),Fact{value,verified:true,fresh:true,evidence:row.evidence.clone()});

@@ -344,6 +344,7 @@ BEGIN
   canonical_manifest_hash,form_version_id,template_version_id,reservation_id,export_material
  ) VALUES(t,c,snap_id,d,rev,cr.policy_id,check_id,cr.input_hash,manifest,
   form_row.id,template_row.id,reservation_id,render_material);
+ PERFORM finance.seal_acceptance_claims(t,c,d,rev,cr.policy_id,reservation_id,snap_id);
  INSERT INTO finance.snapshot_member(tenant_id,company_id,snapshot_id,id,kind,resource_id,digest) VALUES
   (t,c,snap_id,gen_random_uuid(),'CHECK_RUN',check_id,cr.input_hash),
   (t,c,snap_id,gen_random_uuid(),'POLICY',policy_row.id,policy_row.source_digest),

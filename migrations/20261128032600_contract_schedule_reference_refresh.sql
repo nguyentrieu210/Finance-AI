@@ -135,11 +135,12 @@ BEGIN
  FROM finance.financial_resource x WHERE (x.tenant_id,x.company_id,x.resource_kind)=(t,c,'CONTRACT') AND x.reference_details->>'contract_key'=contract;
  IF n=0 OR gross<0 OR total>gross OR EXISTS(
  SELECT 1 FROM finance.financial_resource x WHERE (x.tenant_id,x.company_id,x.resource_kind)=(t,c,'CONTRACT') AND x.reference_details->>'contract_key'=contract
- AND (x.reference_details->>'vendor_key',x.reference_details->>'base_cap',x.reference_details->'addenda',x.reference_details->>'effective_from',x.reference_details->>'effective_until',x.reference_details->>'frozen_on')
- IS DISTINCT FROM (sample->>'vendor_key',sample->>'base_cap',sample->'addenda',sample->>'effective_from',sample->>'effective_until',sample->>'frozen_on'))
+ AND (x.reference_details->>'vendor_key',x.reference_details->>'base_cap',x.reference_details->'addenda',x.reference_details->>'effective_from',x.reference_details->>'effective_until',x.reference_details->>'frozen_on',x.reference_details->'acceptance_lines')
+ IS DISTINCT FROM (sample->>'vendor_key',sample->>'base_cap',sample->'addenda',sample->>'effective_from',sample->>'effective_until',sample->>'frozen_on',sample->'acceptance_lines'))
  THEN RAISE EXCEPTION 'inconsistent or overallocated contract schedule' USING ERRCODE='23514'; END IF;
  IF (SELECT count(DISTINCT x.currency) FROM finance.financial_resource x WHERE (x.tenant_id,x.company_id,x.resource_kind)=(t,c,'CONTRACT') AND x.reference_details->>'contract_key'=contract)<>1
  THEN RAISE EXCEPTION 'contract currency mismatch' USING ERRCODE='23514'; END IF;
+ PERFORM finance.assert_acceptance_refresh(t,c,contract,sample);
 END $$;
 REVOKE ALL ON FUNCTION finance.assert_contract_schedule(uuid,uuid,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION finance.assert_contract_schedule(uuid,uuid,text) TO finance_reference_writer,finance_workflow_writer;

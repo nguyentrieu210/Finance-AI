@@ -78,7 +78,7 @@ REVOKE ALL ON FUNCTION finance.bound_finance_material(uuid,uuid,uuid,uuid,uuid,b
 CREATE FUNCTION finance.runtime_verified_financial_facts(t uuid,c uuid,d uuid,rev uuid,pid uuid,v bigint)
 RETURNS jsonb LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog AS $$
 DECLARE hold_id uuid; hold finance.reservation%ROWTYPE; fr finance.financial_resource%ROWTYPE;
- snap finance.reference_snapshot%ROWTYPE; row_data jsonb; held numeric; result jsonb:='[]'; prefix text; k uuid; ev jsonb; minimum numeric; all_ev jsonb:='[]'; amount_ev jsonb; mat jsonb; grouped jsonb; fact record;
+ snap finance.reference_snapshot%ROWTYPE; row_data jsonb; held numeric; result jsonb:='[]'; prefix text; k uuid; ev jsonb; minimum numeric; all_ev jsonb:='[]'; amount_ev jsonb; mat jsonb; grouped jsonb; fact record; matched jsonb; overdue boolean:=false; advance_ev jsonb:='[]';
 BEGIN
  hold_id:=finance.current_bound_reservation(t,c,d,rev,pid,v);
  IF hold_id IS NULL THEN RETURN '[]'::jsonb; END IF;
@@ -101,6 +101,10 @@ BEGIN
    FROM jsonb_array_elements((row_data->'evidence_ids')||amount_ev) e;
   IF jsonb_array_length(ev)>64 THEN RETURN '[]'::jsonb; END IF;
   prefix:=lower(fr.resource_kind);
+  IF fr.resource_kind='ADVANCE' THEN
+   advance_ev:=advance_ev||ev;
+   overdue:=overdue OR (fr.cap-fr.consumed>0 AND (clock_timestamp() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date>COALESCE((fr.reference_details->'extension'->>'new_due')::date,(fr.reference_details->>'due_date')::date));
+  END IF;
   IF fr.cap-fr.consumed-held < (SELECT (z->>'allocated')::numeric FROM jsonb_array_elements(mat->'resources') z WHERE z->>'id'=fr.id::text) THEN RETURN '[]'::jsonb; END IF;
   all_ev:=all_ev||ev;
   result:=result||jsonb_build_array(
@@ -115,6 +119,13 @@ BEGIN
  FROM jsonb_array_elements(result) x GROUP BY x->>'path') g;
  SELECT min((x->>'value')::numeric) INTO minimum FROM jsonb_array_elements(grouped) x WHERE x->>'path' LIKE '%.remaining';
  result:=grouped;
+ IF jsonb_array_length(advance_ev)>0 THEN
+  SELECT coalesce(jsonb_agg(DISTINCT e ORDER BY e),'[]') INTO advance_ev FROM jsonb_array_elements(advance_ev) e;
+  result:=result||jsonb_build_array(jsonb_build_object('path','advance.overdue','value',overdue::text,'verified',true,'evidence',advance_ev));
+ END IF;
+ matched:=finance.verified_acceptance_material(t,c,d,rev,pid,hold_id);
+ IF matched IS NULL THEN RETURN '[]'::jsonb; END IF;
+ result:=result||(matched->'facts');
  IF minimum IS NULL OR jsonb_array_length(all_ev)>64 THEN RETURN '[]'::jsonb; END IF;
  RETURN result||jsonb_build_array(
   jsonb_build_object('path','finance.payable_cap','value',minimum::text,'currency',hold.currency,'verified',true,'evidence',all_ev),
@@ -223,7 +234,7 @@ BEGIN
  THEN outcome:='UNKNOWN'; detail:='CRITICAL_EVIDENCE_INCOMPLETE';
  ELSE outcome:='PASS'; detail:='CRITICAL_EVIDENCE_VERIFIED'; END IF;
  structural:=structural||jsonb_build_array(jsonb_build_object('key','critical.fields','outcome',outcome,'severity','BLOCK','detail',detail));
- IF finance.current_bound_reservation(t,c,p.dossier_id,p.revision_id,p.policy_id,p.dossier_version) IS NULL
+ IF jsonb_array_length(material->'financial')=0 OR finance.current_bound_reservation(t,c,p.dossier_id,p.revision_id,p.policy_id,p.dossier_version) IS NULL
  THEN outcome:='UNKNOWN'; detail:='NO_VERIFIED_CURRENT_RESERVATION'; ELSE outcome:='PASS'; detail:='SOURCE_BOUND_RESERVATION_VERIFIED'; END IF;
  structural:=structural||jsonb_build_array(jsonb_build_object('key','financial.reservation','outcome',outcome,'severity','BLOCK','detail',detail));
  -- Validate every worker result before writing any check rows.
