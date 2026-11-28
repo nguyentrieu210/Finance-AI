@@ -6802,6 +6802,229 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /v1/references/{item_id}/material:
+    get:
+      operationId: getReferenceMaterial
+      tags:
+      - E23
+      summary: getReferenceMaterial
+      x-release-gate: pilot
+      parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceMaterial'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found or out of scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or stale version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Business guard failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /v1/policies/{item_id}/configuration:
+    get:
+      operationId: getPolicyConfiguration
+      tags:
+      - E16
+      summary: getPolicyConfiguration
+      x-release-gate: pilot
+      parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyConfiguration'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found or out of scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or stale version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Business guard failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /v1/reservable-resources:
+    get:
+      operationId: listReservableResources
+      tags:
+      - E11
+      summary: listReservableResources
+      x-release-gate: pilot
+      parameters:
+      - name: cursor
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReservableResource'
+                  next_cursor:
+                    type: [string, 'null']
+                required:
+                - items
+                - next_cursor
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found or out of scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or stale version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Business guard failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /v1/risks:
     get:
       operationId: listRisks
@@ -10139,6 +10362,174 @@ components:
       - waivable
       - clause_id
       - definition
+    ReferenceImportRow:
+      type: object
+      additionalProperties: false
+      properties:
+        source_key:
+          type: string
+        currency:
+          type: string
+        cap:
+          type: string
+        consumed:
+          type: string
+        evidence_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+      required: [source_key, currency, cap, consumed, evidence_ids]
+    ReferenceMaterial:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        document_id:
+          type: string
+          format: uuid
+        source_digest:
+          type: string
+        kind:
+          type: string
+        coverage:
+          type: string
+        as_of:
+          type: string
+          format: date-time
+        fresh_until:
+          type: string
+          format: date-time
+        state:
+          type: string
+        maker_id:
+          type: string
+          format: uuid
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenceImportRow'
+        evidence_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+      required: [id, document_id, source_digest, kind, coverage, as_of, fresh_until, state, maker_id, records, evidence_ids]
+    ReservableResource:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        source_key:
+          type: string
+        snapshot_id:
+          type: string
+          format: uuid
+        currency:
+          type: string
+        cap:
+          type: string
+        consumed:
+          type: string
+        held:
+          type: string
+        available:
+          type: string
+        fresh_until:
+          type: string
+          format: date-time
+      required: [id, kind, source_key, snapshot_id, currency, cap, consumed, held, available, fresh_until]
+    PolicyConfiguration:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        company_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+        name:
+          type: string
+        state:
+          type: string
+        dossier_kind:
+          type: string
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type: string
+          format: date
+        author_id:
+          type: string
+          format: uuid
+        criticality_complete:
+          type: boolean
+        finance_gate:
+          type: [object, 'null']
+          additionalProperties: false
+          properties:
+            clause_key:
+              type: string
+            amount_path:
+              type: string
+            currency_path:
+              type: string
+            resource_kinds:
+              type: array
+              items:
+                type: string
+          required: [clause_key, amount_path, currency_path, resource_kinds]
+        clauses:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              key:
+                type: string
+              id:
+                type: string
+                format: uuid
+              excerpt:
+                type: string
+              page:
+                type: integer
+            required: [key, id, excerpt, page]
+        critical_fields:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              clause_key:
+                type: string
+              field_path:
+                type: string
+            required: [clause_key, field_path]
+        checklist:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              clause_key:
+                type: string
+              document_kind:
+                type: string
+              mandatory:
+                type: boolean
+            required: [clause_key, document_kind, mandatory]
+      required: [id, company_id, version, name, state, dossier_kind, effective_from, effective_to, author_id, criticality_complete, finance_gate, clauses, critical_fields, checklist]
     Reservation:
       type: object
       additionalProperties: false

@@ -29,6 +29,21 @@ fi
 FINANCE_MIGRATION_DATABASE_URL="$url" "$migrator" --apply
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_baseline -v ON_ERROR_STOP=1 <<'SQL'
 CREATE ROLE finance_probe NOLOGIN;
+-- New endpoints remain SECURITY DEFINER with scoped, non-login owners.
+DO $ DECLARE sig text; fn oid; BEGIN
+ FOREACH sig IN ARRAY ARRAY['finance.runtime_reservation_ledger(uuid,uuid,uuid,uuid,uuid,integer)',
+ 'finance.runtime_reference_import_material(uuid,uuid,uuid,uuid)',
+ 'finance.runtime_reservable_resources(uuid,uuid,uuid,uuid,integer)',
+ 'finance.runtime_policy_configuration(uuid,uuid,uuid,uuid)'] LOOP
+ fn:=to_regprocedure(sig);
+ IF fn IS NULL OR NOT (SELECT prosecdef FROM pg_proc WHERE oid=fn) OR has_function_privilege('finance_probe',fn,'EXECUTE')
+ OR NOT has_function_privilege('finance_runtime',fn,'EXECUTE')
+ THEN RAISE EXCEPTION 'missing or insecure finance read adapter %',sig; END IF;
+ END LOOP;
+ IF has_function_privilege('finance_runtime','finance.runtime_create_reference(uuid,uuid,uuid,uuid,text,timestamptz,text,text,uuid,uuid,uuid)','EXECUTE')
+ THEN RAISE EXCEPTION 'legacy fabricated reference API still executable'; END IF;
+END $;
+
 DO $$
 BEGIN
   IF (SELECT count(*) FROM public._sqlx_migrations) <> 78 OR NOT EXISTS (

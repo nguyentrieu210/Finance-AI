@@ -73,7 +73,7 @@ RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalo
 DECLARE result jsonb;
 BEGIN
  IF (t,c,a) IS DISTINCT FROM (finance.scope_tenant(),finance.scope_company(),finance.scope_actor()) THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
- SELECT jsonb_build_object('id',p.id,'company_id',p.company_id,'version',p.aggregate_version,'name',p.display_name,'state',p.state,
+ SELECT jsonb_build_object('id',p.id,'company_id',p.company_id,'version',p.aggregate_version,'name',coalesce(p.display_name,p.dossier_kind||' policy'),'state',p.state,
  'dossier_kind',p.dossier_kind,'effective_from',p.effective_from,'effective_to',p.effective_until,'author_id',p.author_id,
  'criticality_complete',p.criticality_complete,'finance_gate',p.finance_gate,
  'clauses',coalesce((SELECT jsonb_agg(jsonb_build_object('key',cl.clause_key,'id',cl.id,'excerpt',cl.excerpt,'page',cl.source_page) ORDER BY cl.clause_key) FROM finance.policy_clause cl WHERE (cl.tenant_id,cl.company_id,cl.policy_id)=(t,c,i)),'[]'::jsonb),
