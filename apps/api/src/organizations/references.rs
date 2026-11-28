@@ -29,7 +29,14 @@ pub(super) struct CreateBody {
     kind: String,
     as_of: String,
     coverage: String,
+    fresh_until: Option<String>,
+    #[serde(default)]
+    records: Vec<NormalizedResource>,
 }
+
+#[derive(Deserialize,Serialize)]
+#[serde(deny_unknown_fields)]
+struct NormalizedResource {source_key:String,currency:String,cap:String,consumed:String,evidence_ids:Vec<Uuid>}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -222,6 +229,13 @@ pub(super) async fn create(
         return error(StatusCode::BAD_REQUEST, correlation);
     };
     let as_of = parsed_as_of.with_timezone(&chrono::Utc).to_rfc3339();
+    let fresh_until=match body.fresh_until.as_deref(){
+        Some(raw)=>match chrono::DateTime::parse_from_rfc3339(raw){Ok(value) if value>parsed_as_of=>value.to_rfc3339(),_=>return error(StatusCode::BAD_REQUEST,correlation)},
+        None if body.records.is_empty()=>(parsed_as_of+chrono::TimeDelta::seconds(1)).to_rfc3339(),
+        None=>return error(StatusCode::BAD_REQUEST,correlation),
+    };
+    if body.records.len()>10000 {return error(StatusCode::BAD_REQUEST,correlation)}
+    let Ok(records)=serde_json::to_value(&body.records)else{return error(StatusCode::BAD_REQUEST,correlation)};
     match finance_financial::references::create(
         &state.runtime,
         &proof,
@@ -231,6 +245,8 @@ pub(super) async fn create(
             kind: &body.kind,
             as_of: &as_of,
             coverage: &body.coverage,
+            fresh_until:&fresh_until,
+            records:&records,
             reference_id: random_id(),
         },
     )

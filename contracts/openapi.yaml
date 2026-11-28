@@ -6465,6 +6465,37 @@ paths:
                   - COMPLETE
                   - PARTIAL
                   - UNKNOWN
+                fresh_until:
+                  type: string
+                  format: date-time
+                records:
+                  type: array
+                  maxItems: 10000
+                  items:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      source_key:
+                        type: string
+                      currency:
+                        type: string
+                      cap:
+                        type: string
+                      consumed:
+                        type: string
+                      evidence_ids:
+                        type: array
+                        minItems: 1
+                        maxItems: 50
+                        items:
+                          type: string
+                          format: uuid
+                    required:
+                    - source_key
+                    - currency
+                    - cap
+                    - consumed
+                    - evidence_ids
               required:
               - document_id
               - kind

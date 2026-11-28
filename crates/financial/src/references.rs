@@ -74,7 +74,7 @@ fn map_pg_error(error: sqlx::Error) -> Error {
         sqlx::Error::Database(db) => match db.code().as_deref() {
             Some("22023") => Error::InvalidInput,
             Some("42501") => Error::Forbidden,
-            Some("23505") => Error::Conflict,
+            Some("23505" | "23514") => Error::Conflict,
             _ => Error::Database(error),
         },
         _ => Error::Database(error),
@@ -236,6 +236,8 @@ pub struct CreateReference<'a> {
     pub kind: &'a str,
     pub as_of: &'a str,
     pub coverage: &'a str,
+    pub fresh_until: &'a str,
+    pub records: &'a serde_json::Value,
     pub reference_id: Uuid,
 }
 
@@ -271,7 +273,7 @@ pub async fn create(
     }
     recheck_authenticated(&mut tx, Some(proof)).await?;
     let row = sqlx::query_as::<_, ReferenceJob>(
-        "SELECT * FROM finance.runtime_create_reference($1,$2,$3,$4,$5,$6::text::timestamptz,$7,$8,$9,$10,$11)",
+        "SELECT * FROM finance.runtime_create_reference_bound($1,$2,$3,$4,$5,$6::text::timestamptz,$7,$8,$9,$10,$11,$12::text::timestamptz,$13)",
     )
     .bind(t)
     .bind(c)
@@ -284,6 +286,8 @@ pub async fn create(
     .bind(input.reference_id)
     .bind(command)
     .bind(correlation)
+    .bind(input.fresh_until)
+    .bind(input.records)
     .fetch_one(&mut *tx)
     .await
     .map_err(map_pg_error)?;

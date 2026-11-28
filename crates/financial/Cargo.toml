@@ -12,5 +12,6 @@ finance-core = { path = "../core" }
 finance-identity = { path = "../identity" }
 finance-permissions = { path = "../permissions" }
 serde.workspace = true
+serde_json.workspace = true
 sqlx.workspace = true
 uuid.workspace = true

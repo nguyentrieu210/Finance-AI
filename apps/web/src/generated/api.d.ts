@@ -8680,6 +8680,15 @@ export interface operations {
                     as_of: string;
                     /** @enum {string} */
                     coverage: "COMPLETE" | "PARTIAL" | "UNKNOWN";
+                    /** Format: date-time */
+                    fresh_until?: string;
+                    records?: {
+                        source_key: string;
+                        currency: string;
+                        cap: string;
+                        consumed: string;
+                        evidence_ids: string[];
+                    }[];
                 };
             };
         };
