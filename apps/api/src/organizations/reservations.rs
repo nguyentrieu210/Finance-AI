@@ -138,3 +138,19 @@ pub(super) async fn bind(State(state):State<Arc<OrganizationState>>,headers:Head
  response
  },Err(e)=>error(dossiers::status(e),correlation)}
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Release {reason:String}
+pub(super) async fn release(State(state):State<Arc<OrganizationState>>,headers:HeaderMap,Path((dossier,reservation)):Path<(Uuid,Uuid)>,body:Result<Json<Release>,axum::extract::rejection::JsonRejection>)->Response{
+ let correlation=random_id();
+ let Some(token)=headers.get("if-finance-version").and_then(|h|h.to_str().ok()).and_then(|s|VersionToken::parse(s).ok())else{return error(StatusCode::BAD_REQUEST,correlation)};
+ if token.target!=VersionTarget::Dossier||Uuid::from(token.resource_id)!=dossier{return error(StatusCode::BAD_REQUEST,correlation)}
+ let proof=match dossiers::authenticate_version(&state,&headers,correlation,Some(token.version)).await{Ok(p)=>p,Err(s)=>return error(s,correlation)};
+ let Some(key)=headers.get("idempotency-key").and_then(|h|h.to_str().ok()).and_then(|s|IdempotencyKey::parse(s).ok())else{return error(StatusCode::BAD_REQUEST,correlation)};
+ let Ok(Json(body))=body else{return error(StatusCode::BAD_REQUEST,correlation)};
+ match finance_financial::reservations::release(&state.runtime,&proof,&key,dossier,reservation,&body.reason).await{
+ Ok(row)=>{let version=VersionToken{target:VersionTarget::Dossier,resource_id:ResourceId::try_from(dossier).expect("validated dossier"),version:Version::try_from(row.dossier_version).expect("stored version")};
+ let mut response=Json(row).into_response();response.headers_mut().insert("finance-version",HeaderValue::from_str(&version.to_string()).expect("canonical"));response.headers_mut().insert(header::CACHE_CONTROL,HeaderValue::from_static("no-store"));response},
+ Err(e)=>error(dossiers::status(e),correlation)}
+}

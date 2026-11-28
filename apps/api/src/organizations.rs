@@ -582,6 +582,7 @@ pub fn router(state: OrganizationState) -> Router {
             "/v1/dossiers/{dossier_id}/reservations",
             get(reservations::list).post(reservations::bind),
         )
+        .route("/v1/dossiers/{dossier_id}/reservations/{reservation_id}/release", axum::routing::post(reservations::release))
         .route(
             "/v1/dossiers/{dossier_id}/fields/decisions",
             axum::routing::post(fields::decide),

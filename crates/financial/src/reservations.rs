@@ -97,3 +97,18 @@ pub async fn bind(pool: &PgPool, proof: &AuthenticatedCommand, key: &Idempotency
     tx.commit().await?;
     Ok(row)
 }
+
+pub async fn release(pool:&PgPool,proof:&AuthenticatedCommand,key:&IdempotencyKey,dossier:Uuid,reservation:Uuid,reason:&str)->Result<BindingReceipt,Error>{
+    let version=i64::from(proof.context().expected_version.ok_or(Error::InvalidInput)?);
+    let(t,c,a)=binding(proof)?;
+    if dossier.is_nil()||reservation.is_nil()||reason.trim().is_empty()||reason.len()>2048{return Err(Error::InvalidInput)}
+    let mut tx=scoped_transaction(pool,proof.context()).await?;
+    require_role(&mut tx,proof.context(),Role::FinanceApprover).await.map_err(|e|match e{GrantError::Forbidden=>Error::Forbidden,GrantError::Database(e)=>Error::Database(e)})?;
+    recheck_authenticated(&mut tx,Some(proof)).await?;
+    let command:Uuid=proof.context().command.into();
+    let correlation:Uuid=proof.context().correlation.into();
+    let row=sqlx::query_as::<_,BindingReceipt>("SELECT * FROM finance.runtime_release_unsealed_reservation($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
+        .bind(t).bind(c).bind(a).bind(dossier).bind(version).bind(reservation).bind(reason).bind(key.as_str()).bind(command).bind(correlation)
+        .fetch_one(&mut *tx).await.map_err(|e|match e.as_database_error().and_then(|d|d.code()).as_deref(){Some("42501")=>Error::Forbidden,Some("22023")=>Error::InvalidInput,Some("23514"|"23505")=>Error::Conflict,_=>Error::Database(e)})?;
+    recheck_authenticated(&mut tx,Some(proof)).await?;tx.commit().await?;Ok(row)
+}
