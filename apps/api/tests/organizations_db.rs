@@ -3167,13 +3167,9 @@ async fn complete_api_contracts_real_database() {
     );
 
     // 3. Template preview
-    let template_id = "00000000-0000-0000-0000-000000001804";
-    let (_, tpl_cur) = request(
-        &app,
-        &format!("/v1/templates/{template_id}"),
-        Some(&policy_admin),
-    )
-    .await;
+    let (_, tpl_page) = request(&app, "/v1/templates", Some(&policy_admin)).await;
+    let tpl_cur = &tpl_page["items"][0];
+    let template_id = tpl_cur["id"].as_str().unwrap();
     let tpl_v = format!(
         "\"v1:template:{template_id}:{}\"",
         tpl_cur["version"].as_i64().unwrap()
