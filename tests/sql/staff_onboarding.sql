@@ -13,6 +13,19 @@ SELECT set_config('finance.tenant_id',:'t',true),set_config('finance.company_id'
 SET LOCAL ROLE finance_runtime;
 SELECT finance.staff_admin_save(:'t',:'c',:'a',gen_random_uuid(),gen_random_uuid(),'invite','invitations',:'i',NULL,'{"email":"new@example.invalid"}');
 SELECT finance.staff_invitation_issue(:'t',:'c',:'a',:'i',0,true);
+DO $$ BEGIN
+ IF has_table_privilege('finance_runtime','finance.staff_invitation_delivery','SELECT') THEN RAISE EXCEPTION 'runtime can read raw invitation outbox'; END IF;
+END $$;
+SELECT delivery_id AS delivery_id FROM finance.staff_invitation_delivery_claim('00000000-0000-0000-0000-000000000999',10) \gset
+SELECT finance.staff_invitation_delivery_complete('00000000-0000-0000-0000-000000000999',:'delivery_id',false,'NETWORK');
+RESET ROLE;
+UPDATE finance.staff_invitation_delivery SET next_attempt_at=clock_timestamp() WHERE tenant_id=:'t' AND company_id=:'c' AND invitation_id=:'i';
+SET LOCAL ROLE finance_runtime;
+SELECT delivery_id AS retry_delivery_id FROM finance.staff_invitation_delivery_claim('00000000-0000-0000-0000-000000000998',10) \gset
+SELECT finance.staff_invitation_delivery_complete('00000000-0000-0000-0000-000000000998',:'retry_delivery_id',true,NULL);
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM finance.staff_admin_list('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000001000','invitations','00000000-0000-0000-0000-000000000000',100) x WHERE x->>'delivery_status'='SENT') THEN RAISE EXCEPTION 'admin list omitted delivery status'; END IF;
+END $$;
 RESET ROLE;
 SET LOCAL ROLE finance_identity_lookup;
 SELECT set_config('finance.identity_issuer','https://synthetic.invalid',true),set_config('finance.identity_subject','new-employee',true);

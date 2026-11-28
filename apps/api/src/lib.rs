@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+mod invitation_mailer;
 use axum::{Json, Router, http::StatusCode, routing::get};
 use finance_shared::API_LIVENESS;
 

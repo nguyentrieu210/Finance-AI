@@ -213,6 +213,7 @@ pub async fn build(config: Config) -> Result<Router, Error> {
     .map_err(|_| Error::Identity)?;
     let store = Arc::new(VerifierStore::new(verifier));
     let runtime = connect(&config.runtime_url, "finance_runtime").await?;
+    crate::invitation_mailer::spawn(runtime.clone());
     let lookup = connect(&config.lookup_url, "finance_identity_lookup").await?;
     let valid_until = Arc::new(AtomicU64::new(
         time.checked_add(config.jwks_ttl).ok_or(Error::Config)?,

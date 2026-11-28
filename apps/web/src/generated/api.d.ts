@@ -637,6 +637,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/organizations/onboarding/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit verified email claim for an issued invitation */
+        post: operations["claimStaffInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/onboarding/invitations/{id}/issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue or revoke a seven-day employee invitation */
+        post: operations["issueStaffInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/onboarding/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List employee requests for organization administrator approval */
+        get: operations["listStaffOnboardingRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/onboarding/requests/{id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve or reject a verified employee request */
+        post: operations["decideStaffOnboardingRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/organizations/staff/{kind}": {
         parameters: {
             query?: never;
@@ -1457,6 +1529,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        StaffOnboardingRequest: {
+            /** Format: uuid */
+            id: string;
+            email: string;
+            display_name?: string | null;
+            /** @enum {string} */
+            status: "PENDING" | "APPROVED" | "REJECTED";
+            version: number;
+            /** Format: date-time */
+            created_at?: string;
+        };
         /** @description Scope-specific staff configuration record. Fields vary by resource kind. */
         StaffConfigurationRow: {
             /** Format: uuid */
@@ -1465,7 +1548,9 @@ export interface components {
             name?: string;
             email?: string;
             /** @enum {string} */
-            status?: "DRAFT" | "CANCELLED";
+            status?: "DRAFT" | "ISSUED" | "ACCEPTED" | "CANCELLED" | "PENDING" | "APPROVED" | "REJECTED";
+            /** @enum {string} */
+            delivery_status?: "NOT_QUEUED" | "QUEUED" | "SENDING" | "SENT" | "FAILED" | "CANCELLED";
             active?: boolean;
             /** Format: uuid */
             actor_id?: string;
@@ -6282,6 +6367,224 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Error"];
                 };
+            };
+        };
+    };
+    claimStaffInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pending organization administrator decision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** @constant */
+                        status: "PENDING";
+                    };
+                };
+            };
+            /** @description Authentication required or token invalid */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No active invitation matches the verified email */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Identity or database dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    issueStaffInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expected_version: number;
+                    issue: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Invitation state version changed; email delivery is asynchronous */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Organization administrator required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Version conflict or expired invitation */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Database dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listStaffOnboardingRequests: {
+        parameters: {
+            query?: {
+                after?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped onboarding requests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["StaffOnboardingRequest"][];
+                        /** Format: uuid */
+                        next_after: string | null;
+                    };
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Organization administrator required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Database dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    decideStaffOnboardingRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expected_version: number;
+                    approve: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Decision recorded; approval grants requester access only */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Organization administrator required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Version conflict or request expired */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Database dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -20,19 +20,28 @@
       "owner": "A02",
       "default_scope": "tenant",
       "tables": [
-        "identity_subject"
+        "identity_subject",
+        "staff_invitation",
+        "staff_invitation_delivery",
+        "staff_onboarding_request"
       ],
-      "invariants": "Issuer+subject unique; verified mapping only."
+      "invariants": "Issuer+subject unique; verified mapping only. Invitations and onboarding are email-verified, admin-approved and create no automatic elevated grants. Delivery uses tenant/company-scoped durable outbox, short claim lease, bounded retry and static error codes; no credential or token stored."
     },
     {
       "owner": "A03",
       "default_scope": "company",
       "tables": [
+        "delegation",
         "membership",
         "permission",
-        "delegation"
+        "staff_admin_change",
+        "staff_department",
+        "staff_position",
+        "staff_role",
+        "staff_role_assignment",
+        "staff_role_revision"
       ],
-      "invariants": "Current scope, validity, no self approval; scoped foreign keys."
+      "invariants": "Current scope, validity, no self approval; scoped foreign keys. Staff role assignments pin revisions and department scope; admin changes are versioned and idempotent."
     },
     {
       "owner": "A04",

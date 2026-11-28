@@ -38,6 +38,7 @@ sha2 = "=0.10.9"
 sqlx.workspace = true
 uuid.workspace = true
 axum.workspace = true
+reqwest = { version = "=0.12.12", default-features = false, features = ["json", "rustls-tls"] }
 tokio = { workspace = true, features = ["time"] }
 finance-shared = { path = "../../crates/shared" }
 

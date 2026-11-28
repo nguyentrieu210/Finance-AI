@@ -4305,6 +4305,162 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /v1/organizations/onboarding/claim:
+    post:
+      operationId: claimStaffInvitation
+      tags: [E02, E03]
+      summary: Submit verified email claim for an issued invitation
+      x-release-gate: pilot
+      security:
+      - oidc: []
+      responses:
+        '200':
+          description: Pending organization administrator decision
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    const: PENDING
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: No active invitation matches the verified email
+        '503':
+          description: Identity or database dependency unavailable
+  /v1/organizations/onboarding/invitations/{id}/issue:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: issueStaffInvitation
+      tags: [E02, E03]
+      summary: Issue or revoke a seven-day employee invitation
+      x-release-gate: pilot
+      security:
+      - oidc: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_version, issue]
+              properties:
+                expected_version:
+                  type: integer
+                  minimum: 0
+                issue:
+                  type: boolean
+      responses:
+        '200':
+          description: Invitation state version changed; email delivery is asynchronous
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Organization administrator required
+        '409':
+          description: Version conflict or expired invitation
+        '503':
+          description: Database dependency unavailable
+  /v1/organizations/onboarding/requests:
+    get:
+      operationId: listStaffOnboardingRequests
+      tags: [E02, E03]
+      summary: List employee requests for organization administrator approval
+      x-release-gate: pilot
+      security:
+      - oidc: []
+      parameters:
+      - name: after
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+      responses:
+        '200':
+          description: Scoped onboarding requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_after]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StaffOnboardingRequest'
+                  next_after:
+                    type: [string, 'null']
+                    format: uuid
+        '401':
+          description: Authentication required
+        '403':
+          description: Organization administrator required
+        '503':
+          description: Database dependency unavailable
+  /v1/organizations/onboarding/requests/{id}/decide:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: decideStaffOnboardingRequest
+      tags: [E02, E03]
+      summary: Approve or reject a verified employee request
+      x-release-gate: pilot
+      security:
+      - oidc: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_version, approve]
+              properties:
+                expected_version:
+                  type: integer
+                  minimum: 0
+                approve:
+                  type: boolean
+      responses:
+        '200':
+          description: Decision recorded; approval grants requester access only
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Organization administrator required
+        '409':
+          description: Version conflict or request expired
+        '503':
+          description: Database dependency unavailable
   /v1/organizations/staff/{kind}:
     parameters:
     - name: kind
@@ -9246,6 +9402,26 @@ components:
       type: openIdConnect
       openIdConnectUrl: https://identity.example.invalid/.well-known/openid-configuration
   schemas:
+    StaffOnboardingRequest:
+      type: object
+      required: [id, email, status, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        display_name:
+          type: [string, 'null']
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+        version:
+          type: integer
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
     StaffConfigurationRow:
       type: object
       description: Scope-specific staff configuration record. Fields vary by resource kind.
@@ -9263,7 +9439,10 @@ components:
           type: string
         status:
           type: string
-          enum: [DRAFT, CANCELLED]
+          enum: [DRAFT, ISSUED, ACCEPTED, CANCELLED, PENDING, APPROVED, REJECTED]
+        delivery_status:
+          type: string
+          enum: [NOT_QUEUED, QUEUED, SENDING, SENT, FAILED, CANCELLED]
         active:
           type: boolean
         actor_id:
