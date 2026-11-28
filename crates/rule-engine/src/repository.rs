@@ -48,6 +48,8 @@ fn registry() -> BTreeMap<String, Type> {
         ("advance.remaining", Type::Money(vnd)),
         ("invoice.quantity", Type::Decimal),
         ("invoice.date", Type::Date),
+        ("invoice.number", Type::Text),
+        ("invoice.supplier", Type::Text),
         ("invoice.verified", Type::Boolean),
         ("vendor.verified", Type::Boolean),
         ("reference.fresh", Type::Boolean),
@@ -381,6 +383,8 @@ pub struct Simulation {
 #[serde(deny_unknown_fields)]
 struct CorpusFact {
     value: Option<Value>,
+    #[serde(default)]
+    verified_absence: bool,
     verified: bool,
     fresh: bool,
     evidence: Vec<finance_shared::ids::EvidenceId>,
@@ -408,8 +412,24 @@ fn corpus_facts(json: &str) -> Result<Vec<BTreeMap<String, compiler::Fact>>, Err
                     if raw.evidence.len() > 64 {
                         return Err(Error::InvalidInput);
                     }
+                    if raw.verified_absence
+                        && (raw.value.as_ref().is_some_and(|v| !v.is_null())
+                            || !raw.verified
+                            || !raw.fresh
+                            || raw.evidence.is_empty())
+                    {
+                        return Err(Error::InvalidInput);
+                    }
                     let value = match (ty, raw.value) {
+                        (_, None | Some(Value::Null)) if raw.verified_absence => {
+                            Some(compiler::Value::Absent(*ty))
+                        }
                         (_, None | Some(Value::Null)) => None,
+                        (Type::Text, Some(Value::String(s)))
+                            if s.len() <= 256 && !s.chars().any(char::is_control) =>
+                        {
+                            Some(compiler::Value::Text(std::sync::Arc::from(s)))
+                        }
                         (Type::Boolean, Some(Value::Bool(b))) => Some(compiler::Value::Boolean(b)),
                         (Type::Date, Some(Value::String(s))) => Some(compiler::Value::Date(
                             compiler::parse_date(&s).map_err(|_| Error::InvalidInput)?,
@@ -631,4 +651,32 @@ pub async fn get_simulation(
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(result)
+}
+
+#[cfg(test)]
+mod corpus_tests {
+    use super::*;
+
+    #[test]
+    fn corpus_preserves_explicit_absence_without_inventing_missing_values() {
+        let evidence = "00000000-0000-0000-0000-000000000001";
+        let data = serde_json::json!([{
+            "invoice.date": {"value": null, "verified": true, "fresh": true, "evidence": [evidence]},
+            "invoice.number": {"value": null, "verified_absence": true, "verified": true, "fresh": true, "evidence": [evidence]},
+            "invoice.supplier": {"value": "Synthetic supplier", "verified": true, "fresh": true, "evidence": [evidence]}
+        }]);
+        let rows = corpus_facts(&data.to_string()).unwrap();
+        assert_eq!(rows[0]["invoice.date"].value, None);
+        assert_eq!(
+            rows[0]["invoice.number"].value,
+            Some(compiler::Value::Absent(Type::Text))
+        );
+        assert_eq!(
+            rows[0]["invoice.supplier"].value,
+            Some(compiler::Value::Text(std::sync::Arc::from("Synthetic supplier")))
+        );
+        let mut invalid = data;
+        invalid[0]["invoice.number"]["fresh"] = serde_json::json!(false);
+        assert!(corpus_facts(&invalid.to_string()).is_err());
+    }
 }

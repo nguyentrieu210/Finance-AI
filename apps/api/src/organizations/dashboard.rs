@@ -37,6 +37,10 @@ pub(super) async fn get(
         Ok(counts) => counts,
         Err(e) => return error(dossiers::status(e), correlation),
     };
+    let review = match finance_workflow::analytics::review_history_counts(&state.runtime, &proof).await {
+        Ok(counts) => counts,
+        Err(e) => return error(dossiers::status(e), correlation),
+    };
     let Some(epoch) = now() else {
         return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
     };
@@ -45,6 +49,7 @@ pub(super) async fn get(
     };
     let as_of = as_of.to_rfc3339();
     let mut items = finance_analytics::dashboard::from_state_counts(counts, &as_of);
+    items.extend(finance_analytics::dashboard::from_review_history(review, &as_of));
     items.truncate(limit as usize);
     let mut response = Json(Page { items }).into_response();
     response

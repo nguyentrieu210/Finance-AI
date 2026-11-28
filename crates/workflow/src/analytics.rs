@@ -56,3 +56,45 @@ pub async fn state_counts(
     tx.commit().await?;
     Ok(counts)
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, sqlx::FromRow)]
+pub struct ReviewHistoryCounts {
+    pub accepted: i64,
+    pub first_pass: i64,
+    pub returned_cases: i64,
+    pub unknown_accepted: i64,
+}
+
+/// Read an immutable review-history projection. Cases without a matched
+/// decision are explicitly excluded from first-pass KPI, not treated as zero.
+pub async fn review_history_counts(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+) -> Result<ReviewHistoryCounts, Error> {
+    let ResourceScope::Company(CompanyScope { tenant, company }) = proof.context().scope else {
+        return Err(Error::Forbidden);
+    };
+    let Principal::User(actor) = proof.context().actor else {
+        return Err(Error::Forbidden);
+    };
+    let (t, c, a): (Uuid, Uuid, Uuid) = (tenant.into(), company.into(), actor.into());
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(|e| match e {
+            GrantError::Forbidden => Error::Forbidden,
+            GrantError::Database(e) => Error::Database(e),
+        })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let counts = sqlx::query_as::<_, ReviewHistoryCounts>(
+        "SELECT * FROM finance.runtime_review_history_counts($1,$2,$3)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .fetch_one(&mut *tx)
+    .await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(counts)
+}
