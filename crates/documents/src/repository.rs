@@ -313,11 +313,13 @@ pub async fn download_original_with_storage(
             original = super::storage_runtime::download(
                 &mut tx,
                 storage,
-                t,
-                c,
-                a,
-                dossier,
-                document,
+                super::storage_runtime::DocumentScope {
+                    tenant: t,
+                    company: c,
+                    actor: a,
+                    dossier,
+                    document,
+                },
                 command,
                 correlation,
             )
@@ -561,11 +563,13 @@ pub async fn finalize_with_storage(
         super::storage_runtime::attach_finalized(
             &mut tx,
             storage,
-            t,
-            c,
-            a,
-            input.dossier,
-            input.document,
+            super::storage_runtime::DocumentScope {
+                tenant: t,
+                company: c,
+                actor: a,
+                dossier: input.dossier,
+                document: input.document,
+            },
             input.generation,
             row.id,
         )

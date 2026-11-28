@@ -66,17 +66,29 @@ pub(super) async fn grant_metadata(
     .ok_or(Error::Conflict)
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct DocumentScope {
+    pub tenant: Uuid,
+    pub company: Uuid,
+    pub actor: Uuid,
+    pub dossier: Uuid,
+    pub document: Uuid,
+}
+
 pub(super) async fn attach_finalized(
     tx: &mut Transaction<'_, Postgres>,
     storage: &S3,
-    t: Uuid,
-    c: Uuid,
-    a: Uuid,
-    d: Uuid,
-    doc: Uuid,
+    scope: DocumentScope,
     g: i64,
     job: Uuid,
 ) -> Result<(), Error> {
+    let DocumentScope {
+        tenant: t,
+        company: c,
+        actor: a,
+        dossier: d,
+        document: doc,
+    } = scope;
     let metadata = grant_metadata(tx, t, c, a, d, doc, g).await?;
     if metadata.object_version.is_some() {
         return Ok(());
@@ -105,14 +117,17 @@ pub(super) async fn attach_finalized(
 pub(super) async fn download(
     tx: &mut Transaction<'_, Postgres>,
     storage: &S3,
-    t: Uuid,
-    c: Uuid,
-    a: Uuid,
-    d: Uuid,
-    doc: Uuid,
+    scope: DocumentScope,
     command: Uuid,
     correlation: Uuid,
 ) -> Result<Option<Original>, Error> {
+    let DocumentScope {
+        tenant: t,
+        company: c,
+        actor: a,
+        dossier: d,
+        document: doc,
+    } = scope;
     let metadata = sqlx::query_as::<_, Metadata>(
         "SELECT * FROM finance.runtime_s3_download($1,$2,$3,$4,$5,$6,$7)",
     )

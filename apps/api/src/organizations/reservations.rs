@@ -168,11 +168,13 @@ pub(super) async fn bind(
         &state.runtime,
         &proof,
         &key,
-        dossier,
-        body.policy_id,
-        &body.resource_ids,
-        &body.reason,
-        random_id(),
+        finance_financial::reservations::BindingInput {
+            dossier,
+            policy: body.policy_id,
+            resources: &body.resource_ids,
+            reason: &body.reason,
+            id: random_id(),
+        },
     )
     .await
     {

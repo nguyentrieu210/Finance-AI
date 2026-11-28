@@ -81,7 +81,12 @@ fn encode(s: &str) -> String {
 }
 
 fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    use std::fmt::Write;
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        write!(output, "{b:02x}").expect("write to string");
+    }
+    output
 }
 
 fn mac(key: &[u8], message: &str) -> Vec<u8> {
@@ -242,10 +247,11 @@ impl S3 {
             return Err(Error::Metadata);
         }
         let signed = headers.keys().copied().collect::<Vec<_>>().join(";");
-        let canonical_headers = headers
-            .iter()
-            .map(|(k, v)| format!("{k}:{v}\n"))
-            .collect::<String>();
+        use std::fmt::Write;
+        let mut canonical_headers = String::new();
+        for (k, v) in &headers {
+            writeln!(canonical_headers, "{k}:{v}").expect("write to string");
+        }
         let day = now.format("%Y%m%d").to_string();
         let stamp = now.format("%Y%m%dT%H%M%SZ").to_string();
         let scope = format!("{day}/{}/s3/aws4_request", self.region);

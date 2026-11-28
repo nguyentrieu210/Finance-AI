@@ -94,16 +94,27 @@ pub struct BindingReceipt {
     pub id: Uuid,
     pub dossier_version: i64,
 }
+pub struct BindingInput<'a> {
+    pub dossier: Uuid,
+    pub policy: Uuid,
+    pub resources: &'a [Uuid],
+    pub reason: &'a str,
+    pub id: Uuid,
+}
+
 pub async fn bind(
     pool: &PgPool,
     proof: &AuthenticatedCommand,
     key: &IdempotencyKey,
-    dossier: Uuid,
-    policy: Uuid,
-    resources: &[Uuid],
-    reason: &str,
-    id: Uuid,
+    input: BindingInput<'_>,
 ) -> Result<BindingReceipt, Error> {
+    let BindingInput {
+        dossier,
+        policy,
+        resources,
+        reason,
+        id,
+    } = input;
     let version = i64::from(
         proof
             .context()

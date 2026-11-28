@@ -85,7 +85,12 @@ struct Event {
     reverses: Option<Uuid>,
 }
 fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    use std::fmt::Write;
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        write!(output, "{b:02x}").expect("write to string");
+    }
+    output
 }
 fn decode(s: &str) -> Result<Vec<u8>, Error> {
     if s.len() != 64

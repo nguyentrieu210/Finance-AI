@@ -87,6 +87,10 @@ pub async fn load(pool: &PgPool, lease: Lease) -> Result<Vec<u8>, RunFailure> {
     {
         return Err(RunFailure::Permanent);
     }
-    let hex = bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    use std::fmt::Write;
+    let mut hex = String::with_capacity(bytes.len() * 2);
+    for b in &bytes {
+        write!(hex, "{b:02x}").expect("write to string");
+    }
     serde_json::to_vec(&json!({"material":row.material,"format":row.format,"template_hex":hex,"template_sha256":row.sha256})).map_err(|_|RunFailure::Permanent)
 }

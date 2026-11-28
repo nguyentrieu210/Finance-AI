@@ -421,11 +421,11 @@ async fn input_bytes(
         .object_version
         .as_deref()
         .ok_or(RunFailure::Permanent)?;
-    let hash = source
-        .source_digest
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect::<String>();
+    use std::fmt::Write;
+    let mut hash = String::with_capacity(source.source_digest.len() * 2);
+    for b in &source.source_digest {
+        write!(hash, "{b:02x}").expect("write to string");
+    }
     let object = Object {
         binding: Binding {
             scope: lease.scope(),

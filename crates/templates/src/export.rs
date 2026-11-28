@@ -358,7 +358,17 @@ async fn complete_inner(
         .bind(i32::try_from(artifacts.len()).map_err(|_| WorkerError::InvalidManifest)?)
         .bind(total_bytes);
     let result = if verified {
-        let manifest=artifacts.iter().map(|x|serde_json::json!({"name":x.name,"bytes":x.bytes,"sha256":x.expected.as_bytes().iter().map(|b|format!("{b:02x}")).collect::<String>()})).collect::<Vec<_>>();
+        use std::fmt::Write;
+        let manifest = artifacts
+            .iter()
+            .map(|x| {
+                let mut digest = String::with_capacity(64);
+                for b in x.expected.as_bytes() {
+                    write!(digest, "{b:02x}").expect("write to string");
+                }
+                serde_json::json!({"name":x.name,"bytes":x.bytes,"sha256":digest})
+            })
+            .collect::<Vec<_>>();
         query
             .bind(serde_json::Value::Array(manifest))
             .fetch_one(&mut *tx)
