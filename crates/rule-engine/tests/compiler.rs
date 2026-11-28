@@ -207,3 +207,65 @@ fn exists_distinguishes_verified_absence_from_unknown() {
     fact.value = Some(Value::Date(chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()));
     assert_eq!(compiler::evaluate(&compiled, &facts).outcome, Outcome::Pass);
 }
+
+#[test]
+fn set_membership_and_count_require_known_coverage() {
+    use std::collections::BTreeSet;
+    use std::sync::Arc;
+
+    let set = json!({"literal": ["A", "B"], "value_type": "set"});
+    let a = json!({"literal": "A", "value_type": "string"});
+    assert_eq!(outcome(call("in", vec![a.clone(), set.clone()])), Outcome::Pass);
+    assert_eq!(
+        outcome(call("eq", vec![call("count", vec![set]), decimal("2")])),
+        Outcome::Pass
+    );
+    assert_eq!(
+        outcome(call(
+            "eq",
+            vec![
+                call("count", vec![json!({"literal": [], "value_type": "set"})]),
+                decimal("0")
+            ]
+        )),
+        Outcome::Pass
+    );
+    let registry = BTreeMap::from([("docs.kinds".to_owned(), Type::Set)]);
+    let compiled = compiler::compile(
+        &rule(call("in", vec![a, json!({"ref": "docs.kinds"})])),
+        &registry,
+    )
+    .unwrap();
+    let mut facts = BTreeMap::new();
+    assert_eq!(compiler::evaluate(&compiled, &facts).outcome, Outcome::Unknown);
+    facts.insert(
+        "docs.kinds".to_owned(),
+        Fact {
+            value: Some(Value::Set(Arc::new(BTreeSet::new()))),
+            verified: true,
+            fresh: true,
+            evidence: vec![EvidenceId::try_from(Uuid::from_u128(3)).unwrap()],
+        },
+    );
+    assert_eq!(compiler::evaluate(&compiled, &facts).outcome, Outcome::Fail);
+    facts.get_mut("docs.kinds").unwrap().fresh = false;
+    assert_eq!(compiler::evaluate(&compiled, &facts).outcome, Outcome::Unknown);
+}
+
+#[test]
+fn duplicate_set_items_and_cross_type_membership_rejected() {
+    let bad_set = json!({"literal": ["A", "A"], "value_type": "set"});
+    let text = json!({"literal": "A", "value_type": "string"});
+    assert_eq!(
+        compiler::compile(&rule(call("in", vec![text, bad_set])), &BTreeMap::new()).err(),
+        Some(Error::InvalidLiteral)
+    );
+    assert_eq!(
+        compiler::compile(
+            &rule(call("in", vec![decimal("1"), json!({"literal": ["1"], "value_type": "set"})])),
+            &BTreeMap::new()
+        )
+        .err(),
+        Some(Error::TypeMismatch)
+    );
+}

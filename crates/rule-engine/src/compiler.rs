@@ -7,7 +7,8 @@ use finance_shared::{
     money::{Amount, Currency, Money},
 };
 use serde::Deserialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Type {
@@ -15,23 +16,41 @@ pub enum Type {
     Money(Currency),
     Decimal,
     Date,
+    Text,
+    Enum,
+    Set,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Value {
     Boolean(bool),
     Money(Money),
     Decimal(Amount),
     Date(NaiveDate),
+    Text(Arc<str>),
+    Enum(Arc<str>),
+    Set(Arc<BTreeSet<String>>),
 }
 
 impl Value {
-    fn ty(self) -> Type {
+    fn ty(&self) -> Type {
         match self {
             Self::Boolean(_) => Type::Boolean,
             Self::Money(m) => Type::Money(m.currency),
             Self::Decimal(_) => Type::Decimal,
             Self::Date(_) => Type::Date,
+            Self::Text(_) => Type::Text,
+            Self::Enum(_) => Type::Enum,
+            Self::Set(_) => Type::Set,
+        }
+    }
+
+    fn valid(&self) -> bool {
+        match self {
+            Self::Text(s) => valid_text(s),
+            Self::Enum(s) => valid_text(s) && !s.is_empty(),
+            Self::Set(items) => valid_set(items),
+            _ => true,
         }
     }
 }
@@ -123,6 +142,8 @@ enum Op {
     Div,
     Exists,
     DateDiff,
+    In,
+    Count,
 }
 
 enum Node {
@@ -189,10 +210,41 @@ pub(crate) fn parse_date(value: &str) -> Result<NaiveDate, Error> {
     Ok(date)
 }
 
+fn valid_text(s: &str) -> bool {
+    s.len() <= 256 && !s.chars().any(char::is_control)
+}
+
+fn valid_set(items: &BTreeSet<String>) -> bool {
+    items.len() <= 5000
+        && items.iter().all(|s| valid_text(s))
+        && items.iter().map(String::len).sum::<usize>() <= 65536
+}
+
 fn literal(raw: Literal) -> Result<Value, Error> {
     match (raw.value_type.as_str(), raw.literal, raw.currency) {
         ("boolean", serde_json::Value::Bool(b), None) => Ok(Value::Boolean(b)),
         ("date", serde_json::Value::String(s), None) => Ok(Value::Date(parse_date(&s)?)),
+        ("string", serde_json::Value::String(s), None) if valid_text(&s) => {
+            Ok(Value::Text(Arc::from(s)))
+        }
+        ("enum", serde_json::Value::String(s), None) if valid_text(&s) && !s.is_empty() => {
+            Ok(Value::Enum(Arc::from(s)))
+        }
+        ("set", serde_json::Value::Array(items), None) if items.len() <= 5000 => {
+            let mut set = BTreeSet::new();
+            for item in items {
+                let serde_json::Value::String(s) = item else {
+                    return Err(Error::InvalidLiteral);
+                };
+                if !valid_text(&s) || !set.insert(s) {
+                    return Err(Error::InvalidLiteral);
+                }
+            }
+            if !valid_set(&set) {
+                return Err(Error::InvalidLiteral);
+            }
+            Ok(Value::Set(Arc::new(set)))
+        }
         ("decimal", serde_json::Value::String(s), None) if s.len() <= 32 => Ok(Value::Decimal(
             Amount::parse(&s).map_err(|_| Error::InvalidLiteral)?,
         )),
@@ -242,12 +294,14 @@ fn compile_node(
                 "div" => Op::Div,
                 "exists" => Op::Exists,
                 "date_diff" => Op::DateDiff,
+                "in" => Op::In,
+                "count" => Op::Count,
                 _ => return Err(Error::UnsupportedOperator),
             };
             let arity = c.args.len();
             if !(1..=16).contains(&arity)
                 || match op {
-                    Op::Not | Op::Exists => arity != 1,
+                    Op::Not | Op::Exists | Op::Count => arity != 1,
                     Op::And | Op::Or => arity < 2,
                     _ => arity != 2,
                 }
@@ -260,17 +314,27 @@ fn compile_node(
                 .map(|a| compile_node(a, registry, depth + 1, nodes))
                 .collect::<Result<Vec<_>, _>>()?;
             let first = args[0].ty();
-            if args.iter().any(|a| a.ty() != first) {
+            if matches!(op, Op::In) {
+                if !matches!(first, Type::Text | Type::Enum) || args[1].ty() != Type::Set {
+                    return Err(Error::TypeMismatch);
+                }
+            } else if args.iter().any(|a| a.ty() != first) {
                 return Err(Error::TypeMismatch);
             }
             let ty = match op {
                 Op::And | Op::Or | Op::Not if first == Type::Boolean => Type::Boolean,
                 Op::Eq | Op::Ne => Type::Boolean,
-                Op::Lt | Op::Lte | Op::Gt | Op::Gte if first != Type::Boolean => Type::Boolean,
+                Op::Lt | Op::Lte | Op::Gt | Op::Gte
+                    if matches!(first, Type::Money(_) | Type::Decimal | Type::Date) =>
+                {
+                    Type::Boolean
+                }
                 Op::Add | Op::Sub if matches!(first, Type::Money(_) | Type::Decimal) => first,
                 Op::Mul | Op::Div if first == Type::Decimal => Type::Decimal,
                 Op::Exists => Type::Boolean,
                 Op::DateDiff if first == Type::Date => Type::Decimal,
+                Op::In => Type::Boolean,
+                Op::Count if first == Type::Set => Type::Decimal,
                 _ => return Err(Error::TypeMismatch),
             };
             Ok(Node::Call(op, args, ty))
@@ -314,7 +378,7 @@ pub fn compile(json: &[u8], registry: &BTreeMap<String, Type>) -> Result<Compile
     })
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 enum Eval {
     Known(Value),
     Absent,
@@ -336,7 +400,7 @@ fn eval(
 ) -> Eval {
     use Eval::*;
     match node {
-        Node::Literal(v) => Known(*v),
+        Node::Literal(v) => Known(v.clone()),
         Node::Ref(path, ty) => {
             refs.push(path.clone());
             let Some(f) = facts.get(path) else {
@@ -349,8 +413,8 @@ fn eval(
             if !f.verified || !f.fresh || f.evidence.is_empty() {
                 return Unknown;
             }
-            match f.value {
-                Some(value) if value.ty() == *ty => Known(value),
+            match &f.value {
+                Some(value) if value.ty() == *ty && value.valid() => Known(value.clone()),
                 Some(_) => Error,
                 None => Absent,
             }
@@ -374,29 +438,37 @@ fn eval(
                         Known(Value::Boolean(!dominant))
                     }
                 }
-                Op::Not => match values[0] {
-                    Known(Value::Boolean(b)) => Known(Value::Boolean(!b)),
+                Op::Not => match &values[0] {
+                    Known(Value::Boolean(b)) => Known(Value::Boolean(!*b)),
                     Unknown | Absent => Unknown,
                     _ => Error,
                 },
-                Op::Exists => match values[0] {
+                Op::Exists => match &values[0] {
                     Known(_) => Known(Value::Boolean(true)),
                     Absent => Known(Value::Boolean(false)),
                     Unknown => Unknown,
                     Error => Error,
                 },
+                Op::Count => match &values[0] {
+                    Known(Value::Set(items)) => match Amount::parse(&items.len().to_string()) {
+                        Ok(amount) => Known(Value::Decimal(amount)),
+                        Err(_) => Error,
+                    },
+                    Unknown | Absent => Unknown,
+                    _ => Error,
+                },
                 _ => {
                     let [Known(a), Known(b)] = values.as_slice() else {
                         return Unknown;
                     };
-                    binary(*op, *a, *b)
+                    binary(*op, a, b)
                 }
             }
         }
     }
 }
 
-fn binary(op: Op, a: Value, b: Value) -> Eval {
+fn binary(op: Op, a: &Value, b: &Value) -> Eval {
     use Eval::*;
     if matches!(op, Op::Eq | Op::Ne) {
         return Known(Value::Boolean(if matches!(op, Op::Eq) {
@@ -405,13 +477,21 @@ fn binary(op: Op, a: Value, b: Value) -> Eval {
             a != b
         }));
     }
+    if matches!(op, Op::In) {
+        return match (a, b) {
+            (Value::Text(s) | Value::Enum(s), Value::Set(items)) => {
+                Known(Value::Boolean(items.contains(s.as_ref())))
+            }
+            _ => Error,
+        };
+    }
     if let (Value::Date(x), Value::Date(y)) = (a, b) {
         return match op {
             Op::Lt => Known(Value::Boolean(x < y)),
             Op::Lte => Known(Value::Boolean(x <= y)),
             Op::Gt => Known(Value::Boolean(x > y)),
             Op::Gte => Known(Value::Boolean(x >= y)),
-            Op::DateDiff => match Amount::parse(&x.signed_duration_since(y).num_days().to_string()) {
+            Op::DateDiff => match Amount::parse(&x.signed_duration_since(*y).num_days().to_string()) {
                 Ok(amount) => Known(Value::Decimal(amount)),
                 Err(_) => Error,
             },
@@ -421,7 +501,7 @@ fn binary(op: Op, a: Value, b: Value) -> Eval {
     if matches!(op, Op::Mul | Op::Div) {
         return match (a, b) {
             (Value::Decimal(x), Value::Decimal(y)) => {
-                match exact_decimal(op, x, y) {
+                match exact_decimal(op, *x, *y) {
                     Some(amount) => Known(Value::Decimal(amount)),
                     None => Error,
                 }
@@ -431,7 +511,7 @@ fn binary(op: Op, a: Value, b: Value) -> Eval {
     }
     let (x, y) = match (a, b) {
         (Value::Money(x), Value::Money(y)) if x.currency == y.currency => (x.amount, y.amount),
-        (Value::Decimal(x), Value::Decimal(y)) => (x, y),
+        (Value::Decimal(x), Value::Decimal(y)) => (*x, *y),
         _ => return Error,
     };
     let x_dec = x.decimal();
