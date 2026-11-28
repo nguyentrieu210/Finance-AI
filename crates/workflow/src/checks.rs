@@ -89,7 +89,9 @@ pub async fn list(
     .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
-    Ok(Some(rows.into_iter().map(Check::canonical_explanation).collect()))
+    Ok(Some(
+        rows.into_iter().map(Check::canonical_explanation).collect(),
+    ))
 }
 
 pub struct Acknowledge<'a> {
