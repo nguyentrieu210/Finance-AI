@@ -6,7 +6,7 @@ export const isAmount=(s:string)=>/^\d{1,20}(\.\d{1,8})?$/.test(s);
 export type ResourceKind='CONTRACT'|'INVOICE'|'ADVANCE'|'BUDGET';
 export const kinds:ResourceKind[]=['CONTRACT','INVOICE','ADVANCE','BUDGET'];
 export type Row={source_key:string;currency:string;cap:string;consumed:string;evidence_ids:string[];details:Record<string,unknown>};
-export type PaymentRow={source_key:string;currency:string;amount:string;reservation_id:string;event_kind:string;reverses:string|null;occurred_at:string;evidence_ids:string[]};
+export type PaymentRow={source_key:string;currency:string;amount:string;reservation_id:string;event_kind:string;reverses:string|null;occurred_at:string;evidence_ids:string[];allocations?:Record<string,string>};
 export type Material={id:string;document_id:string;source_digest:string;kind:ResourceKind|'PAYMENT';coverage:string;as_of:string;fresh_until:string;state:string;records:(Row|PaymentRow)[];evidence_ids:string[];maker_id:string};
 export type Resource={id:string;kind:ResourceKind;source_key:string;snapshot_id:string;currency:string;cap:string;consumed:string;held:string;available:string;fresh_until:string};
 export type Gate={clause_key:string;amount_path:string;currency_path:string;resource_kinds:ResourceKind[];resource_keys:Partial<Record<ResourceKind,string>>;line_match?:{currency:string;price_tolerance:string;conversions:{from:string;to:string;numerator:string;denominator:string}[]}};

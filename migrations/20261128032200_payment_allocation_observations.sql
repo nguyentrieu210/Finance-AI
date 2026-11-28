@@ -90,8 +90,14 @@ BEGIN
  -- Replays with a different UI idempotency key cannot apply the same bank event twice.
  IF EXISTS(SELECT 1 FROM finance.allocation_effect ae WHERE (ae.tenant_id,ae.company_id,ae.id)=(t,c,p.id))
  THEN RAISE EXCEPTION 'payment already observed' USING ERRCODE='23505'; END IF;
- PERFORM finance.prototype_allocation(t,c,hold.id,hold.revision_id,p.id,p.event_kind,p.amount,
-  sha256(convert_to(jsonb_build_array(encode(source.source_digest,'hex'),p.external_key,p.event_kind,p.amount,p.currency,p.occurred_at,p.reservation_id,p.reverses_key)::text,'UTF8')),original,true,false);
+ IF hold.split_allocation THEN
+  PERFORM finance.apply_split_allocation(t,c,hold.id,hold.revision_id,p.id,p.event_kind,p.amount,
+   sha256(convert_to(jsonb_build_array(encode(source.source_digest,'hex'),p.external_key,p.event_kind,p.amount,p.currency,p.occurred_at,p.reservation_id,p.reverses_key,p.line_allocations)::text,'UTF8')),original,p.line_allocations);
+ ELSE
+  IF p.line_allocations IS NOT NULL THEN RAISE EXCEPTION 'non-split event cannot provide split allocation' USING ERRCODE='23514'; END IF;
+  PERFORM finance.prototype_allocation(t,c,hold.id,hold.revision_id,p.id,p.event_kind,p.amount,
+   sha256(convert_to(jsonb_build_array(encode(source.source_digest,'hex'),p.external_key,p.event_kind,p.amount,p.currency,p.occurred_at,p.reservation_id,p.reverses_key)::text,'UTF8')),original,true,false);
+ END IF;
  SELECT coalesce(sum(CASE WHEN ae.kind='CONSUME' THEN ae.amount WHEN ae.kind='REVERSE' THEN -ae.amount ELSE 0 END),0)
  INTO total FROM finance.allocation_effect ae WHERE (ae.tenant_id,ae.company_id,ae.reservation_id)=(t,c,hold.id);
  IF total<0 OR total>hold.amount THEN RAISE EXCEPTION 'invalid net payment' USING ERRCODE='23514'; END IF;

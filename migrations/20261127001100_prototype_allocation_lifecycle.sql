@@ -61,7 +61,7 @@ BEGIN
    WHERE tenant_id=t AND company_id=c AND id=k FOR UPDATE;
   IF NOT FOUND OR NOT row_resource.coverage_complete OR row_resource.fresh_until<=clock_timestamp()
    OR row_resource.currency<>cur THEN RAISE EXCEPTION 'unavailable resource' USING ERRCODE='23514'; END IF;
-  SELECT COALESCE(sum(v.remaining),0) INTO held FROM finance.reservation_line l
+  SELECT COALESCE(sum(coalesce(l.line_remaining,v.remaining)),0) INTO held FROM finance.reservation_line l
    JOIN finance.reservation v ON (v.tenant_id,v.company_id,v.id)=(l.tenant_id,l.company_id,l.reservation_id)
    WHERE l.tenant_id=t AND l.company_id=c AND l.resource_id=k AND v.state IN ('RESERVED','COMMITTED','PARTIAL');
   IF row_resource.cap-row_resource.consumed-held<n THEN
@@ -95,7 +95,7 @@ BEGIN
  PERFORM pg_advisory_xact_lock(hashtextextended('finance.allocation/v1/'||t::text||'/'||c::text||'/'||e::text,0));
  PERFORM pg_advisory_xact_lock(hashtextextended('finance.reservation/v1/'||t::text||'/'||c::text||'/'||i::text,0));
  SELECT * INTO v FROM finance.reservation WHERE tenant_id=t AND company_id=c AND id=i AND revision_id=r FOR UPDATE;
- IF NOT FOUND THEN RAISE EXCEPTION 'unknown reservation' USING ERRCODE='23514'; END IF;
+ IF NOT FOUND OR v.split_allocation THEN RAISE EXCEPTION 'unknown or split reservation requires explicit allocation' USING ERRCODE='23514'; END IF;
  SELECT * INTO prior FROM finance.allocation_effect WHERE tenant_id=t AND company_id=c AND id=e;
  IF FOUND THEN
   IF (prior.reservation_id,prior.revision_id,prior.kind,prior.amount,prior.source_digest,prior.reverses)

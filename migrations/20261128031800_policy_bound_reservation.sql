@@ -36,7 +36,7 @@ CREATE FUNCTION finance.bound_finance_material(t uuid,c uuid,d uuid,rev uuid,pid
 RETURNS jsonb LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog AS $$
 DECLARE gate jsonb; fields jsonb; amount_row jsonb; currency_row jsonb; n numeric; k uuid; fr finance.financial_resource%ROWTYPE; refs jsonb:='[]'; kinds text[]; expected text[]; cur text;
 BEGIN
- IF (t,c) IS DISTINCT FROM (finance.scope_tenant(),finance.scope_company()) OR cardinality(ids) NOT BETWEEN 1 AND 4 OR array_position(ids,NULL::uuid) IS NOT NULL THEN RETURN NULL; END IF;
+ IF (t,c) IS DISTINCT FROM (finance.scope_tenant(),finance.scope_company()) OR cardinality(ids) NOT BETWEEN 1 AND 32 OR array_position(ids,NULL::uuid) IS NOT NULL THEN RETURN NULL; END IF;
  SELECT pv.finance_gate INTO gate FROM finance.policy_version pv JOIN finance.dossier ds ON (ds.tenant_id,ds.company_id,ds.id)=(t,c,d)
  WHERE (pv.tenant_id,pv.company_id,pv.id)=(t,c,pid) AND pv.state='PUBLISHED' AND pv.criticality_complete AND pv.dossier_kind=ds.kind
  AND pv.effective_from<=(clock_timestamp() AT TIME ZONE 'UTC')::date AND pv.effective_until>(clock_timestamp() AT TIME ZONE 'UTC')::date;
@@ -127,7 +127,7 @@ BEGIN
  PERFORM pg_advisory_xact_lock(hashtextextended('finance.reservation/v1/'||t::text||'/'||c::text||'/'||i::text,0));
  mat:=finance.bound_finance_material(t,c,d,rev,pid,v,sorted);
  IF mat IS NULL THEN RAISE EXCEPTION 'missing verified finance material' USING ERRCODE='23514'; END IF;
- PERFORM finance.prototype_reserve_finance(t,c,i,rev,mat->>'currency',(mat->>'amount')::numeric,sorted);
+ PERFORM finance.reserve_bound_material(t,c,i,rev,mat,sorted);
  UPDATE finance.reservation x SET binding_policy_id=pid,binding_actor_id=a,binding_key=idem,binding_request_hash=digest,binding_material_hash=sha256(convert_to(mat::text,'UTF8')),binding_version=v+1,binding_reason=why WHERE (x.tenant_id,x.company_id,x.id)=(t,c,i) AND x.binding_policy_id IS NULL;
  IF NOT FOUND THEN RAISE EXCEPTION 'reservation identity conflict' USING ERRCODE='23505'; END IF;
  UPDATE finance.dossier x SET version=v+1,status='DRAFT',updated_at=GREATEST(updated_at,clock_timestamp()) WHERE (x.tenant_id,x.company_id,x.id)=(t,c,d);

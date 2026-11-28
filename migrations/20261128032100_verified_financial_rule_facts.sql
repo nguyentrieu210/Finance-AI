@@ -2,9 +2,9 @@
 -- includes current independently verified cap facts, not caller supplied totals.
 CREATE OR REPLACE FUNCTION finance.bound_finance_material(t uuid,c uuid,d uuid,rev uuid,pid uuid,v bigint,ids uuid[])
 RETURNS jsonb LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog AS $$
-DECLARE gate jsonb; fields jsonb; amount_row jsonb; currency_row jsonb; n numeric; k uuid; fr finance.financial_resource%ROWTYPE; refs jsonb:='[]'; kinds text[]; expected text[]; cur text; key_row jsonb; key_path text; key_count bigint;
+DECLARE gate jsonb; fields jsonb; amount_row jsonb; currency_row jsonb; n numeric; k uuid; fr finance.financial_resource%ROWTYPE; refs jsonb:='[]'; kinds text[]; expected text[]; cur text; key_row jsonb; key_path text; key_count bigint; advance_plan jsonb; line_amount numeric; advance_total numeric:=0; advance_count integer:=0; plan_key text; split_enabled boolean:=false;
 BEGIN
- IF (t,c) IS DISTINCT FROM (finance.scope_tenant(),finance.scope_company()) OR cardinality(ids) NOT BETWEEN 1 AND 4 OR array_position(ids,NULL::uuid) IS NOT NULL THEN RETURN NULL; END IF;
+ IF (t,c) IS DISTINCT FROM (finance.scope_tenant(),finance.scope_company()) OR cardinality(ids) NOT BETWEEN 1 AND 32 OR array_position(ids,NULL::uuid) IS NOT NULL THEN RETURN NULL; END IF;
  SELECT pv.finance_gate INTO gate FROM finance.policy_version pv JOIN finance.dossier ds ON (ds.tenant_id,ds.company_id,ds.id)=(t,c,d)
  WHERE (pv.tenant_id,pv.company_id,pv.id)=(t,c,pid) AND pv.state='PUBLISHED' AND pv.criticality_complete AND pv.dossier_kind=ds.kind
  AND pv.effective_from<=(clock_timestamp() AT TIME ZONE 'UTC')::date AND pv.effective_until>(clock_timestamp() AT TIME ZONE 'UTC')::date;
@@ -32,6 +32,13 @@ BEGIN
  OR amount_row->>'value' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$' THEN RETURN NULL; END IF;
  n:=(amount_row->>'value')::numeric; cur:=currency_row->>'value';
  IF n<=0 OR cur IS NULL OR cur !~ '^[A-Z]{3}$' THEN RETURN NULL; END IF;
+ split_enabled:=coalesce(gate->'resource_keys'->>'ADVANCE'='advance_settlement.allocations',false);
+ IF split_enabled THEN
+  SELECT value INTO key_row FROM jsonb_array_elements(fields) WHERE value->>'path'='advance_settlement.allocations';
+  IF key_row IS NULL OR key_row->>'verified' IS DISTINCT FROM 'true' OR key_row->>'value' IS NULL THEN RETURN NULL; END IF;
+  BEGIN advance_plan:=(key_row->>'value')::jsonb; EXCEPTION WHEN invalid_text_representation THEN RETURN NULL; END;
+  IF jsonb_typeof(advance_plan) IS DISTINCT FROM 'object' OR (SELECT count(*) FROM jsonb_object_keys(advance_plan)) NOT BETWEEN 1 AND 29 THEN RETURN NULL; END IF;
+ END IF;
  SELECT array_agg(k ORDER BY k) INTO expected FROM jsonb_array_elements_text(gate->'resource_kinds') k;
  FOR k IN SELECT DISTINCT z FROM unnest(ids) z ORDER BY z LOOP
   SELECT * INTO fr FROM finance.financial_resource r WHERE (r.tenant_id,r.company_id,r.id)=(t,c,k) FOR UPDATE;
@@ -44,13 +51,24 @@ BEGIN
   SELECT count(*) INTO key_count FROM jsonb_array_elements(fields) fld WHERE fld->>'path'=key_path;
   IF key_count<>1 THEN RETURN NULL; END IF;
   SELECT value INTO key_row FROM jsonb_array_elements(fields) WHERE value->>'path'=key_path;
-  IF key_row->>'verified' IS DISTINCT FROM 'true' OR key_row->>'value' IS NULL
-  OR fr.source_key IS DISTINCT FROM jsonb_build_array('MANUAL_API',key_row->>'value')::text THEN RETURN NULL; END IF;
-  refs:=refs||jsonb_build_array(jsonb_build_object('id',fr.id,'snapshot',fr.snapshot_id,'kind',fr.resource_kind,'key',fr.source_key));
+  IF key_row->>'verified' IS DISTINCT FROM 'true' OR key_row->>'value' IS NULL THEN RETURN NULL; END IF;
+  line_amount:=n;
+  IF split_enabled AND fr.resource_kind='ADVANCE' THEN
+   plan_key:=(fr.source_key::jsonb)->>1;
+   IF jsonb_typeof(advance_plan->plan_key) IS DISTINCT FROM 'string' OR advance_plan->>plan_key !~ '^[0-9]{1,20}([.][0-9]{1,8})?$' THEN RETURN NULL; END IF;
+   line_amount:=(advance_plan->>plan_key)::numeric;
+   IF line_amount<=0 THEN RETURN NULL; END IF;
+   advance_total:=advance_total+line_amount; advance_count:=advance_count+1;
+  ELSIF fr.source_key IS DISTINCT FROM jsonb_build_array('MANUAL_API',key_row->>'value')::text THEN RETURN NULL;
+  END IF;
+  refs:=refs||jsonb_build_array(jsonb_build_object('id',fr.id,'snapshot',fr.snapshot_id,'kind',fr.resource_kind,'key',fr.source_key,'allocated',line_amount));
  END LOOP;
- SELECT array_agg(z->>'kind' ORDER BY z->>'kind') INTO kinds FROM jsonb_array_elements(refs) z;
- IF kinds IS DISTINCT FROM expected OR jsonb_array_length(refs)<>cardinality(ids) THEN RETURN NULL; END IF;
- RETURN jsonb_build_object('policy',pid,'revision',rev,'amount',n,'currency',cur,'fields',fields,'resources',refs);
+ SELECT array_agg(DISTINCT z->>'kind' ORDER BY z->>'kind') INTO kinds FROM jsonb_array_elements(refs) z;
+ IF kinds IS DISTINCT FROM expected OR jsonb_array_length(refs)<>cardinality(ids)
+ OR EXISTS(SELECT 1 FROM jsonb_array_elements(refs) z GROUP BY z->>'kind' HAVING count(*)>1 AND (z->>'kind'<>'ADVANCE' OR NOT split_enabled))
+ OR (split_enabled AND (advance_total<>n OR advance_count<>(SELECT count(*) FROM jsonb_object_keys(advance_plan))))
+ THEN RETURN NULL; END IF;
+ RETURN jsonb_build_object('policy',pid,'revision',rev,'amount',n,'currency',cur,'fields',fields,'resources',refs,'split',split_enabled);
 END $$;
 ALTER FUNCTION finance.bound_finance_material(uuid,uuid,uuid,uuid,uuid,bigint,uuid[]) OWNER TO finance_workflow_writer;
 REVOKE ALL ON FUNCTION finance.bound_finance_material(uuid,uuid,uuid,uuid,uuid,bigint,uuid[]) FROM PUBLIC;
@@ -59,7 +77,7 @@ REVOKE ALL ON FUNCTION finance.bound_finance_material(uuid,uuid,uuid,uuid,uuid,b
 CREATE FUNCTION finance.runtime_verified_financial_facts(t uuid,c uuid,d uuid,rev uuid,pid uuid,v bigint)
 RETURNS jsonb LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog AS $$
 DECLARE hold_id uuid; hold finance.reservation%ROWTYPE; fr finance.financial_resource%ROWTYPE;
- snap finance.reference_snapshot%ROWTYPE; row_data jsonb; held numeric; result jsonb:='[]'; prefix text; k uuid; ev jsonb; minimum numeric; all_ev jsonb:='[]'; amount_ev jsonb; mat jsonb;
+ snap finance.reference_snapshot%ROWTYPE; row_data jsonb; held numeric; result jsonb:='[]'; prefix text; k uuid; ev jsonb; minimum numeric; all_ev jsonb:='[]'; amount_ev jsonb; mat jsonb; grouped jsonb; fact record;
 BEGIN
  hold_id:=finance.current_bound_reservation(t,c,d,rev,pid,v);
  IF hold_id IS NULL THEN RETURN '[]'::jsonb; END IF;
@@ -75,14 +93,14 @@ BEGIN
    WHERE jsonb_build_array('MANUAL_API',item->>'source_key')::text=fr.source_key;
   IF row_data IS NULL OR jsonb_typeof(row_data->'evidence_ids') IS DISTINCT FROM 'array'
     OR jsonb_array_length(row_data->'evidence_ids')=0 THEN RETURN '[]'::jsonb; END IF;
-  SELECT coalesce(sum(r.remaining),0) INTO held FROM finance.reservation_line l
+  SELECT coalesce(sum(coalesce(l.line_remaining,r.remaining)),0) INTO held FROM finance.reservation_line l
    JOIN finance.reservation r ON (r.tenant_id,r.company_id,r.id)=(l.tenant_id,l.company_id,l.reservation_id)
    WHERE (l.tenant_id,l.company_id,l.resource_id)=(t,c,k) AND r.id<>hold_id AND r.state IN ('RESERVED','COMMITTED','PARTIAL');
   SELECT coalesce(jsonb_agg(DISTINCT e),'[]'::jsonb) INTO ev
    FROM jsonb_array_elements((row_data->'evidence_ids')||amount_ev) e;
   IF jsonb_array_length(ev)>64 THEN RETURN '[]'::jsonb; END IF;
   prefix:=lower(fr.resource_kind);
-  minimum:=CASE WHEN minimum IS NULL THEN fr.cap-fr.consumed-held ELSE least(minimum,fr.cap-fr.consumed-held) END;
+  IF fr.cap-fr.consumed-held < (SELECT (z->>'allocated')::numeric FROM jsonb_array_elements(mat->'resources') z WHERE z->>'id'=fr.id::text) THEN RETURN '[]'::jsonb; END IF;
   all_ev:=all_ev||ev;
   result:=result||jsonb_build_array(
    jsonb_build_object('path',prefix||'.remaining','value',(fr.cap-fr.consumed-held)::text,'currency',fr.currency,'verified',true,'evidence',ev),
@@ -91,6 +109,11 @@ BEGIN
    jsonb_build_object('path',prefix||'.other_holds','value',held::text,'currency',fr.currency,'verified',true,'evidence',ev));
  END LOOP;
  SELECT coalesce(jsonb_agg(DISTINCT e),'[]'::jsonb) INTO all_ev FROM jsonb_array_elements(all_ev) e;
+ SELECT coalesce(jsonb_agg(jsonb_build_object('path',g.path,'value',g.amount::text,'currency',hold.currency,'verified',true,'evidence',g.evidence) ORDER BY g.path),'[]'::jsonb) INTO grouped FROM (
+ SELECT x->>'path' path,sum((x->>'value')::numeric) amount,(SELECT coalesce(jsonb_agg(DISTINCT ev),'[]'::jsonb) FROM jsonb_array_elements(result) z CROSS JOIN LATERAL jsonb_array_elements(z->'evidence') ev WHERE z->>'path'=x->>'path') evidence
+ FROM jsonb_array_elements(result) x GROUP BY x->>'path') g;
+ SELECT min((x->>'value')::numeric) INTO minimum FROM jsonb_array_elements(grouped) x WHERE x->>'path' LIKE '%.remaining';
+ result:=grouped;
  IF minimum IS NULL OR jsonb_array_length(all_ev)>64 THEN RETURN '[]'::jsonb; END IF;
  RETURN result||jsonb_build_array(
   jsonb_build_object('path','finance.payable_cap','value',minimum::text,'currency',hold.currency,'verified',true,'evidence',all_ev),

@@ -84,7 +84,7 @@ pub struct BindingReceipt { pub id: Uuid, pub dossier_version: i64 }
 pub async fn bind(pool: &PgPool, proof: &AuthenticatedCommand, key: &IdempotencyKey, dossier: Uuid, policy: Uuid, resources: &[Uuid], reason: &str, id: Uuid) -> Result<BindingReceipt, Error> {
     let version=i64::from(proof.context().expected_version.ok_or(Error::InvalidInput)?);
     let (t,c,a)=binding(proof)?;
-    if dossier.is_nil() || policy.is_nil() || id.is_nil() || !(1..=4).contains(&resources.len()) || resources.iter().any(Uuid::is_nil) || reason.trim().is_empty() || reason.len()>2048 {return Err(Error::InvalidInput);}
+    if dossier.is_nil() || policy.is_nil() || id.is_nil() || !(1..=32).contains(&resources.len()) || resources.iter().any(Uuid::is_nil) || reason.trim().is_empty() || reason.len()>2048 {return Err(Error::InvalidInput);}
     let mut tx=scoped_transaction(pool,proof.context()).await?;
     require_role(&mut tx,proof.context(),Role::FinanceApprover).await.map_err(|e|match e {GrantError::Forbidden=>Error::Forbidden,GrantError::Database(e)=>Error::Database(e)})?;
     recheck_authenticated(&mut tx,Some(proof)).await?;

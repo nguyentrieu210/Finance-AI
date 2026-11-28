@@ -74,7 +74,8 @@ BEGIN
  -- checker. The source identity is explicit and never synthesized from amounts.
  FOR item IN SELECT value FROM jsonb_array_elements(records) LOOP
   IF kind='PAYMENT' THEN
-   IF (SELECT count(*) FROM jsonb_object_keys(item))<>8
+   IF (SELECT count(*) FROM jsonb_object_keys(item)) NOT BETWEEN 8 AND 9
+   OR (item ? 'allocations' AND item->'allocations'<>'null'::jsonb AND jsonb_typeof(item->'allocations') IS DISTINCT FROM 'object')
    OR NOT (item ?& ARRAY['source_key','currency','amount','reservation_id','event_kind','reverses','occurred_at','evidence_ids'])
    OR item->>'source_key' IS NULL OR octet_length(item->>'source_key') NOT BETWEEN 1 AND 128 OR item->>'source_key' ~ '[[:cntrl:]]'
    OR item->>'currency' IS NULL OR item->>'currency' !~ '^[A-Z]{3}$'
@@ -178,10 +179,10 @@ BEGIN
  PERFORM pg_advisory_xact_lock(hashtextextended('finance.reference/v1/'||t::text||'/'||c::text,0));
  IF rkind='PAYMENT' THEN
   -- Payment events are independently approved observations, not payment orders.
-  INSERT INTO finance.payment_ref(tenant_id,company_id,snapshot_id,id,external_key,currency,amount,state,occurred_at,reservation_id,event_kind,reverses_key)
+  INSERT INTO finance.payment_ref(tenant_id,company_id,snapshot_id,id,external_key,currency,amount,state,occurred_at,reservation_id,event_kind,reverses_key,line_allocations)
   SELECT t,c,ref_id,gen_random_uuid(),item->>'source_key',item->>'currency',(item->>'amount')::numeric,
    CASE WHEN item->>'event_kind'='REVERSE' THEN 'PARTIALLY_REVERSED' ELSE 'PARTIALLY_PAID' END,
-   (item->>'occurred_at')::timestamptz,(item->>'reservation_id')::uuid,item->>'event_kind',item->>'reverses'
+   (item->>'occurred_at')::timestamptz,(item->>'reservation_id')::uuid,item->>'event_kind',item->>'reverses',nullif(item->'allocations','null'::jsonb)
   FROM jsonb_array_elements(r.import_payload) item;
  ELSE
  IF EXISTS(SELECT 1 FROM jsonb_array_elements(r.import_payload) item WHERE NOT COALESCE(finance.validate_reference_details(rkind,item,(r.as_of AT TIME ZONE 'UTC')::date),false)) THEN RAISE EXCEPTION 'invalid typed reference' USING ERRCODE='23514'; END IF;

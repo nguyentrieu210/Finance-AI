@@ -59,7 +59,7 @@ BEGIN
  (f.cap-f.consumed-h.amount)::text,to_char(f.fresh_until AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
  FROM finance.financial_resource f JOIN finance.reference_snapshot s ON (s.tenant_id,s.company_id,s.id)=(f.tenant_id,f.company_id,f.snapshot_id)
  JOIN finance.source_coverage sc ON (sc.tenant_id,sc.company_id,sc.snapshot_id,sc.resource_kind)=(f.tenant_id,f.company_id,f.snapshot_id,f.resource_kind)
- CROSS JOIN LATERAL(SELECT coalesce(sum(r.remaining),0) amount FROM finance.reservation_line l JOIN finance.reservation r ON (r.tenant_id,r.company_id,r.id)=(l.tenant_id,l.company_id,l.reservation_id)
+ CROSS JOIN LATERAL(SELECT coalesce(sum(coalesce(l.line_remaining,r.remaining)),0) amount FROM finance.reservation_line l JOIN finance.reservation r ON (r.tenant_id,r.company_id,r.id)=(l.tenant_id,l.company_id,l.reservation_id)
  WHERE (l.tenant_id,l.company_id,l.resource_id)=(t,c,f.id) AND r.state IN ('RESERVED','COMMITTED','PARTIAL')) h
  WHERE (f.tenant_id,f.company_id)=(t,c) AND f.id>after_id AND f.coverage_complete AND sc.complete AND s.state='APPROVED' AND s.source_document_id IS NOT NULL AND f.fresh_until>statement_timestamp() AND s.fresh_until>statement_timestamp()
  AND COALESCE(finance.reference_details_eligible(f.resource_kind,f.reference_details,(statement_timestamp() AT TIME ZONE 'UTC')::date),false)

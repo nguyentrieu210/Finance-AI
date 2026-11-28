@@ -54,6 +54,7 @@ BEGIN
   PERFORM 1 FROM finance.financial_resource fr WHERE (fr.tenant_id,fr.company_id,fr.id)=(t,c,k) FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'resource absent' USING ERRCODE='23514'; END IF;
  END LOOP;
+ UPDATE finance.reservation_line l SET line_remaining=0 WHERE (l.tenant_id,l.company_id,l.reservation_id)=(t,c,i) AND l.line_remaining IS NOT NULL;
  UPDATE finance.reservation x SET state='RELEASED',remaining=0,release_actor_id=a,release_key=idem,
  release_request_hash=digest,release_version=v+1,release_reason=why WHERE (x.tenant_id,x.company_id,x.id)=(t,c,i);
  INSERT INTO finance.allocation_effect(tenant_id,company_id,id,reservation_id,revision_id,kind,amount,source_digest,reverses)

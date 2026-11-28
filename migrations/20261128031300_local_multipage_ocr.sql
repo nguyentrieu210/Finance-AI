@@ -17,7 +17,7 @@ ALTER TABLE finance.extracted_field DROP CONSTRAINT extracted_field_field_path_c
  'advance_settlement.contract_number','advance_settlement.date','advance_settlement.requested',
  'acceptance_record.contract_number','acceptance_record.date','acceptance_record.total',
  'payment_voucher.date','payment_voucher.requested',
- 'invoice.currency','contract.currency','contract_appendix.currency','payment_request.currency','advance_request.currency','advance_settlement.currency','acceptance_record.currency','payment_voucher.currency'));
+ 'invoice.currency','contract.currency','contract_appendix.currency','payment_request.currency','advance_request.currency','advance_settlement.currency','acceptance_record.currency','payment_voucher.currency','advance_settlement.allocations','advance_settlement.applied','advance_settlement.extra','invoice.source_key','contract.installment_key','finance.budget_key'));
 
 CREATE FUNCTION finance.local_ocr_source(t uuid,c uuid,j uuid,f bigint,w uuid)
 RETURNS TABLE(document_id uuid,revision_id uuid,generation bigint,source_digest bytea,content bytea,object_version text,byte_count bigint,mime text,kind text,event_type text)
@@ -83,12 +83,12 @@ BEGIN
    WHERE s.document_id=doc AND s.revision_id=rev AND s.generation=g AND s.source_digest=source AND s.kind=kind AND s.event_type=evt)
  THEN RAISE EXCEPTION 'wrong OCR source' USING ERRCODE='23514'; END IF;
  expected_paths:=CASE kind
- WHEN 'INVOICE' THEN ARRAY['invoice.number','invoice.date','invoice.supplier','invoice.net','invoice.tax','invoice.total','invoice.currency']
- WHEN 'CONTRACT' THEN ARRAY['contract.number','contract.date','contract.supplier','contract.total','contract.currency']
- WHEN 'CONTRACT_APPENDIX' THEN ARRAY['contract_appendix.number','contract_appendix.date','contract_appendix.supplier','contract_appendix.total','contract_appendix.currency']
- WHEN 'PAYMENT_REQUEST' THEN ARRAY['payment_request.contract_number','payment_request.invoice_number','payment_request.date','payment_request.supplier','payment_request.requested','payment_request.currency']
- WHEN 'ADVANCE_REQUEST' THEN ARRAY['advance_request.contract_number','advance_request.date','advance_request.requested','advance_request.currency']
- WHEN 'ADVANCE_SETTLEMENT' THEN ARRAY['advance_settlement.contract_number','advance_settlement.date','advance_settlement.requested','advance_settlement.currency']
+ WHEN 'INVOICE' THEN ARRAY['invoice.number','invoice.date','invoice.supplier','invoice.net','invoice.tax','invoice.total','invoice.currency','invoice.source_key']
+ WHEN 'CONTRACT' THEN ARRAY['contract.number','contract.date','contract.supplier','contract.total','contract.currency','contract.installment_key']
+ WHEN 'CONTRACT_APPENDIX' THEN ARRAY['contract_appendix.number','contract_appendix.date','contract_appendix.supplier','contract_appendix.total','contract_appendix.currency','contract.installment_key']
+ WHEN 'PAYMENT_REQUEST' THEN ARRAY['payment_request.contract_number','payment_request.invoice_number','payment_request.date','payment_request.supplier','payment_request.requested','payment_request.currency','finance.budget_key']
+ WHEN 'ADVANCE_REQUEST' THEN ARRAY['advance_request.contract_number','advance_request.date','advance_request.requested','advance_request.currency','finance.budget_key']
+ WHEN 'ADVANCE_SETTLEMENT' THEN ARRAY['advance_settlement.contract_number','advance_settlement.date','advance_settlement.requested','advance_settlement.currency','advance_settlement.allocations','advance_settlement.applied','advance_settlement.extra']
  WHEN 'ACCEPTANCE_RECORD' THEN ARRAY['acceptance_record.contract_number','acceptance_record.date','acceptance_record.total','acceptance_record.currency']
  WHEN 'PAYMENT_VOUCHER' THEN ARRAY['payment_voucher.date','payment_voucher.requested','payment_voucher.currency']
  ELSE NULL END;
@@ -210,7 +210,7 @@ BEGIN
    WHEN row.disposition='REJECTED' THEN NULL
    WHEN row.source_state='CANDIDATE' THEN row.source_value
    ELSE NULL END AS normalized_value,
-  CASE WHEN row.field_path LIKE '%.date' THEN 'date' WHEN split_part(row.field_path,'.',2) IN ('net','tax','total','requested') THEN 'money' ELSE 'text' END AS value_type,
+  CASE WHEN row.field_path LIKE '%.date' THEN 'date' WHEN split_part(row.field_path,'.',2) IN ('net','tax','total','requested','applied','extra') THEN 'money' ELSE 'text' END AS value_type,
   CASE row.disposition WHEN 'CONFIRMED_CANDIDATE' THEN 'VERIFIED'
    WHEN 'CORRECTED' THEN 'CORRECTED' WHEN 'REJECTED' THEN 'UNKNOWN'
    ELSE CASE WHEN row.source_state='CANDIDATE' THEN 'CANDIDATE' ELSE 'UNKNOWN' END END AS state,
@@ -233,7 +233,7 @@ BEGIN
  THEN RAISE EXCEPTION 'field metadata forbidden' USING ERRCODE='42501'; END IF;
  RETURN QUERY
  SELECT f.field_path,
-  CASE WHEN f.field_path LIKE '%.date' THEN 'date' WHEN split_part(f.field_path,'.',2) IN ('net','tax','total','requested') THEN 'money' ELSE 'text' END,
+  CASE WHEN f.field_path LIKE '%.date' THEN 'date' WHEN split_part(f.field_path,'.',2) IN ('net','tax','total','requested','applied','extra') THEN 'money' ELSE 'text' END,
   f.normalized_value
  FROM finance.field_identity fi
  JOIN finance.extracted_field f
@@ -271,7 +271,7 @@ BEGIN
    WHERE x2.tenant_id=f.tenant_id AND x2.company_id=f.company_id AND x2.id=f.run_id
     AND e.page=f.source_page AND e.block_index=ANY(f.block_indexes)),
   q.normalized_value,
-  CASE WHEN f.field_path LIKE '%.date' THEN 'date' WHEN split_part(f.field_path,'.',2) IN ('net','tax','total','requested') THEN 'money' ELSE 'text' END,
+  CASE WHEN f.field_path LIKE '%.date' THEN 'date' WHEN split_part(f.field_path,'.',2) IN ('net','tax','total','requested','applied','extra') THEN 'money' ELSE 'text' END,
   CASE q.disposition WHEN 'CONFIRMED_CANDIDATE' THEN 'VERIFIED'
    WHEN 'CORRECTED' THEN 'CORRECTED' ELSE 'UNKNOWN' END,
   q.evidence_ids,x.schema_version,q.dossier_version
