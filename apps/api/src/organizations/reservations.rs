@@ -23,8 +23,11 @@ struct Money {
 #[derive(Serialize)]
 struct Reservation {
     id: Uuid,
-    snapshot_id: Uuid,
+    snapshot_id: Option<Uuid>,
     resource_id: Uuid,
+    resource_ids: Vec<Uuid>,
+    revision_id: Uuid,
+    policy_id: Option<Uuid>,
     amount: Money,
     remaining: Money,
     state: String,
@@ -91,6 +94,9 @@ pub(super) async fn list(
                     id: row.id,
                     snapshot_id: row.snapshot_id,
                     resource_id: row.resource_id,
+                    resource_ids: row.resource_ids,
+                    revision_id: row.revision_id,
+                    policy_id: row.policy_id,
                     amount: Money {
                         amount: row.amount,
                         currency: row.currency.clone(),

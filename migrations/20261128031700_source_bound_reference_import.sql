@@ -26,7 +26,7 @@ BEGIN
   OR kind IS NULL OR kind NOT IN ('VENDOR','CONTRACT','INVOICE','ADVANCE','BUDGET','PAYMENT')
  OR records IS NULL OR jsonb_typeof(records) IS DISTINCT FROM 'array' OR jsonb_array_length(records)>10000 OR octet_length(records::text)>8388608
  OR as_of_ts>clock_timestamp() OR fresh_ts IS NULL OR fresh_ts<=as_of_ts
- OR (kind='PAYMENT' AND jsonb_array_length(records)>0)
+ OR kind NOT IN ('CONTRACT','INVOICE','ADVANCE','BUDGET') OR jsonb_array_length(records)=0
   OR coverage IS NULL OR coverage NOT IN ('COMPLETE','PARTIAL','UNKNOWN')
   OR idem IS NULL OR idem !~ '^[A-Za-z0-9._~-]{1,128}$'
  THEN RAISE EXCEPTION 'invalid reference creation request' USING ERRCODE='22023'; END IF;
@@ -60,7 +60,7 @@ BEGIN
  THEN RAISE EXCEPTION 'reference mapping requires evidence' USING ERRCODE='23514'; END IF;
  SELECT coalesce(array_agg(DISTINCT x::uuid ORDER BY x::uuid),ARRAY[]::uuid[]) INTO all_evidence
  FROM jsonb_array_elements(records) item CROSS JOIN LATERAL jsonb_array_elements_text(item->'evidence_ids') x;
- IF cardinality(all_evidence)>50000 OR EXISTS(SELECT 1 FROM unnest(all_evidence) x WHERE NOT EXISTS(
+ IF cardinality(all_evidence)>50 OR EXISTS(SELECT 1 FROM unnest(all_evidence) x WHERE NOT EXISTS(
  SELECT 1 FROM finance.evidence e JOIN finance.ocr_run o ON (o.tenant_id,o.company_id,o.id)=(e.tenant_id,e.company_id,e.ocr_run_id)
  WHERE (e.tenant_id,e.company_id,e.id)=(t,c,x) AND o.document_id=doc AND o.source_digest=source_hash))
  THEN RAISE EXCEPTION 'reference mapping evidence not bound to source' USING ERRCODE='23514'; END IF;

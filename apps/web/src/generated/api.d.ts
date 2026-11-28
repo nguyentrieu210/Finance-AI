@@ -1729,9 +1729,14 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
-            snapshot_id: string;
+            snapshot_id: string | null;
             /** Format: uuid */
             resource_id: string;
+            resource_ids: string[];
+            /** Format: uuid */
+            revision_id: string;
+            /** Format: uuid */
+            policy_id: string | null;
             amount: components["schemas"]["Money"];
             remaining: components["schemas"]["Money"];
             /** @enum {string} */

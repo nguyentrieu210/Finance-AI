@@ -92,6 +92,12 @@ BEGIN
    JOIN finance.policy_clause cl ON (cl.tenant_id,cl.company_id,cl.policy_id,cl.clause_key)=(t,c,pid,z.clause_key);
   GET DIAGNOSTICS affected=ROW_COUNT;
   IF affected<>cardinality(check_keys) THEN RAISE EXCEPTION 'checklist mapping mismatch' USING ERRCODE='23514'; END IF;
+  INSERT INTO finance.policy_critical_field(tenant_id,company_id,policy_id,clause_id,field_path)
+  SELECT t,c,pid,cl.id,z.field_path
+  FROM unnest(critical_keys,critical_paths) z(clause_key,field_path)
+  JOIN finance.policy_clause cl ON (cl.tenant_id,cl.company_id,cl.policy_id,cl.clause_key)=(t,c,pid,z.clause_key);
+  GET DIAGNOSTICS affected=ROW_COUNT;
+  IF affected<>cardinality(critical_paths) THEN RAISE EXCEPTION 'critical field mapping mismatch' USING ERRCODE='23514'; END IF;
   payload:=jsonb_build_object('id',pid,'company_id',c,'version',1,'name',pname,'state','DRAFT',
    'effective_from',to_char(starts,'YYYY-MM-DD')||'T00:00:00Z','effective_to',to_char(ends,'YYYY-MM-DD')||'T00:00:00Z','hash',encode(source_hash,'hex'));
   INSERT INTO finance.audit_event(tenant_id,company_id,id,actor_id,command_id,correlation_id,resource_id,action)
@@ -163,11 +169,6 @@ BEGIN
   ELSIF op='policy.publish' THEN
    IF day IS DISTINCT FROM p.effective_from THEN RAISE EXCEPTION 'effective date differs from reviewed version' USING ERRCODE='23514'; END IF;
    PERFORM finance.prototype_policy_transition(t,c,pid,a,'PUBLISHED');
-   -- The independent checker approves the frozen critical mapping together
-   -- with the policy. Empty legacy registries remain incomplete.
-   UPDATE finance.policy_version pv SET criticality_complete=true
-   WHERE (pv.tenant_id,pv.company_id,pv.id)=(t,c,pid) AND EXISTS(
-   SELECT 1 FROM finance.policy_critical_field cf WHERE (cf.tenant_id,cf.company_id,cf.policy_id)=(t,c,pid));
    action_name:='POLICY_PUBLISHED';
   ELSIF op='policy.retire' THEN
    PERFORM finance.prototype_policy_transition(t,c,pid,a,'RETIRED'); action_name:='POLICY_RETIRED';
@@ -193,3 +194,22 @@ ALTER FUNCTION finance.runtime_policy_change(uuid,uuid,uuid,uuid,bigint,text,tex
 REVOKE ALL ON FUNCTION finance.runtime_policy_change(uuid,uuid,uuid,uuid,bigint,text,text,text,text,date,uuid,uuid,uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION finance.runtime_policy_change(uuid,uuid,uuid,uuid,bigint,text,text,text,text,date,uuid,uuid,uuid) TO finance_runtime;
 
+-- Derive critical registry completeness in the SAME publication transition.
+CREATE OR REPLACE FUNCTION finance.policy_version_state_guard() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'immutable policy version' USING ERRCODE='23514'; END IF;
+ IF (NEW.tenant_id,NEW.company_id,NEW.id,NEW.dossier_kind,NEW.author_id,NEW.effective_from,NEW.effective_until,
+ NEW.source_digest,NEW.display_name,NEW.supersedes_id,NEW.created_at,NEW.finance_gate)
+ IS DISTINCT FROM (OLD.tenant_id,OLD.company_id,OLD.id,OLD.dossier_kind,OLD.author_id,OLD.effective_from,OLD.effective_until,
+ OLD.source_digest,OLD.display_name,OLD.supersedes_id,OLD.created_at,OLD.finance_gate)
+ THEN RAISE EXCEPTION 'immutable policy content' USING ERRCODE='23514'; END IF;
+ IF (OLD.state,NEW.state) NOT IN (('DRAFT','IN_REVIEW'),('IN_REVIEW','PUBLISHED'),('PUBLISHED','RETIRED'),('PUBLISHED','REVOKED'))
+ THEN RAISE EXCEPTION 'invalid policy transition' USING ERRCODE='23514'; END IF;
+ IF OLD.state='PUBLISHED' AND (NEW.checker_id,NEW.published_at) IS DISTINCT FROM (OLD.checker_id,OLD.published_at)
+ THEN RAISE EXCEPTION 'immutable approval' USING ERRCODE='23514'; END IF;
+ IF NEW.state='PUBLISHED' THEN
+  NEW.criticality_complete:=EXISTS(SELECT 1 FROM finance.policy_critical_field cf WHERE (cf.tenant_id,cf.company_id,cf.policy_id)=(NEW.tenant_id,NEW.company_id,NEW.id));
+ ELSE NEW.criticality_complete:=OLD.criticality_complete; END IF;
+ NEW.aggregate_version:=OLD.aggregate_version+1;
+ RETURN NEW;
+END $$;

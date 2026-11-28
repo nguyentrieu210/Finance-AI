@@ -15,8 +15,11 @@ use uuid::Uuid;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, sqlx::FromRow)]
 pub struct ReservationRow {
     pub id: Uuid,
-    pub snapshot_id: Uuid,
+    pub snapshot_id: Option<Uuid>,
     pub resource_id: Uuid,
+    pub resource_ids: Vec<Uuid>,
+    pub revision_id: Uuid,
+    pub policy_id: Option<Uuid>,
     pub amount: String,
     pub remaining: String,
     pub currency: String,
@@ -56,15 +59,11 @@ pub async fn list(
     }
     let (tenant, company, actor) = binding(proof)?;
     let mut tx = scoped_transaction(pool, proof.context()).await?;
-    require_role(&mut tx, proof.context(), Role::Requester)
-        .await
-        .map_err(|error| match error {
-            GrantError::Forbidden => Error::Forbidden,
-            GrantError::Database(error) => Error::Database(error),
-        })?;
+    let roles=finance_permissions::lock_roles(&mut tx,proof.context()).await.map_err(|e|match e{GrantError::Forbidden=>Error::Forbidden,GrantError::Database(e)=>Error::Database(e)})?;
+    if !roles.contains(&Role::Requester)&&!roles.contains(&Role::FinanceApprover)&&!roles.contains(&Role::Accountant){return Err(Error::Forbidden)}
     recheck_authenticated(&mut tx, Some(proof)).await?;
     let rows = sqlx::query_as::<_, ReservationRow>(
-        "SELECT * FROM finance.runtime_reservations($1,$2,$3,$4,$5,$6::integer)",
+        "SELECT * FROM finance.runtime_reservation_ledger($1,$2,$3,$4,$5,$6::integer)",
     )
     .bind(tenant)
     .bind(company)
