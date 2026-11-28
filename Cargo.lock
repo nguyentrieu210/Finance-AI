@@ -818,8 +818,10 @@ dependencies = [
 name = "finance-worker"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "finance-core",
  "finance-document-intelligence",
+ "finance-documents",
  "finance-extraction",
  "finance-ocr",
  "finance-shared",

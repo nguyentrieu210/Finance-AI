@@ -33,6 +33,7 @@ pub struct Grant {
     pub headers: HeaderMap,
 }
 
+#[derive(Clone)]
 pub struct S3 {
     endpoint: Url,
     region: String,
@@ -117,6 +118,7 @@ impl S3 {
         let url = Url::parse(endpoint).map_err(|_| Error::Configuration)?;
         let host = url.host_str().ok_or(Error::Configuration)?;
         let loopback = host == "127.0.0.1";
+        if host.contains(':') { return Err(Error::Configuration); }
         let bucket = |b: &str| (3..=63).contains(&b.len()) && b.bytes().all(|x| x.is_ascii_lowercase() || x.is_ascii_digit() || x == b'-')
             && !b.starts_with('-') && !b.ends_with('-');
         if !(url.scheme() == "https" || (loopback && url.scheme() == "http"))
@@ -150,7 +152,7 @@ impl S3 {
             headers.insert("content-type", mime(object.mime).into());
             headers.insert("if-none-match", "*".into());
             headers.insert("x-amz-checksum-sha256", STANDARD.encode(object.digest.as_bytes()));
-        } else if method != Method::GET || version_id.is_none() {
+        } else if !((method == Method::GET && version_id.is_some()) || (method == Method::HEAD && version_id.is_none())) {
             return Err(Error::Metadata);
         }
         let signed = headers.keys().copied().collect::<Vec<_>>().join(";");
@@ -187,6 +189,51 @@ impl S3 {
             }
         }
         Ok(Grant { url, headers: result })
+    }
+
+    /// Explicit operator opt-in. Missing or partial configuration fails closed.
+    pub fn from_env() -> Result<Option<Self>, Error> {
+        match std::env::var("FINANCE_S3_ENABLED") {
+            Err(std::env::VarError::NotPresent) => return Ok(None),
+            Ok(value) if value == "0" => return Ok(None),
+            Ok(value) if value == "1" => {}
+            _ => return Err(Error::Configuration),
+        }
+        let get = |name| std::env::var(name).map_err(|_| Error::Configuration);
+        let token = std::env::var("FINANCE_S3_SESSION_TOKEN").ok();
+        Self::new(
+            &get("FINANCE_S3_ENDPOINT")?, &get("FINANCE_S3_REGION")?,
+            &get("FINANCE_S3_ACCESS_KEY")?, &get("FINANCE_S3_SECRET_KEY")?,
+            token.as_deref(), &get("FINANCE_S3_STAGING_BUCKET")?,
+            &get("FINANCE_S3_QUARANTINE_BUCKET")?,
+        ).map(Some)
+    }
+
+    /// Discover an immutable version at a conditional-write key. HEAD alone
+    /// never proves the content: all callers must re-read the returned version.
+    async fn current_version(&self, object: &Object, phase: Phase, now: DateTime<Utc>) -> Result<String, Error> {
+        let grant = self.presign(Method::HEAD, object, phase, None, now, 60)?;
+        let response = self.client.head(grant.url).headers(grant.headers).send().await.map_err(|_| Error::Transport)?;
+        if !response.status().is_success() { return Err(Error::Provider); }
+        if response.headers().get("content-length").and_then(|v| v.to_str().ok()).and_then(|s| s.parse::<u64>().ok()) != Some(object.size)
+            || response.headers().get("content-type").and_then(|v| v.to_str().ok()) != Some(mime(object.mime))
+        { return Err(Error::Integrity); }
+        Ok(version(response.headers().get("x-amz-version-id").and_then(|v| v.to_str().ok()).ok_or(Error::InvalidVersion)?)?.to_owned())
+    }
+
+    pub async fn finalize_staged(&self, object: &Object, now: DateTime<Utc>) -> Result<(String, String), Error> {
+        let staged = self.current_version(object, Phase::Staging, now).await?;
+        match self.promote(object, &staged, now).await {
+            Ok(original) => Ok((staged, original)),
+            Err(Error::Conflict) => {
+                // Recovery after a lost receipt/DB rollback: accept only the
+                // exact bytes under the same scoped immutable generation.
+                let original = self.current_version(object, Phase::Quarantine, now).await?;
+                self.read_verified(object, Phase::Quarantine, &original, now).await?;
+                Ok((staged, original))
+            }
+            Err(error) => Err(error),
+        }
     }
 
     /// Upload exactly once; client must send all signed headers and the exact bytes.

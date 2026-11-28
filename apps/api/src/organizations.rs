@@ -62,6 +62,7 @@ pub struct OrganizationState {
     verifier: Arc<VerifierStore>,
     scope: CompanyScope,
     cursor_key: [u8; 32],
+    storage: Option<finance_documents::s3::S3>,
 }
 
 impl OrganizationState {
@@ -89,7 +90,13 @@ impl OrganizationState {
             verifier,
             scope,
             cursor_key,
+            storage: None,
         }
+    }
+
+    pub(crate) fn with_storage(mut self, storage: Option<finance_documents::s3::S3>) -> Self {
+        self.storage = storage;
+        self
     }
 }
 

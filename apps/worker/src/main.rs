@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 mod artifact_store;
 mod ocr;
+mod scan;
 use finance_core::jobs::{self, Failure, FailureResult, JobError, Lease};
 use finance_shared::{
     ids::{CompanyId, CompanyScope, TenantId},
@@ -41,6 +42,7 @@ struct Config {
     adapter_endpoint: Option<String>,
     artifact_root: Option<PathBuf>,
     ocr: Option<ocr::Config>,
+    scan: Option<scan::Config>,
 }
 
 impl Config {
@@ -110,6 +112,7 @@ impl Config {
                 adapter_endpoint,
                 artifact_root,
                 ocr: ocr::Config::from_env()?,
+                scan: scan::Config::from_env()?,
             },
             once,
         ))
@@ -401,6 +404,15 @@ async fn process_preflight(pool: &PgPool, lease: Lease) -> Result<(), RunFailure
 }
 
 async fn cycle(pool: &PgPool, config: &Config) -> Result<bool, RunFailure> {
+    if let Some(scan_config) = &config.scan {
+        jobs::dispatch_event(pool, config.scope, scan::EVENT, 100).await.map_err(job_failure)?;
+        if let Some(lease) = jobs::claim_event(pool,config.scope,config.worker,config.lease_seconds,scan::EVENT).await.map_err(job_failure)? {
+            return match scan::process(pool,scan_config,lease,config.lease_seconds).await {
+                Ok(()) => Ok(true),
+                Err(failure) => { settle_failure(pool,lease,failure).await; Err(failure) }
+            };
+        }
+    }
     jobs::dispatch_event(pool, config.scope, PREFLIGHT_EVENT, 100)
         .await
         .map_err(job_failure)?;
