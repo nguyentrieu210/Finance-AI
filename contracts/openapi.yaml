@@ -1623,6 +1623,76 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /v1/evidence/{evidence_id}/rendered:
+    get:
+      operationId: getRenderedEvidence
+      tags:
+      - E05
+      summary: getRenderedEvidence
+      x-release-gate: pilot
+      parameters:
+      - name: evidence_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found or out of scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or stale version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Business guard failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /v1/dossiers/{dossier_id}/documents/{document_id}/ocr:
     post:
       operationId: rerunOcr
@@ -2443,6 +2513,130 @@ paths:
                     type: string
                 required:
                 - items
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found or out of scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or stale version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Business guard failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: bindReservation
+      tags:
+      - E11
+      summary: bindReservation
+      x-release-gate: pilot
+      parameters:
+      - name: dossier_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
+      - name: If-Finance-Version
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                policy_id:
+                  type: string
+                  format: uuid
+                resource_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 4
+                  uniqueItems: true
+                  items:
+                    type: string
+                    format: uuid
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 2048
+              required:
+              - policy_id
+              - resource_ids
+              - reason
+      responses:
+        '201':
+          description: Success
+          headers:
+            Finance-Version:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  dossier_version:
+                    type: integer
+                    format: int64
+                required:
+                - id
+                - dossier_version
         '400':
           description: Invalid input
           content:
@@ -5121,6 +5315,33 @@ paths:
                     required:
                     - clause_key
                     - field_path
+                finance_gate:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    clause_key:
+                      type: string
+                    amount_path:
+                      type: string
+                    currency_path:
+                      type: string
+                    resource_kinds:
+                      type: array
+                      minItems: 1
+                      maxItems: 4
+                      uniqueItems: true
+                      items:
+                        type: string
+                        enum:
+                        - CONTRACT
+                        - INVOICE
+                        - ADVANCE
+                        - BUDGET
+                  required:
+                  - clause_key
+                  - amount_path
+                  - currency_path
+                  - resource_kinds
               required:
               - company_id
               - name

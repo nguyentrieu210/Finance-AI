@@ -31,7 +31,7 @@ docker exec -i "$cid" psql -X -U finance_migrator -d finance_baseline -v ON_ERRO
 CREATE ROLE finance_probe NOLOGIN;
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM public._sqlx_migrations) <> 76 OR NOT EXISTS (
+  IF (SELECT count(*) FROM public._sqlx_migrations) <> 77 OR NOT EXISTS (
     SELECT 1 FROM public._sqlx_migrations WHERE version = 20261127000100 AND success AND octet_length(checksum) = 48
   ) THEN RAISE EXCEPTION 'migration ledger mismatch'; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace WHERE e.extname = 'vector' AND n.nspname = 'finance' AND e.extversion = '0.8.0') THEN
