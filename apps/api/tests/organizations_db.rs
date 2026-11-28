@@ -2979,29 +2979,43 @@ async fn complete_api_contracts_real_database() {
     let other_dossier_id = other_ds["id"].as_str().unwrap().to_string();
 
     let docs_uri = format!("/v1/dossiers/{dossier_id}/documents");
-    let (d1_status, d1, d1_ver) =
+    let (d1_status, d1, _d1_ver) =
         create_document(&app, &requester, &docs_uri, &dossier_id, "w1-doc-1", 0, 512).await;
     assert_eq!(d1_status, StatusCode::CREATED);
     let doc1_id = d1["document_id"].as_str().unwrap().to_string();
-    let v1 = d1_ver.unwrap();
 
     let (d2_status, d2, d2_ver) =
         create_document(&app, &requester, &docs_uri, &dossier_id, "w1-doc-2", 1, 512).await;
     assert_eq!(d2_status, StatusCode::CREATED);
     let doc2_id = d2["document_id"].as_str().unwrap().to_string();
-    let mut ver = d2_ver.unwrap();
+    let v_before_g1 = d2_ver.unwrap();
+    let mut ver = v_before_g1.clone();
 
     let grant_uri = format!("/v1/dossiers/{dossier_id}/documents/{doc1_id}/upload-grants");
-    let (g1_st, g1, g1_ver) =
-        post_contract(&app, &requester, &grant_uri, "w1-grant-1", Some(&ver), None).await;
+    let (g1_st, g1, g1_ver) = post_contract(
+        &app,
+        &requester,
+        &grant_uri,
+        "w1-grant-1",
+        Some(&v_before_g1),
+        None,
+    )
+    .await;
     assert_eq!(g1_st, StatusCode::CREATED);
     assert_eq!(g1["document_id"], doc1_id);
     assert_eq!(g1["generation"], 1);
     assert_eq!(g1["checksum_sha256_base64"].as_str().unwrap().len(), 44);
-    assert_ne!(g1_ver.as_deref(), Some(ver.as_str()));
+    assert_ne!(g1_ver.as_deref(), Some(v_before_g1.as_str()));
 
-    let (g1_replay_st, g1_replay, _) =
-        post_contract(&app, &requester, &grant_uri, "w1-grant-1", Some(&ver), None).await;
+    let (g1_replay_st, g1_replay, _) = post_contract(
+        &app,
+        &requester,
+        &grant_uri,
+        "w1-grant-1",
+        Some(&v_before_g1),
+        None,
+    )
+    .await;
     assert_eq!(g1_replay_st, StatusCode::CREATED);
     assert_eq!(g1_replay["upload_url"], g1["upload_url"]);
 
@@ -3020,8 +3034,15 @@ async fn complete_api_contracts_real_database() {
     ver = g2_ver.unwrap();
 
     // Superseded grant replay must fail with 409 UPLOAD_GRANT_INACTIVE
-    let (sup_replay_st, sup_replay, _) =
-        post_contract(&app, &requester, &grant_uri, "w1-grant-1", Some(&v1), None).await;
+    let (sup_replay_st, sup_replay, _) = post_contract(
+        &app,
+        &requester,
+        &grant_uri,
+        "w1-grant-1",
+        Some(&v_before_g1),
+        None,
+    )
+    .await;
     assert_eq!(sup_replay_st, StatusCode::CONFLICT);
     assert_eq!(sup_replay["code"], "UPLOAD_GRANT_INACTIVE");
 

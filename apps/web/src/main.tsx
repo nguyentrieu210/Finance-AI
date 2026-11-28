@@ -16,6 +16,13 @@ import { ExtractionWorkbench } from './features/extraction/ExtractionWorkbench';
 import { FieldReview } from './features/validation/FieldReview';
 import { MatchingWorkbench } from './features/matching/MatchingWorkbench';
 import { ReservationWorkbench } from './features/financial/ReservationWorkbench';
+import { JobStatusWorkbench } from './features/core/JobStatusWorkbench';
+import { IdentityWorkbench } from './features/identity/IdentityWorkbench';
+import { MembershipWorkbench } from './features/permissions/MembershipWorkbench';
+import { DocumentsWorkbench } from './features/documents/DocumentsWorkbench';
+import { OcrWorkbench } from './features/ocr/OcrWorkbench';
+import { DocumentIntelligenceWorkbench } from './features/document-intelligence/DocumentIntelligenceWorkbench';
+import { ReferenceWorkbench } from './features/financial/ReferenceWorkbench';
 
 type Organization = components['schemas']['Organization'];
 type Page = { items: Organization[]; next_cursor?: string };
@@ -122,7 +129,7 @@ function App() {
           <div className="table-wrap"><table><thead><tr><th>Mã đơn vị</th><th>Tên đơn vị</th><th>Loại</th><th>Trạng thái</th></tr></thead>
           <tbody>{items.map(row => <tr key={row.id}><td>{row.code}</td><td>{row.name}</td><td>{row.kind}</td><td>{row.active ? 'Hoạt động' : 'Ngừng hoạt động'}</td></tr>)}</tbody></table></div>
           <div className="actions"><button disabled={!connected || busy} onClick={() => void load()}>Trang đầu</button><button disabled={!cursor || busy} onClick={() => void load(cursor)}>Trang tiếp</button></div>
-        </section> : selected === 'E18' && sandbox ? <Drafts /> : selected === 'E22' && sandbox ? <AuditLog /> : selected === 'E24' && sandbox ? <Dashboard /> : selected === 'E15' && sandbox ? <RuleRegistry /> : selected === 'E21' && sandbox ? <RiskWorkbench /> : selected === 'E23' && sandbox ? <IntegrationWorkbench /> : selected === 'E16' && sandbox ? <PublishedPolicies /> : selected === 'E17' && sandbox ? <KnowledgeDiagnostics /> : selected === 'E19' && sandbox ? <FormDesigner /> : selected === 'E20' && sandbox ? <TemplateRegistry /> : selected === 'E08' && sandbox ? <ExtractionWorkbench /> : selected === 'E09' && sandbox ? <FieldReview /> : selected === 'E10' && sandbox ? <MatchingWorkbench /> : selected === 'E11' && sandbox ? <ReservationWorkbench /> : <section aria-labelledby="gate-title"><h2 id="gate-title">Chưa mở nghiệp vụ</h2><p>Phân hệ {selected} chưa vượt qua toàn bộ điều kiện nghiệm thu và phân quyền. Không hiển thị số liệu giả, không cho phép gửi hồ sơ hoặc thay đổi dữ liệu.</p><p role="status">Chưa tiếp nhận chứng từ thực tế — chế độ kỹ thuật.</p></section>}
+        </section> : selected === 'E01' && sandbox ? <JobStatusWorkbench /> : selected === 'E02' && sandbox ? <IdentityWorkbench /> : selected === 'E03' && sandbox ? <MembershipWorkbench /> : selected === 'E05' && sandbox ? <DocumentsWorkbench /> : selected === 'E06' && sandbox ? <OcrWorkbench /> : selected === 'E07' && sandbox ? <DocumentIntelligenceWorkbench /> : selected === 'E12' && sandbox ? <ReferenceWorkbench module="E12" /> : selected === 'E13' && sandbox ? <ReferenceWorkbench module="E13" /> : selected === 'E14' && sandbox ? <ReferenceWorkbench module="E14" /> : selected === 'E18' && sandbox ? <Drafts /> : selected === 'E22' && sandbox ? <AuditLog /> : selected === 'E24' && sandbox ? <Dashboard /> : selected === 'E15' && sandbox ? <RuleRegistry /> : selected === 'E21' && sandbox ? <RiskWorkbench /> : selected === 'E23' && sandbox ? <IntegrationWorkbench /> : selected === 'E16' && sandbox ? <PublishedPolicies /> : selected === 'E17' && sandbox ? <KnowledgeDiagnostics /> : selected === 'E19' && sandbox ? <FormDesigner /> : selected === 'E20' && sandbox ? <TemplateRegistry /> : selected === 'E08' && sandbox ? <ExtractionWorkbench /> : selected === 'E09' && sandbox ? <FieldReview /> : selected === 'E10' && sandbox ? <MatchingWorkbench /> : selected === 'E11' && sandbox ? <ReservationWorkbench /> : <section aria-labelledby="gate-title"><h2 id="gate-title">Chưa mở nghiệp vụ</h2><p>Phân hệ {selected} chưa vượt qua toàn bộ điều kiện nghiệm thu và phân quyền. Không hiển thị số liệu giả, không cho phép gửi hồ sơ hoặc thay đổi dữ liệu.</p><p role="status">Chưa tiếp nhận chứng từ thực tế — chế độ kỹ thuật.</p></section>}
       </main>
     </div>
   </div>;
