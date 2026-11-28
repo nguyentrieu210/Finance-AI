@@ -1,6 +1,7 @@
 """Check technical draft conventions without asserting business approval."""
 from pathlib import Path
 import yaml
+from openapi_parameters import HTTP_METHODS, MUTATING_METHODS, effective_parameters, validate_operation_parameters
 
 root = Path(__file__).resolve().parents[1]
 api = yaml.safe_load((root / "contracts/openapi.yaml").read_text())
@@ -9,17 +10,19 @@ targets = {"dossiers", "organizations", "memberships", "policies", "rules",
 commands = versioned = 0
 for path, item in api["paths"].items():
     for method, operation in item.items():
-        if method not in {"get", "post", "put", "patch", "delete"}:
+        if method not in HTTP_METHODS:
             continue
-        params = {p["name"]: p for p in operation["parameters"]}
+        validate_operation_parameters(path, method, item, operation)
+        params = {p["name"]: p for p in effective_parameters(item, operation)}
         responses = [v for k, v in operation["responses"].items() if str(k).startswith("2")]
         assert "If-Match" not in params, path
         assert all("ETag" not in v.get("headers", {}) for v in responses), path
-        if method != "get":
+        if method in MUTATING_METHODS:
             commands += 1
-            key = params["Idempotency-Key"]
-            assert key["required"] and key["schema"]["maxLength"] == 128
-            assert key["schema"]["pattern"] == r"^[A-Za-z0-9._~-]+$"
+            if operation.get("x-idempotent") is not True:
+                key = params["Idempotency-Key"]
+                assert key["required"] and key["schema"]["maxLength"] == 128
+                assert key["schema"]["pattern"] == r"^[A-Za-z0-9._~-]+$"
         if "If-Finance-Version" in params:
             versioned += 1
             assert params["If-Finance-Version"]["required"]
