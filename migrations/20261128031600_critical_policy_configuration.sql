@@ -1,4 +1,5 @@
 -- Source-clause bound critical field mapping, reviewed as part of policy publication.
+ALTER TABLE finance.policy_version ADD COLUMN finance_gate jsonb CHECK(finance_gate IS NULL OR jsonb_typeof(finance_gate)='object');
 GRANT SELECT,INSERT ON finance.policy_critical_field TO finance_policy_governance;
 GRANT UPDATE(criticality_complete) ON finance.policy_version TO finance_policy_governance;
 CREATE POLICY governance_critical_read ON finance.policy_critical_field FOR SELECT TO finance_policy_governance
@@ -16,7 +17,7 @@ BEGIN
 END $$;
 CREATE TRIGGER critical_registry_freeze BEFORE INSERT OR UPDATE OR DELETE ON finance.policy_critical_field FOR EACH ROW EXECUTE FUNCTION finance.critical_registry_freeze();
 CREATE FUNCTION finance.runtime_policy_create_configured(t uuid,c uuid,a uuid,pid uuid,idem text,pname text,kind text,starts date,ends date,source uuid,
- clause_keys text[],ev_ids uuid[],check_keys text[],doc_kinds text[],required_flags boolean[],cmd uuid,corr uuid,critical_keys text[],critical_paths text[])
+ clause_keys text[],ev_ids uuid[],check_keys text[],doc_kinds text[],required_flags boolean[],cmd uuid,corr uuid,critical_keys text[],critical_paths text[],gate jsonb)
 RETURNS TABLE(id uuid,company_id uuid,version bigint,name text,state text,effective_from text,effective_to text,hash text)
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE digest bytea; previous bytea; source_hash bytea; payload jsonb; affected bigint;
@@ -40,6 +41,25 @@ BEGIN
  OR cardinality(ev_ids)<>(SELECT count(DISTINCT e) FROM unnest(ev_ids) e)
  OR cardinality(doc_kinds)<>(SELECT count(DISTINCT k) FROM unnest(doc_kinds) k)
  THEN RAISE EXCEPTION 'invalid policy draft' USING ERRCODE='22023'; END IF;
+ IF gate IS NOT NULL THEN
+  IF jsonb_typeof(gate) IS DISTINCT FROM 'object' OR octet_length(gate::text)>4096
+  OR NOT (gate ?& ARRAY['clause_key','amount_path','currency_path','resource_kinds'])
+  OR (SELECT count(*) FROM jsonb_object_keys(gate))<>4
+  OR NOT COALESCE(gate->>'clause_key'=ANY(clause_keys),false)
+  OR NOT COALESCE(gate->>'amount_path'=ANY(critical_paths),false)
+  OR NOT COALESCE(gate->>'currency_path'=ANY(critical_paths),false)
+  OR gate->>'amount_path' !~ '^[a-z][a-z0-9_]*[.][a-z][a-z0-9_]*$'
+  OR gate->>'currency_path' IS DISTINCT FROM split_part(gate->>'amount_path','.',1)||'.currency'
+  OR gate->>'amount_path'=gate->>'currency_path'
+  OR jsonb_typeof(gate->'resource_kinds') IS DISTINCT FROM 'array'
+  THEN RAISE EXCEPTION 'invalid finance gate' USING ERRCODE='22023'; END IF;
+  IF jsonb_array_length(gate->'resource_kinds') NOT BETWEEN 1 AND 4
+  OR EXISTS(SELECT 1 FROM jsonb_array_elements_text(gate->'resource_kinds') k WHERE k IS NULL OR k NOT IN ('CONTRACT','INVOICE','ADVANCE','BUDGET'))
+  OR jsonb_array_length(gate->'resource_kinds')<>(SELECT count(DISTINCT k) FROM jsonb_array_elements_text(gate->'resource_kinds') k)
+  OR NOT EXISTS(SELECT 1 FROM unnest(critical_keys,critical_paths) x(k,p) WHERE x.k=gate->>'clause_key' AND x.p=gate->>'amount_path')
+  OR NOT EXISTS(SELECT 1 FROM unnest(critical_keys,critical_paths) x(k,p) WHERE x.k=gate->>'clause_key' AND x.p=gate->>'currency_path')
+  THEN RAISE EXCEPTION 'finance gate must bind approved clause and critical fields' USING ERRCODE='22023'; END IF;
+ END IF;
  IF NOT EXISTS(SELECT 1 FROM finance.membership m WHERE (m.tenant_id,m.company_id,m.actor_id)=(t,c,a)
   AND m.role='POLICY_ADMIN' AND m.active AND m.valid_from<=clock_timestamp() AND (m.valid_until IS NULL OR m.valid_until>clock_timestamp()))
  THEN RAISE EXCEPTION 'policy maker required' USING ERRCODE='42501'; END IF;
@@ -49,15 +69,15 @@ BEGIN
  JOIN finance.document_ref r ON (r.tenant_id,r.company_id,r.id)=(b.tenant_id,b.company_id,b.id)
  WHERE (b.tenant_id,b.company_id,b.id)=(t,c,source) AND b.scan_state='CLEAN' AND u.state='FINALIZED' AND u.actor_id=a;
  IF NOT FOUND THEN RAISE EXCEPTION 'clean authorized policy source required' USING ERRCODE='42501'; END IF;
- digest:=sha256(convert_to(jsonb_build_array(pname,kind,starts,ends,source,encode(source_hash,'hex'),clause_keys,ev_ids,check_keys,doc_kinds,required_flags)::text,'UTF8'));
+ digest:=sha256(convert_to(jsonb_build_array(pname,kind,starts,ends,source,encode(source_hash,'hex'),clause_keys,ev_ids,check_keys,doc_kinds,required_flags,critical_keys,critical_paths,gate)::text,'UTF8'));
  SELECT ir.request_hash,ir.result_payload INTO previous,payload FROM finance.idempotency_record ir
  WHERE (ir.tenant_id,ir.company_id,ir.actor_id,ir.operation_id,ir.key)=(t,c,a,'policy.create',idem);
  IF FOUND THEN
   IF previous<>digest THEN RAISE EXCEPTION 'policy replay conflict' USING ERRCODE='23514'; END IF;
  ELSE
   PERFORM finance.prototype_policy_lock(t,c,kind);
-  INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,effective_from,effective_until,source_digest,display_name)
-   VALUES(t,c,pid,kind,a,starts,ends,source_hash,pname);
+  INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,effective_from,effective_until,source_digest,display_name,finance_gate)
+   VALUES(t,c,pid,kind,a,starts,ends,source_hash,pname,gate);
   INSERT INTO finance.policy_clause(tenant_id,company_id,policy_id,id,clause_key,excerpt,source_digest,source_page)
    SELECT t,c,pid,e.id,z.clause_key,e.excerpt,source_hash,e.page
    FROM unnest(clause_keys,ev_ids) z(clause_key,evidence_id)
@@ -83,9 +103,9 @@ BEGIN
  RETURN QUERY SELECT x.id,x.company_id,x.version,x.name,x.state,x.effective_from,x.effective_to,x.hash
  FROM jsonb_to_record(payload) AS x(id uuid,company_id uuid,version bigint,name text,state text,effective_from text,effective_to text,hash text);
 END $$;
-ALTER FUNCTION finance.runtime_policy_create_configured(uuid,uuid,uuid,uuid,text,text,text,date,date,uuid,text[],uuid[],text[],text[],boolean[],uuid,uuid,text[],text[]) OWNER TO finance_policy_governance;
-REVOKE ALL ON FUNCTION finance.runtime_policy_create_configured(uuid,uuid,uuid,uuid,text,text,text,date,date,uuid,text[],uuid[],text[],text[],boolean[],uuid,uuid,text[],text[]) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION finance.runtime_policy_create_configured(uuid,uuid,uuid,uuid,text,text,text,date,date,uuid,text[],uuid[],text[],text[],boolean[],uuid,uuid,text[],text[]) TO finance_runtime;
+ALTER FUNCTION finance.runtime_policy_create_configured(uuid,uuid,uuid,uuid,text,text,text,date,date,uuid,text[],uuid[],text[],text[],boolean[],uuid,uuid,text[],text[],jsonb) OWNER TO finance_policy_governance;
+REVOKE ALL ON FUNCTION finance.runtime_policy_create_configured(uuid,uuid,uuid,uuid,text,text,text,date,date,uuid,text[],uuid[],text[],text[],boolean[],uuid,uuid,text[],text[],jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION finance.runtime_policy_create_configured(uuid,uuid,uuid,uuid,text,text,text,date,date,uuid,text[],uuid[],text[],text[],boolean[],uuid,uuid,text[],text[],jsonb) TO finance_runtime;
 
 CREATE OR REPLACE FUNCTION finance.runtime_policy_change(t uuid,c uuid,a uuid,pid uuid,v bigint,op text,idem text,why text,new_name text,day date,new_id uuid,cmd uuid,corr uuid)
 RETURNS TABLE(id uuid,company_id uuid,version bigint,name text,state text,effective_from text,effective_to text,hash text)
@@ -121,8 +141,8 @@ BEGIN
   target_id:=pid;
   IF op='policy.revise' THEN
    IF p.state='IN_REVIEW' OR day>=p.effective_until THEN RAISE EXCEPTION 'invalid revision' USING ERRCODE='23514'; END IF;
-   INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,effective_from,effective_until,source_digest,display_name,supersedes_id)
-    VALUES(t,c,new_id,p.dossier_kind,a,day,p.effective_until,p.source_digest,new_name,pid);
+   INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,effective_from,effective_until,source_digest,display_name,supersedes_id,finance_gate)
+    VALUES(t,c,new_id,p.dossier_kind,a,day,p.effective_until,p.source_digest,new_name,pid,p.finance_gate);
    INSERT INTO finance.policy_clause(tenant_id,company_id,policy_id,id,clause_key,excerpt,source_digest,source_page)
     SELECT t,c,new_id,cl.id,cl.clause_key,cl.excerpt,cl.source_digest,cl.source_page FROM finance.policy_clause cl
     WHERE (cl.tenant_id,cl.company_id,cl.policy_id)=(t,c,pid);

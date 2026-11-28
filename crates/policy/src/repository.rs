@@ -261,6 +261,7 @@ pub struct CreateDraft<'a> {
     pub mandatory: &'a [bool],
     pub critical_keys: &'a [String],
     pub critical_paths: &'a [String],
+    pub finance_gate: Option<&'a str>,
 }
 
 pub async fn create(
@@ -301,7 +302,7 @@ pub async fn create(
     let command: Uuid = proof.context().command.into();
     let correlation: Uuid = proof.context().correlation.into();
     let row = sqlx::query_as::<_, PublishedPolicy>(
-        "SELECT * FROM finance.runtime_policy_create_configured($1,$2,$3,$4,$5,$6,$7,$8::text::date,$9::text::date,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)",
+        "SELECT * FROM finance.runtime_policy_create_configured($1,$2,$3,$4,$5,$6,$7,$8::text::date,$9::text::date,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::text::jsonb)",
     )
     .bind(t)
     .bind(c)
@@ -322,6 +323,7 @@ pub async fn create(
     .bind(correlation)
     .bind(input.critical_keys)
     .bind(input.critical_paths)
+    .bind(input.finance_gate)
     .fetch_one(&mut *tx)
     .await
     .map_err(

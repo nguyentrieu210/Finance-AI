@@ -580,7 +580,7 @@ pub fn router(state: OrganizationState) -> Router {
         )
         .route(
             "/v1/dossiers/{dossier_id}/reservations",
-            get(reservations::list),
+            get(reservations::list).post(reservations::bind),
         )
         .route(
             "/v1/dossiers/{dossier_id}/fields/decisions",
