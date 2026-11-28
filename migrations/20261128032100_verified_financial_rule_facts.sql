@@ -1,0 +1,312 @@
+ALTER TABLE finance.check_run ADD COLUMN financial_digest bytea CHECK(financial_digest IS NULL OR octet_length(financial_digest)=32);
+-- E10-E15: bind each cap to a confirmed document identity. The rule input
+-- includes current independently verified cap facts, not caller supplied totals.
+CREATE OR REPLACE FUNCTION finance.bound_finance_material(t uuid,c uuid,d uuid,rev uuid,pid uuid,v bigint,ids uuid[])
+RETURNS jsonb LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog AS $$
+DECLARE gate jsonb; fields jsonb; amount_row jsonb; currency_row jsonb; n numeric; k uuid; fr finance.financial_resource%ROWTYPE; refs jsonb:='[]'; kinds text[]; expected text[]; cur text; key_row jsonb; key_path text; key_count bigint; advance_plan jsonb; line_amount numeric; advance_total numeric:=0; advance_count integer:=0; plan_key text; split_enabled boolean:=false; required_paths text[]; settlement_kind text; extra_mat jsonb; applied_row jsonb; requested_row jsonb; extra_row jsonb; beneficiary_row jsonb;
+BEGIN
+ IF (t,c) IS DISTINCT FROM (finance.scope_tenant(),finance.scope_company()) OR cardinality(ids) NOT BETWEEN 1 AND 32 OR array_position(ids,NULL::uuid) IS NOT NULL THEN RETURN NULL; END IF;
+ SELECT pv.finance_gate INTO gate FROM finance.policy_version pv JOIN finance.dossier ds ON (ds.tenant_id,ds.company_id,ds.id)=(t,c,d)
+ WHERE (pv.tenant_id,pv.company_id,pv.id)=(t,c,pid) AND pv.state='PUBLISHED' AND pv.criticality_complete AND pv.dossier_kind=ds.kind
+ AND pv.effective_from<=(clock_timestamp() AT TIME ZONE 'UTC')::date AND pv.effective_until>(clock_timestamp() AT TIME ZONE 'UTC')::date;
+ IF gate IS NULL OR jsonb_typeof(gate->'resource_keys') IS DISTINCT FROM 'object' THEN RETURN NULL; END IF;
+ SELECT ds.kind INTO settlement_kind FROM finance.dossier ds WHERE (ds.tenant_id,ds.company_id,ds.id)=(t,c,d);
+ SELECT array_agg(DISTINCT z ORDER BY z) INTO required_paths FROM unnest(ARRAY[gate->>'amount_path',gate->>'currency_path']||ARRAY(SELECT value FROM jsonb_each_text(gate->'resource_keys'))||CASE WHEN settlement_kind='SETTLEMENT' THEN ARRAY['advance_settlement.applied','advance_settlement.extra','advance_settlement.requested','advance_settlement.beneficiary_key'] WHEN gate->>'extra_settlement'='true' THEN ARRAY['payment_request.settlement_snapshot','payment_request.beneficiary_key'] ELSE ARRAY[]::text[] END) z;
+ SELECT jsonb_agg(row.item ORDER BY row.doc,row.path) INTO fields FROM (
+ SELECT o.document_id doc,f.field_path path,jsonb_build_object('document',o.document_id,'path',f.field_path,'decision',q.id,'value',q.normalized_value,'evidence',q.evidence_ids,'verified',coalesce(q.disposition IN ('CONFIRMED_CANDIDATE','CORRECTED') AND cardinality(q.evidence_ids)>0,false),'source',encode(b.sha256_digest,'hex')) item
+ FROM finance.document_ref dr JOIN finance.document_blob b ON (b.tenant_id,b.company_id,b.id)=(dr.tenant_id,dr.company_id,dr.id)
+ JOIN finance.upload_intent u ON (u.tenant_id,u.company_id,u.id)=(dr.tenant_id,dr.company_id,dr.id)
+ JOIN finance.ocr_run o ON (o.tenant_id,o.company_id,o.document_id,o.revision_id,o.generation)=(dr.tenant_id,dr.company_id,dr.id,dr.revision_id,b.generation)
+ JOIN finance.extraction_run x ON (x.tenant_id,x.company_id,x.ocr_run_id)=(o.tenant_id,o.company_id,o.id)
+ JOIN finance.extracted_field f ON (f.tenant_id,f.company_id,f.run_id)=(x.tenant_id,x.company_id,x.id)
+ LEFT JOIN LATERAL (SELECT q.id,q.disposition,q.normalized_value,q.evidence_ids FROM finance.field_decision q
+ WHERE (q.tenant_id,q.company_id,q.run_id,q.field_path,q.dossier_id,q.revision_id)=(f.tenant_id,f.company_id,f.run_id,f.field_path,d,rev)
+ AND q.dossier_version<=v ORDER BY q.dossier_version DESC,q.created_at DESC,q.id DESC LIMIT 1) q ON true
+ WHERE (dr.tenant_id,dr.company_id,dr.dossier_id,dr.revision_id)=(t,c,d,rev)
+ AND b.scan_state='CLEAN' AND u.state='FINALIZED' AND u.generation=b.generation AND b.sha256_digest=u.declared_sha256 AND o.source_digest=b.sha256_digest
+ AND f.field_path=ANY(required_paths)
+ AND NOT EXISTS(SELECT 1 FROM finance.ocr_run newer WHERE (newer.tenant_id,newer.company_id,newer.document_id,newer.revision_id)=(o.tenant_id,o.company_id,o.document_id,o.revision_id) AND (newer.created_at,newer.id)>(o.created_at,o.id))
+ LIMIT 13) row;
+ IF jsonb_array_length(fields) IS DISTINCT FROM cardinality(required_paths) OR EXISTS(SELECT 1 FROM unnest(required_paths) path WHERE (SELECT count(*) FROM jsonb_array_elements(fields) q WHERE q->>'path'=path AND q->>'verified'='true' AND q->>'value' IS NOT NULL)<>1) THEN RETURN NULL; END IF;
+ SELECT value INTO amount_row FROM jsonb_array_elements(fields) WHERE value->>'path'=gate->>'amount_path';
+ SELECT value INTO currency_row FROM jsonb_array_elements(fields) WHERE value->>'path'=gate->>'currency_path';
+ IF amount_row IS NULL OR currency_row IS NULL OR amount_row->>'verified' IS DISTINCT FROM 'true' OR currency_row->>'verified' IS DISTINCT FROM 'true'
+ OR amount_row->>'document' IS DISTINCT FROM currency_row->>'document' OR amount_row->>'value' IS NULL
+ OR amount_row->>'value' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$' THEN RETURN NULL; END IF;
+ n:=(amount_row->>'value')::numeric; cur:=currency_row->>'value';
+ IF n<=0 OR cur IS NULL OR cur !~ '^[A-Z]{3}$' THEN RETURN NULL; END IF;
+ split_enabled:=coalesce(gate->'resource_keys'->>'ADVANCE'='advance_settlement.allocations',false);
+ IF settlement_kind='SETTLEMENT' THEN
+  IF NOT split_enabled OR gate->>'amount_path'<>'advance_settlement.applied' THEN RETURN NULL; END IF;
+  SELECT value INTO applied_row FROM jsonb_array_elements(fields) WHERE value->>'path'='advance_settlement.applied';
+  SELECT value INTO extra_row FROM jsonb_array_elements(fields) WHERE value->>'path'='advance_settlement.extra';
+  SELECT value INTO requested_row FROM jsonb_array_elements(fields) WHERE value->>'path'='advance_settlement.requested';
+  SELECT value INTO beneficiary_row FROM jsonb_array_elements(fields) WHERE value->>'path'='advance_settlement.beneficiary_key';
+  IF EXISTS(SELECT 1 FROM jsonb_array_elements(jsonb_build_array(applied_row,extra_row,requested_row,beneficiary_row)) q WHERE q->>'document' IS DISTINCT FROM amount_row->>'document') OR extra_row->>'value' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$' OR requested_row->>'value' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$' THEN RETURN NULL; END IF;
+  IF n+(extra_row->>'value')::numeric<>(requested_row->>'value')::numeric THEN RETURN NULL; END IF;
+ ELSIF gate->>'extra_settlement'='true' THEN
+  IF settlement_kind<>'PAYMENT' OR gate->>'amount_path'<>'payment_request.requested' THEN RETURN NULL; END IF;
+  extra_mat:=finance.verified_extra_settlement(t,c,d,fields,amount_row,cur,n);
+  IF extra_mat IS NULL THEN RETURN NULL; END IF;
+ END IF;
+ IF split_enabled THEN
+  SELECT value INTO key_row FROM jsonb_array_elements(fields) WHERE value->>'path'='advance_settlement.allocations';
+  IF key_row IS NULL OR key_row->>'verified' IS DISTINCT FROM 'true' OR key_row->>'value' IS NULL THEN RETURN NULL; END IF;
+  BEGIN advance_plan:=(key_row->>'value')::jsonb; EXCEPTION WHEN invalid_text_representation THEN RETURN NULL; END;
+  IF jsonb_typeof(advance_plan) IS DISTINCT FROM 'object' OR (SELECT count(*) FROM jsonb_object_keys(advance_plan)) NOT BETWEEN 1 AND 29 THEN RETURN NULL; END IF;
+ END IF;
+ SELECT array_agg(k ORDER BY k) INTO expected FROM jsonb_array_elements_text(gate->'resource_kinds') k;
+ FOR k IN SELECT DISTINCT z FROM unnest(ids) z ORDER BY z LOOP
+  SELECT * INTO fr FROM finance.financial_resource r WHERE (r.tenant_id,r.company_id,r.id)=(t,c,k) FOR UPDATE;
+  IF NOT FOUND OR fr.currency<>cur OR NOT fr.coverage_complete OR fr.fresh_until<=clock_timestamp()
+  OR NOT COALESCE(finance.reference_details_eligible(fr.resource_kind,fr.reference_details,(clock_timestamp() AT TIME ZONE 'UTC')::date),false)
+  OR NOT EXISTS(SELECT 1 FROM finance.reference_snapshot s JOIN finance.source_coverage sc ON (sc.tenant_id,sc.company_id,sc.snapshot_id)=(s.tenant_id,s.company_id,s.id)
+   WHERE (s.tenant_id,s.company_id,s.id)=(t,c,fr.snapshot_id) AND s.state='APPROVED' AND s.source_document_id IS NOT NULL AND s.fresh_until>clock_timestamp() AND sc.resource_kind=fr.resource_kind AND sc.complete
+   AND EXISTS(SELECT 1 FROM finance.document_blob b JOIN finance.upload_intent u ON (u.tenant_id,u.company_id,u.id)=(b.tenant_id,b.company_id,b.id) WHERE (b.tenant_id,b.company_id,b.id)=(s.tenant_id,s.company_id,s.source_document_id) AND b.scan_state='CLEAN' AND b.sha256_digest=s.source_digest AND u.state='FINALIZED' AND u.generation=b.generation AND u.declared_sha256=b.sha256_digest))
+  THEN RETURN NULL; END IF;
+  key_path:=gate->'resource_keys'->>fr.resource_kind;
+  SELECT count(*) INTO key_count FROM jsonb_array_elements(fields) fld WHERE fld->>'path'=key_path;
+  IF key_count<>1 THEN RETURN NULL; END IF;
+  SELECT value INTO key_row FROM jsonb_array_elements(fields) WHERE value->>'path'=key_path;
+  IF key_row->>'verified' IS DISTINCT FROM 'true' OR key_row->>'value' IS NULL THEN RETURN NULL; END IF;
+  line_amount:=n;
+  IF split_enabled AND fr.resource_kind='ADVANCE' THEN
+   IF fr.reference_details->>'beneficiary_key' IS DISTINCT FROM beneficiary_row->>'value' THEN RETURN NULL; END IF;
+   plan_key:=(fr.source_key::jsonb)->>1;
+   IF jsonb_typeof(advance_plan->plan_key) IS DISTINCT FROM 'string' OR advance_plan->>plan_key !~ '^[0-9]{1,20}([.][0-9]{1,8})?$' THEN RETURN NULL; END IF;
+   line_amount:=(advance_plan->>plan_key)::numeric;
+   IF line_amount<=0 THEN RETURN NULL; END IF;
+   advance_total:=advance_total+line_amount; advance_count:=advance_count+1;
+  ELSIF fr.source_key IS DISTINCT FROM jsonb_build_array('MANUAL_API',key_row->>'value')::text THEN RETURN NULL;
+  END IF;
+  refs:=refs||jsonb_build_array(jsonb_build_object('id',fr.id,'snapshot',fr.snapshot_id,'kind',fr.resource_kind,'key',fr.source_key,'allocated',line_amount));
+ END LOOP;
+ SELECT array_agg(DISTINCT z->>'kind' ORDER BY z->>'kind') INTO kinds FROM jsonb_array_elements(refs) z;
+ IF kinds IS DISTINCT FROM expected OR jsonb_array_length(refs)<>cardinality(ids)
+ OR EXISTS(SELECT 1 FROM jsonb_array_elements(refs) z GROUP BY z->>'kind' HAVING count(*)>1 AND (z->>'kind'<>'ADVANCE' OR NOT split_enabled))
+ OR (split_enabled AND (advance_total<>n OR advance_count<>(SELECT count(*) FROM jsonb_object_keys(advance_plan))))
+ THEN RETURN NULL; END IF;
+ RETURN jsonb_build_object('policy',pid,'revision',rev,'amount',n,'currency',cur,'fields',fields,'resources',refs,'split',split_enabled,'extra_settlement',extra_mat);
+END $$;
+ALTER FUNCTION finance.bound_finance_material(uuid,uuid,uuid,uuid,uuid,bigint,uuid[]) OWNER TO finance_workflow_writer;
+REVOKE ALL ON FUNCTION finance.bound_finance_material(uuid,uuid,uuid,uuid,uuid,bigint,uuid[]) FROM PUBLIC;
+
+
+CREATE FUNCTION finance.runtime_verified_financial_facts(t uuid,c uuid,d uuid,rev uuid,pid uuid,v bigint)
+RETURNS jsonb LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog AS $$
+DECLARE hold_id uuid; hold finance.reservation%ROWTYPE; fr finance.financial_resource%ROWTYPE;
+ snap finance.reference_snapshot%ROWTYPE; row_data jsonb; held numeric; result jsonb:='[]'; prefix text; k uuid; ev jsonb; minimum numeric; all_ev jsonb:='[]'; amount_ev jsonb; mat jsonb; grouped jsonb; fact record; matched jsonb; overdue boolean:=false; advance_ev jsonb:='[]';
+BEGIN
+ hold_id:=finance.current_bound_reservation(t,c,d,rev,pid,v);
+ IF hold_id IS NULL THEN RETURN '[]'::jsonb; END IF;
+ SELECT * INTO STRICT hold FROM finance.reservation x WHERE (x.tenant_id,x.company_id,x.id)=(t,c,hold_id);
+ mat:=finance.bound_finance_material(t,c,d,rev,pid,v,hold.resource_ids);
+ IF mat IS NULL THEN RETURN '[]'::jsonb; END IF;
+ SELECT coalesce(jsonb_agg(DISTINCT e ORDER BY e),'[]'::jsonb) INTO amount_ev
+ FROM jsonb_array_elements(mat->'fields') fld CROSS JOIN LATERAL jsonb_array_elements(fld->'evidence') e;
+ FOR k IN SELECT z FROM unnest(hold.resource_ids) z ORDER BY z LOOP
+  SELECT * INTO STRICT fr FROM finance.financial_resource x WHERE (x.tenant_id,x.company_id,x.id)=(t,c,k);
+  SELECT * INTO STRICT snap FROM finance.reference_snapshot x WHERE (x.tenant_id,x.company_id,x.id)=(t,c,fr.snapshot_id);
+  SELECT item INTO row_data FROM jsonb_array_elements(snap.import_payload) item
+   WHERE jsonb_build_array('MANUAL_API',item->>'source_key')::text=fr.source_key;
+  IF row_data IS NULL OR jsonb_typeof(row_data->'evidence_ids') IS DISTINCT FROM 'array'
+    OR jsonb_array_length(row_data->'evidence_ids')=0 THEN RETURN '[]'::jsonb; END IF;
+  SELECT coalesce(sum(coalesce(l.line_remaining,r.remaining)),0) INTO held FROM finance.reservation_line l
+   JOIN finance.reservation r ON (r.tenant_id,r.company_id,r.id)=(l.tenant_id,l.company_id,l.reservation_id)
+   WHERE (l.tenant_id,l.company_id,l.resource_id)=(t,c,k) AND r.id<>hold_id AND r.state IN ('RESERVED','COMMITTED','PARTIAL');
+  SELECT coalesce(jsonb_agg(DISTINCT e ORDER BY e),'[]'::jsonb) INTO ev
+   FROM jsonb_array_elements((row_data->'evidence_ids')||amount_ev) e;
+  IF jsonb_array_length(ev)>64 THEN RETURN '[]'::jsonb; END IF;
+  prefix:=lower(fr.resource_kind);
+  IF fr.resource_kind='ADVANCE' THEN
+   advance_ev:=advance_ev||ev;
+   overdue:=overdue OR (fr.cap-fr.consumed>0 AND (clock_timestamp() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date>COALESCE((fr.reference_details->'extension'->>'new_due')::date,(fr.reference_details->>'due_date')::date));
+  END IF;
+  IF fr.cap-fr.consumed-held < (SELECT (z->>'allocated')::numeric FROM jsonb_array_elements(mat->'resources') z WHERE z->>'id'=fr.id::text) THEN RETURN '[]'::jsonb; END IF;
+  all_ev:=all_ev||ev;
+  result:=result||jsonb_build_array(
+   jsonb_build_object('path',prefix||'.remaining','value',(fr.cap-fr.consumed-held)::text,'currency',fr.currency,'verified',true,'evidence',ev),
+   jsonb_build_object('path',prefix||'.cap','value',fr.cap::text,'currency',fr.currency,'verified',true,'evidence',ev),
+   jsonb_build_object('path',prefix||'.consumed','value',fr.consumed::text,'currency',fr.currency,'verified',true,'evidence',ev),
+   jsonb_build_object('path',prefix||'.other_holds','value',held::text,'currency',fr.currency,'verified',true,'evidence',ev));
+ END LOOP;
+ SELECT coalesce(jsonb_agg(DISTINCT e ORDER BY e),'[]'::jsonb) INTO all_ev FROM jsonb_array_elements(all_ev) e;
+ SELECT coalesce(jsonb_agg(jsonb_build_object('path',g.path,'value',g.amount::text,'currency',hold.currency,'verified',true,'evidence',g.evidence) ORDER BY g.path),'[]'::jsonb) INTO grouped FROM (
+ SELECT x->>'path' path,sum((x->>'value')::numeric) amount,(SELECT coalesce(jsonb_agg(DISTINCT ev ORDER BY ev),'[]'::jsonb) FROM jsonb_array_elements(result) z CROSS JOIN LATERAL jsonb_array_elements(z->'evidence') ev WHERE z->>'path'=x->>'path') evidence
+ FROM jsonb_array_elements(result) x GROUP BY x->>'path') g;
+ SELECT min((x->>'value')::numeric) INTO minimum FROM jsonb_array_elements(grouped) x WHERE x->>'path' LIKE '%.remaining';
+ result:=grouped;
+ IF jsonb_array_length(advance_ev)>0 THEN
+  SELECT coalesce(jsonb_agg(DISTINCT e ORDER BY e),'[]') INTO advance_ev FROM jsonb_array_elements(advance_ev) e;
+  result:=result||jsonb_build_array(jsonb_build_object('path','advance.overdue','value',overdue::text,'verified',true,'evidence',advance_ev));
+ END IF;
+ matched:=finance.verified_acceptance_material(t,c,d,rev,pid,hold_id);
+ IF matched IS NULL THEN RETURN '[]'::jsonb; END IF;
+ result:=result||(matched->'facts');
+ IF mat->'extra_settlement'<>'null'::jsonb THEN
+  result:=result||jsonb_build_array(jsonb_build_object('path','settlement.extra_verified','value','true','verified',true,'evidence',mat->'extra_settlement'->'evidence'));
+ END IF;
+ IF minimum IS NULL OR jsonb_array_length(all_ev)>64 THEN RETURN '[]'::jsonb; END IF;
+ RETURN result||jsonb_build_array(
+  jsonb_build_object('path','finance.payable_cap','value',minimum::text,'currency',hold.currency,'verified',true,'evidence',all_ev),
+  jsonb_build_object('path','finance.requested','value',hold.amount::text,'currency',hold.currency,'verified',true,'evidence',amount_ev),
+  jsonb_build_object('path','reference.fresh','value','true','verified',true,'evidence',all_ev));
+END $$;
+ALTER FUNCTION finance.runtime_verified_financial_facts(uuid,uuid,uuid,uuid,uuid,bigint) OWNER TO finance_workflow_writer;
+REVOKE ALL ON FUNCTION finance.runtime_verified_financial_facts(uuid,uuid,uuid,uuid,uuid,bigint) FROM PUBLIC;
+CREATE OR REPLACE FUNCTION finance.runtime_preflight_rule_material(t uuid,c uuid,j uuid,f bigint,w uuid)
+RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE p finance.preflight_request%ROWTYPE; ds finance.dossier%ROWTYPE; rules jsonb; fields jsonb; financial jsonb;
+BEGIN
+ IF (t,c) IS DISTINCT FROM (finance.scope_tenant(),finance.scope_company())
+ OR NOT finance.worker_scope_allowed(t,c)
+ THEN RAISE EXCEPTION 'worker authority' USING ERRCODE='42501'; END IF;
+ PERFORM 1 FROM finance.job WHERE (tenant_id,company_id,id,fence,leased_by)=(t,c,j,f,w)
+ AND state='LEASED' AND lease_until>clock_timestamp() FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'stale preflight lease' USING ERRCODE='40001'; END IF;
+ SELECT * INTO p FROM finance.preflight_request WHERE (tenant_id,company_id,job_id)=(t,c,j);
+ IF NOT FOUND THEN RAISE EXCEPTION 'unknown preflight request' USING ERRCODE='P0002'; END IF;
+ PERFORM set_config('finance.actor_id',p.actor_id::text,true);
+ SELECT * INTO ds FROM finance.dossier WHERE (tenant_id,company_id,id)=(t,c,p.dossier_id) FOR UPDATE;
+ IF NOT FOUND OR ds.owner_id<>p.actor_id OR ds.version<>p.dossier_version OR ds.status<>'DRAFT'
+ OR NOT EXISTS(SELECT 1 FROM finance.dossier_revision dr WHERE (dr.tenant_id,dr.company_id,dr.dossier_id,dr.id,dr.number)=(t,c,ds.id,p.revision_id,ds.revision))
+ OR p.business_day<>(clock_timestamp() AT TIME ZONE 'UTC')::date
+ OR NOT EXISTS(SELECT 1 FROM finance.membership m WHERE (m.tenant_id,m.company_id,m.actor_id)=(t,c,p.actor_id)
+ AND m.role='REQUESTER' AND m.active AND m.valid_from<=clock_timestamp() AND (m.valid_until IS NULL OR m.valid_until>clock_timestamp()))
+ THEN RAISE EXCEPTION 'stale preflight material' USING ERRCODE='23514'; END IF;
+ PERFORM finance.prototype_policy_lock(t,c,ds.kind);
+ IF p.policy_id IS DISTINCT FROM finance.prototype_effective_policy(t,c,ds.kind,p.business_day)
+ THEN RAISE EXCEPTION 'stale policy' USING ERRCODE='23514'; END IF;
+ SELECT coalesce(jsonb_agg(jsonb_build_object('id',r.id,'name',r.rule_key,'version',r.version,'severity',r.severity,'definition',r.definition) ORDER BY r.rule_key,r.id),'[]'::jsonb) INTO rules
+ FROM (SELECT * FROM finance.rule_version WHERE (tenant_id,company_id,policy_id)=(t,c,p.policy_id) AND state='PUBLISHED' ORDER BY rule_key,id LIMIT 1001) r;
+ IF jsonb_array_length(rules)>1000 OR octet_length(rules::text)>4194304 THEN RAISE EXCEPTION 'rule material limit' USING ERRCODE='23514'; END IF;
+ SELECT coalesce(jsonb_agg(row.data ORDER BY row.document,row.path),'[]'::jsonb) INTO fields
+ FROM (
+ SELECT o.document_id AS document,f.field_path AS path,
+ jsonb_build_object('document',o.document_id,'path',f.field_path,
+ 'value',CASE WHEN q.disposition IN ('CONFIRMED_CANDIDATE','CORRECTED') THEN q.normalized_value END,
+ 'verified',coalesce(q.disposition IN ('CONFIRMED_CANDIDATE','CORRECTED') AND cardinality(q.evidence_ids)>0,false),
+ 'evidence',coalesce(to_jsonb(q.evidence_ids),'[]'::jsonb)) AS data
+ FROM finance.document_ref dr JOIN finance.document_blob b ON (b.tenant_id,b.company_id,b.id)=(dr.tenant_id,dr.company_id,dr.id)
+ JOIN finance.upload_intent u ON (u.tenant_id,u.company_id,u.id)=(dr.tenant_id,dr.company_id,dr.id)
+ JOIN finance.ocr_run o ON (o.tenant_id,o.company_id,o.document_id,o.revision_id,o.generation)=(dr.tenant_id,dr.company_id,dr.id,dr.revision_id,b.generation)
+ JOIN finance.extraction_run x ON (x.tenant_id,x.company_id,x.ocr_run_id)=(o.tenant_id,o.company_id,o.id)
+ JOIN finance.extracted_field f ON (f.tenant_id,f.company_id,f.run_id)=(x.tenant_id,x.company_id,x.id)
+ LEFT JOIN LATERAL (
+ SELECT q.disposition,q.normalized_value,q.evidence_ids FROM finance.field_decision q
+ WHERE (q.tenant_id,q.company_id,q.run_id,q.field_path,q.dossier_id,q.revision_id)=(f.tenant_id,f.company_id,f.run_id,f.field_path,p.dossier_id,p.revision_id)
+ AND q.dossier_version<=p.dossier_version ORDER BY q.dossier_version DESC,q.created_at DESC,q.id DESC LIMIT 1
+ ) q ON true
+ WHERE (dr.tenant_id,dr.company_id,dr.dossier_id,dr.revision_id)=(t,c,p.dossier_id,p.revision_id)
+ AND b.scan_state='CLEAN' AND u.state='FINALIZED' AND u.generation=b.generation AND o.source_digest=b.sha256_digest
+ AND NOT EXISTS(SELECT 1 FROM finance.ocr_run newer WHERE (newer.tenant_id,newer.company_id,newer.document_id,newer.revision_id)=(o.tenant_id,o.company_id,o.document_id,o.revision_id)
+ AND (newer.created_at,newer.id)>(o.created_at,o.id))
+ ORDER BY o.document_id,f.field_path LIMIT 5001
+ ) row;
+ IF jsonb_array_length(fields)>5000 OR octet_length(fields::text)>8388608 THEN RAISE EXCEPTION 'field material limit' USING ERRCODE='23514'; END IF;
+ financial:=finance.runtime_verified_financial_facts(t,c,p.dossier_id,p.revision_id,p.policy_id,p.dossier_version);
+ RETURN jsonb_build_object('invoice_document_count',(SELECT count(*) FROM finance.upload_intent u WHERE (u.tenant_id,u.company_id,u.dossier_id,u.revision_id)=(t,c,p.dossier_id,p.revision_id) AND u.document_kind='INVOICE' AND u.state<>'CANCELLED'),'financial',financial,'policy',p.policy_id,'revision',p.revision_id,'version',p.dossier_version,'rules',rules,'fields',fields);
+END $$;
+ALTER FUNCTION finance.runtime_preflight_rule_material(uuid,uuid,uuid,bigint,uuid) OWNER TO finance_workflow_writer;
+REVOKE ALL ON FUNCTION finance.runtime_preflight_rule_material(uuid,uuid,uuid,bigint,uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION finance.runtime_preflight_rule_material(uuid,uuid,uuid,bigint,uuid) TO finance_job_worker;
+
+
+CREATE OR REPLACE FUNCTION finance.complete_preflight_with_rules(t uuid,c uuid,j uuid,f bigint,w uuid,material jsonb,results jsonb)
+RETURNS void LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE current_material jsonb; p finance.preflight_request%ROWTYPE; result jsonb; rule jsonb; evidence uuid[]; seen uuid[]:=ARRAY[]::uuid[]; structural jsonb:='[]'::jsonb; item record; outcome text; detail text; blocked boolean; revision_version bigint; affected bigint; digest bytea;
+BEGIN
+ current_material:=finance.runtime_preflight_rule_material(t,c,j,f,w);
+ IF current_material IS DISTINCT FROM material OR jsonb_typeof(results) IS DISTINCT FROM 'array'
+ OR jsonb_array_length(results)<>jsonb_array_length(material->'rules') OR octet_length(results::text)>2097152
+ THEN RAISE EXCEPTION 'stale rule evaluation' USING ERRCODE='23514'; END IF;
+ SELECT * INTO STRICT p FROM finance.preflight_request WHERE (tenant_id,company_id,job_id)=(t,c,j);
+ -- Evaluate current structural evidence, not fixed prototype outcomes.
+ -- A clean blob must correspond to the exact finalized generation and digest.
+ structural:=structural||jsonb_build_array(jsonb_build_object('key','policy.effective','outcome','PASS','severity','BLOCK','detail','PUBLISHED_POLICY_FOUND'));
+ FOR item IN SELECT document_kind,mandatory FROM finance.checklist_item
+ WHERE (tenant_id,company_id,policy_id)=(t,c,p.policy_id) ORDER BY document_kind LOOP
+  IF EXISTS(SELECT 1 FROM finance.upload_intent u JOIN finance.document_blob b ON (b.tenant_id,b.company_id,b.id)=(u.tenant_id,u.company_id,u.id)
+   WHERE (u.tenant_id,u.company_id,u.dossier_id,u.revision_id,u.actor_id,u.document_kind)=(t,c,p.dossier_id,p.revision_id,p.actor_id,item.document_kind)
+   AND u.state='FINALIZED' AND b.generation=u.generation AND b.sha256_digest=u.declared_sha256 AND b.scan_state='CLEAN')
+   THEN outcome:='PASS'; detail:='CLEAN_DOCUMENT_FOUND';
+  ELSIF EXISTS(SELECT 1 FROM finance.upload_intent u WHERE (u.tenant_id,u.company_id,u.dossier_id,u.revision_id,u.document_kind)=(t,c,p.dossier_id,p.revision_id,item.document_kind) AND u.state<>'CANCELLED')
+   THEN outcome:='UNKNOWN'; detail:='DOCUMENT_NOT_RELEASED';
+  ELSE outcome:='FAIL'; detail:='MISSING_DOCUMENT'; END IF;
+  structural:=structural||jsonb_build_array(jsonb_build_object('key','checklist.'||item.document_kind,'outcome',outcome,'severity',CASE WHEN item.mandatory THEN 'BLOCK' ELSE 'WARNING' END,'detail',detail));
+ END LOOP;
+ IF EXISTS(SELECT 1 FROM finance.upload_intent u LEFT JOIN finance.document_blob b ON (b.tenant_id,b.company_id,b.id)=(u.tenant_id,u.company_id,u.id)
+ WHERE (u.tenant_id,u.company_id,u.dossier_id,u.revision_id)=(t,c,p.dossier_id,p.revision_id) AND u.state<>'CANCELLED'
+ AND (u.state<>'FINALIZED' OR b.id IS NULL OR b.generation<>u.generation OR b.sha256_digest<>u.declared_sha256 OR b.scan_state<>'CLEAN'))
+ THEN outcome:='UNKNOWN'; detail:='DOCUMENT_NOT_RELEASED'; ELSE outcome:='PASS'; detail:='CLEAN_GENERATIONS_VERIFIED'; END IF;
+ structural:=structural||jsonb_build_array(jsonb_build_object('key','scan.release','outcome',outcome,'severity','BLOCK','detail',detail));
+ IF jsonb_array_length(material->'rules')=0 OR EXISTS(SELECT 1 FROM finance.policy_clause pc
+ WHERE (pc.tenant_id,pc.company_id,pc.policy_id)=(t,c,p.policy_id)
+ AND NOT EXISTS(SELECT 1 FROM finance.checklist_item ci WHERE (ci.tenant_id,ci.company_id,ci.policy_id,ci.clause_id)=(t,c,p.policy_id,pc.id))
+ AND NOT EXISTS(SELECT 1 FROM finance.rule_version rv WHERE (rv.tenant_id,rv.company_id,rv.policy_id,rv.clause_id)=(t,c,p.policy_id,pc.id) AND rv.state='PUBLISHED')
+ AND NOT EXISTS(SELECT 1 FROM finance.policy_critical_field cf WHERE (cf.tenant_id,cf.company_id,cf.policy_id,cf.clause_id)=(t,c,p.policy_id,pc.id)))
+ THEN outcome:='UNKNOWN'; detail:='POLICY_RULE_COVERAGE_INCOMPLETE'; ELSE outcome:='PASS'; detail:='PUBLISHED_RULE_COVERAGE_FOUND'; END IF;
+ structural:=structural||jsonb_build_array(jsonb_build_object('key','rules.complete','outcome',outcome,'severity','BLOCK','detail',detail));
+ IF NOT EXISTS(SELECT 1 FROM finance.policy_version pv WHERE (pv.tenant_id,pv.company_id,pv.id)=(t,c,p.policy_id) AND pv.criticality_complete)
+ THEN outcome:='UNKNOWN'; detail:='NO_APPROVED_CRITICAL_REGISTRY';
+ ELSIF EXISTS(SELECT 1 FROM finance.policy_critical_field cf WHERE (cf.tenant_id,cf.company_id,cf.policy_id)=(t,c,p.policy_id)
+ AND (SELECT count(*) FROM jsonb_array_elements((material->'fields')||(material->'financial')) fld WHERE fld->>'path'=cf.field_path AND fld->>'verified'='true' AND fld->>'value' IS NOT NULL)<>1)
+ THEN outcome:='UNKNOWN'; detail:='CRITICAL_EVIDENCE_INCOMPLETE';
+ ELSE outcome:='PASS'; detail:='CRITICAL_EVIDENCE_VERIFIED'; END IF;
+ structural:=structural||jsonb_build_array(jsonb_build_object('key','critical.fields','outcome',outcome,'severity','BLOCK','detail',detail));
+ IF jsonb_array_length(material->'financial')=0 OR finance.current_bound_reservation(t,c,p.dossier_id,p.revision_id,p.policy_id,p.dossier_version) IS NULL
+ THEN outcome:='UNKNOWN'; detail:='NO_VERIFIED_CURRENT_RESERVATION'; ELSE outcome:='PASS'; detail:='SOURCE_BOUND_RESERVATION_VERIFIED'; END IF;
+ structural:=structural||jsonb_build_array(jsonb_build_object('key','financial.reservation','outcome',outcome,'severity','BLOCK','detail',detail));
+ -- Validate every worker result before writing any check rows.
+ blocked:=EXISTS(SELECT 1 FROM jsonb_array_elements(structural) x WHERE x->>'severity'='BLOCK' AND x->>'outcome' NOT IN ('PASS','NOT_APPLICABLE'))
+ OR EXISTS(SELECT 1 FROM jsonb_array_elements(results) x JOIN LATERAL(SELECT r FROM jsonb_array_elements(material->'rules') r WHERE r->>'id'=x->>'id') rr ON true
+ WHERE rr.r->>'severity'='BLOCK' AND x->>'outcome' NOT IN ('PASS','NOT_APPLICABLE'));
+ revision_version:=p.dossier_version;
+ IF NOT blocked THEN revision_version:=revision_version+1; END IF;
+ digest:=sha256(convert_to(jsonb_build_array(material,structural,results)::text,'UTF8'));
+ INSERT INTO finance.check_run(tenant_id,company_id,id,dossier_id,revision_id,dossier_version,actor_id,policy_id,business_day,input_hash,blocked,financial_digest)
+ VALUES(t,c,p.run_id,p.dossier_id,p.revision_id,revision_version,p.actor_id,p.policy_id,p.business_day,digest,blocked,sha256(convert_to((material->'financial')::text,'UTF8')));
+ FOR item IN SELECT value FROM jsonb_array_elements(structural) LOOP
+ INSERT INTO finance.check_result(tenant_id,company_id,run_id,rule_key,outcome,severity,detail_code)
+ VALUES(t,c,p.run_id,item.value->>'key',item.value->>'outcome',item.value->>'severity',item.value->>'detail');
+ END LOOP;
+ FOR result IN SELECT value FROM jsonb_array_elements(results) LOOP
+  SELECT value INTO rule FROM jsonb_array_elements(material->'rules') WHERE value->>'id'=result->>'id';
+  IF NOT FOUND OR (result->>'version')::bigint IS DISTINCT FROM (rule->>'version')::bigint
+  OR (result->>'id')::uuid=ANY(seen) OR result->>'outcome' IS NULL OR result->>'outcome' NOT IN ('PASS','FAIL','UNKNOWN','ERROR','NOT_APPLICABLE')
+  OR result->>'detail' IS NULL OR result->>'detail' NOT IN ('RULE_EVALUATED','RULE_COMPILE_ERROR')
+  OR jsonb_typeof(result->'evidence') IS DISTINCT FROM 'array' OR jsonb_array_length(result->'evidence')>256
+  THEN RAISE EXCEPTION 'invalid rule result' USING ERRCODE='23514'; END IF;
+  seen:=array_append(seen,(result->>'id')::uuid);
+  SELECT coalesce(array_agg(DISTINCT x::uuid ORDER BY x::uuid),ARRAY[]::uuid[]) INTO evidence FROM jsonb_array_elements_text(result->'evidence') x;
+  IF cardinality(evidence)<>jsonb_array_length(result->'evidence') OR EXISTS(
+   SELECT 1 FROM unnest(evidence) e WHERE NOT EXISTS(
+    SELECT 1 FROM jsonb_array_elements((material->'fields')||(material->'financial')) fld
+    CROSS JOIN LATERAL jsonb_array_elements_text(fld->'evidence') ev
+    WHERE fld->>'verified'='true' AND ev=e::text))
+  THEN RAISE EXCEPTION 'unbound rule evidence' USING ERRCODE='23514'; END IF;
+  INSERT INTO finance.check_result(tenant_id,company_id,run_id,rule_key,outcome,severity,detail_code,rule_version,evidence_ids)
+  VALUES(t,c,p.run_id,'dsl.'||(rule->>'name'),result->>'outcome',rule->>'severity',result->>'detail',(rule->>'version')::bigint,evidence);
+ END LOOP;
+ IF NOT blocked THEN
+  UPDATE finance.dossier SET status='REVIEWABLE',version=revision_version,updated_at=GREATEST(updated_at,clock_timestamp())
+  WHERE (tenant_id,company_id,id,version)=(t,c,p.dossier_id,p.dossier_version) AND status='DRAFT';
+  IF NOT FOUND THEN RAISE EXCEPTION 'stale preflight dossier' USING ERRCODE='23514'; END IF;
+ END IF;
+ INSERT INTO finance.audit_event(tenant_id,company_id,id,actor_id,command_id,correlation_id,resource_id,action)
+ VALUES(t,c,p.run_id,p.actor_id,j,j,p.dossier_id,'SYNTHETIC_PREFLIGHT_CHECKED');
+ INSERT INTO finance.outbox(tenant_id,company_id,id,command_id,resource_id,event_type)
+ VALUES(t,c,p.run_id,j,p.dossier_id,'SYNTHETIC_PREFLIGHT_CHECKED');
+ UPDATE finance.job SET state='SUCCEEDED',lease_until=NULL,leased_by=NULL
+ WHERE (tenant_id,company_id,id,fence,leased_by)=(t,c,j,f,w) AND state='LEASED' AND lease_until>clock_timestamp();
+ IF NOT FOUND THEN RAISE EXCEPTION 'stale preflight lease' USING ERRCODE='40001'; END IF;
+ UPDATE finance.job_attempt SET state='SUCCEEDED',finished_at=clock_timestamp()
+ WHERE (tenant_id,company_id,job_id,fence,worker_id)=(t,c,j,f,w) AND state='ACTIVE';
+ IF NOT FOUND THEN RAISE EXCEPTION 'stale attempt' USING ERRCODE='40001'; END IF;
+ INSERT INTO finance.inbox(tenant_id,company_id,event_id,fence) VALUES(t,c,j,f);
+END $$;
+ALTER FUNCTION finance.complete_preflight_with_rules(uuid,uuid,uuid,bigint,uuid,jsonb,jsonb) OWNER TO finance_workflow_writer;
+REVOKE ALL ON FUNCTION finance.complete_preflight_with_rules(uuid,uuid,uuid,bigint,uuid,jsonb,jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION finance.complete_preflight_with_rules(uuid,uuid,uuid,bigint,uuid,jsonb,jsonb) TO finance_job_worker;
+
+

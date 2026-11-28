@@ -1623,6 +1623,76 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /v1/evidence/{evidence_id}/rendered:
+    get:
+      operationId: getRenderedEvidence
+      tags:
+      - E05
+      summary: getRenderedEvidence
+      x-release-gate: pilot
+      parameters:
+      - name: evidence_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found or out of scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or stale version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Business guard failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /v1/dossiers/{dossier_id}/documents/{document_id}/ocr:
     post:
       operationId: rerunOcr
@@ -2443,6 +2513,248 @@ paths:
                     type: string
                 required:
                 - items
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found or out of scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or stale version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Business guard failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: bindReservation
+      tags:
+      - E11
+      summary: bindReservation
+      x-release-gate: pilot
+      parameters:
+      - name: dossier_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
+      - name: If-Finance-Version
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                policy_id:
+                  type: string
+                  format: uuid
+                resource_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 32
+                  uniqueItems: true
+                  items:
+                    type: string
+                    format: uuid
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 2048
+              required:
+              - policy_id
+              - resource_ids
+              - reason
+      responses:
+        '201':
+          description: Success
+          headers:
+            Finance-Version:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  dossier_version:
+                    type: integer
+                    format: int64
+                required:
+                - id
+                - dossier_version
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found or out of scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or stale version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Business guard failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /v1/dossiers/{dossier_id}/reservations/{reservation_id}/release:
+    post:
+      operationId: releaseReservation
+      tags:
+      - E11
+      summary: releaseReservation
+      x-release-gate: pilot
+      parameters:
+      - name: dossier_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: reservation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
+      - name: If-Finance-Version
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 2048
+              required:
+              - reason
+      responses:
+        '200':
+          description: Success
+          headers:
+            Finance-Version:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  dossier_version:
+                    type: integer
+                    format: int64
+                required:
+                - id
+                - dossier_version
         '400':
           description: Invalid input
           content:
@@ -4311,6 +4623,7 @@ paths:
       tags: [E02, E03]
       summary: Submit verified email claim for an issued invitation
       x-release-gate: pilot
+      x-idempotent: true
       security:
       - oidc: []
       responses:
@@ -4347,6 +4660,7 @@ paths:
       tags: [E02, E03]
       summary: Issue or revoke a seven-day employee invitation
       x-release-gate: pilot
+      x-idempotent: true
       security:
       - oidc: []
       requestBody:
@@ -4432,6 +4746,7 @@ paths:
       tags: [E02, E03]
       summary: Approve or reject a verified employee request
       x-release-gate: pilot
+      x-idempotent: true
       security:
       - oidc: []
       requestBody:
@@ -4525,6 +4840,7 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
       requestBody:
         required: true
         content:
@@ -5103,6 +5419,57 @@ paths:
                     - clause_key
                     - document_kind
                     - mandatory
+                critical_fields:
+                  type: array
+                  maxItems: 200
+                  items:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      clause_key:
+                        type: string
+                      field_path:
+                        type: string
+                    required:
+                    - clause_key
+                    - field_path
+                finance_gate:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    clause_key:
+                      type: string
+                    amount_path:
+                      type: string
+                    currency_path:
+                      type: string
+                    resource_keys:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    extra_settlement:
+                      type: boolean
+                      enum: [true]
+                    line_match:
+                      $ref: '#/components/schemas/LineMatchingPolicy'
+                    resource_kinds:
+                      type: array
+                      minItems: 1
+                      maxItems: 4
+                      uniqueItems: true
+                      items:
+                        type: string
+                        enum:
+                        - CONTRACT
+                        - INVOICE
+                        - ADVANCE
+                        - BUDGET
+                  required:
+                  - clause_key
+                  - amount_path
+                  - currency_path
+                  - resource_kinds
+                  - resource_keys
               required:
               - company_id
               - name
@@ -6447,6 +6814,16 @@ paths:
                   - COMPLETE
                   - PARTIAL
                   - UNKNOWN
+                fresh_until:
+                  type: string
+                  format: date-time
+                records:
+                  type: array
+                  maxItems: 10000
+                  items:
+                    oneOf:
+                    - $ref: '#/components/schemas/ReferenceImportRow'
+                    - $ref: '#/components/schemas/PaymentImportRow'
               required:
               - document_id
               - kind
@@ -6484,6 +6861,229 @@ paths:
                 pattern: ^"v1:(dossier|organization|membership|policy|rule|form|template|workflow|reference|risk|reconciliation):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,15})"$
                 description: Canonical quoted aggregate token; numeric version 0..9007199254740991. Server validates target
                   kind, ID and current version after authorization.
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found or out of scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or stale version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Business guard failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /v1/references/{item_id}/material:
+    get:
+      operationId: getReferenceMaterial
+      tags:
+      - E23
+      summary: getReferenceMaterial
+      x-release-gate: pilot
+      parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceMaterial'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found or out of scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or stale version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Business guard failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /v1/policies/{item_id}/configuration:
+    get:
+      operationId: getPolicyConfiguration
+      tags:
+      - E16
+      summary: getPolicyConfiguration
+      x-release-gate: pilot
+      parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyConfiguration'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found or out of scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or stale version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Business guard failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /v1/reservable-resources:
+    get:
+      operationId: listReservableResources
+      tags:
+      - E11
+      summary: listReservableResources
+      x-release-gate: pilot
+      parameters:
+      - name: cursor
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReservableResource'
+                  next_cursor:
+                    type: [string, 'null']
+                required:
+                - items
+                - next_cursor
         '400':
           description: Invalid input
           content:
@@ -8468,6 +9068,94 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /v1/dossiers/{dossier_id}/line-reconciliations:
+    get:
+      operationId: listLineReconciliations
+      tags: [E10]
+      summary: Current and historical independently confirmed line reconciliations
+      x-release-gate: pilot
+      parameters:
+      - name: dossier_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Authorized bounded history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReconciliationHistory'
+        '401': {description: Unauthenticated}
+        '403': {description: Forbidden}
+        '503': {description: Dependency unavailable}
+    post:
+      operationId: reconcileDossierLines
+      tags: [E10]
+      summary: Store evidence-bound manual many-to-many line reconciliation
+      x-release-gate: pilot
+      parameters:
+      - name: dossier_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9._~-]+$'}
+      - name: If-Finance-Version
+        in: header
+        required: true
+        schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [policy_id, material]
+              properties:
+                policy_id: {type: string, format: uuid}
+                material:
+                  type: object
+                  required: [sources, targets, allocations, reason, coverage_complete]
+                  properties:
+                    sources:
+                      type: array
+                      minItems: 1
+                      maxItems: 256
+                      items: {$ref: '#/components/schemas/ReconciliationLine'}
+                    targets:
+                      type: array
+                      minItems: 1
+                      maxItems: 256
+                      items: {$ref: '#/components/schemas/ReconciliationLine'}
+                    allocations:
+                      type: array
+                      maxItems: 1024
+                      items: {$ref: '#/components/schemas/ReconciliationEdge'}
+                    reason: {type: string, minLength: 1, maxLength: 2048}
+                    coverage_complete: {type: boolean}
+      responses:
+        '200':
+          description: Immutable reconciliation receipt (not payment approval)
+          headers:
+            Finance-Version:
+              required: true
+              schema: {type: string}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReconciliationReceipt'
+        '400': {description: Invalid input}
+        '401': {description: Unauthenticated}
+        '403': {description: Forbidden}
+        '409': {description: Conflict}
+        '422': {description: Business guard failed}
+        '503': {description: Dependency unavailable}
   /v1/dossiers/{dossier_id}/payment-observations:
     post:
       operationId: recordPaymentObservation
@@ -9869,6 +10557,399 @@ components:
       - waivable
       - clause_id
       - definition
+    LineMatchingPolicy:
+      type: object
+      additionalProperties: false
+      required: [currency, price_tolerance, conversions]
+      properties:
+        currency: {type: string}
+        price_tolerance: {type: string}
+        conversions:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required: [from, to, numerator, denominator]
+            properties:
+              from: {type: string}
+              to: {type: string}
+              numerator: {type: string}
+              denominator: {type: string}
+    ReconciliationMaterial:
+      type: object
+      additionalProperties: false
+      required: [sources, targets, allocations, reason, coverage_complete]
+      properties:
+        sources:
+          type: array
+          items: {$ref: '#/components/schemas/ReconciliationLine'}
+        targets:
+          type: array
+          items: {$ref: '#/components/schemas/ReconciliationLine'}
+        allocations:
+          type: array
+          items: {$ref: '#/components/schemas/ReconciliationEdge'}
+        reason: {type: string}
+        coverage_complete: {type: boolean}
+    ReconciliationReceipt:
+      type: object
+      additionalProperties: false
+      required: [id, dossier_version, policy_id, outcome, residuals, price_difference, advisory_only]
+      properties:
+        id: {type: string, format: uuid}
+        dossier_version: {type: integer}
+        policy_id: {type: string, format: uuid}
+        outcome: {type: string, enum: [MATCHED, FAIL, UNKNOWN]}
+        price_difference: {type: boolean}
+        advisory_only: {type: boolean}
+        residuals:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, side, remaining_quantity, remaining_value, evidence_id]
+            properties:
+              id: {type: string}
+              side: {type: string, enum: [SOURCE, TARGET]}
+              remaining_quantity: {type: string}
+              remaining_value: {type: string}
+              evidence_id: {type: string, format: uuid}
+    ReconciliationHistory:
+      type: object
+      additionalProperties: false
+      required: [result, material, actor_id, created_at, stale]
+      properties:
+        result: {$ref: '#/components/schemas/ReconciliationReceipt'}
+        material: {$ref: '#/components/schemas/ReconciliationMaterial'}
+        actor_id: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        stale: {type: boolean}
+    FinancialReferenceDetails:
+      oneOf:
+      - $ref: '#/components/schemas/ContractReferenceDetails'
+      - $ref: '#/components/schemas/AdvanceReferenceDetails'
+      - $ref: '#/components/schemas/BudgetReferenceDetails'
+      - $ref: '#/components/schemas/InvoiceReferenceDetails'
+    ContractReferenceDetails:
+      type: object
+      additionalProperties: false
+      required: [contract_key, installment_key, vendor_key, effective_from, effective_until, base_cap, addenda, installment_gross, retention, advance_deduction, paid]
+      properties:
+        contract_key: {type: string}
+        installment_key: {type: string}
+        vendor_key: {type: string}
+        effective_from: {type: string, format: date}
+        effective_until: {type: string, format: date}
+        base_cap: {type: string}
+        installment_gross: {type: string}
+        retention: {type: string}
+        advance_deduction: {type: string}
+        paid: {type: string}
+        addenda:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [key, approved_on, effective_on, delta]
+            properties:
+              key: {type: string}
+              approved_on: {type: string, format: date}
+              effective_on: {type: string, format: date}
+              delta: {type: string}
+        acceptance_lines:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [key, item, unit, quantity, unit_price, value]
+            properties:
+              key: {type: string}
+              item: {type: string}
+              unit: {type: string}
+              quantity: {type: string}
+              unit_price: {type: string}
+              value: {type: string}
+    AdvanceReferenceDetails:
+      type: object
+      additionalProperties: false
+      required: [beneficiary_key, purpose, issued_on, due_date, issued, settled, refunded]
+      properties:
+        beneficiary_key: {type: string}
+        purpose: {type: string}
+        issued_on: {type: string, format: date}
+        due_date: {type: string, format: date}
+        issued: {type: string}
+        settled: {type: string}
+        refunded: {type: string}
+        extension:
+          type: [object, 'null']
+          additionalProperties: false
+          required: [approved_on, new_due, approval_ref]
+          properties:
+            approved_on: {type: string, format: date}
+            new_due: {type: string, format: date}
+            approval_ref: {type: string}
+    BudgetReferenceDetails:
+      type: object
+      additionalProperties: false
+      required: [cost_center, account, budget_version, period_start, period_end, approved_limit, external_unmatched_commitments, actual, disjoint_verified]
+      properties:
+        cost_center: {type: string}
+        account: {type: string}
+        budget_version: {type: string}
+        period_start: {type: string, format: date}
+        period_end: {type: string, format: date}
+        approved_limit: {type: string}
+        external_unmatched_commitments: {type: string}
+        actual: {type: string}
+        disjoint_verified: {type: boolean, enum: [true]}
+    InvoiceReferenceDetails:
+      type: object
+      additionalProperties: false
+      required: [issuer, series, number, invoice_date, eligible_total, paid]
+      properties:
+        issuer: {type: string}
+        series: {type: string}
+        number: {type: string}
+        invoice_date: {type: string, format: date}
+        eligible_total: {type: string}
+        paid: {type: string}
+    ReconciliationLine:
+      type: object
+      required: [id, evidence_id, item, unit, quantity, unit_price, value, currency]
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        evidence_id: {type: string, format: uuid}
+        item: {type: string}
+        unit: {type: string}
+        quantity: {type: string}
+        unit_price: {type: string}
+        value: {type: string}
+        currency: {type: string}
+    ReconciliationEdge:
+      type: object
+      additionalProperties: false
+      required: [source, target, source_quantity, target_quantity]
+      properties:
+        source: {type: string}
+        target: {type: string}
+        source_quantity: {type: string}
+        target_quantity: {type: string}
+    ReferenceImportRow:
+      type: object
+      additionalProperties: false
+      properties:
+        source_key:
+          type: string
+        currency:
+          type: string
+        cap:
+          type: string
+        consumed:
+          type: string
+        evidence_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        details:
+          $ref: '#/components/schemas/FinancialReferenceDetails'
+      required: [source_key, currency, cap, consumed, evidence_ids, details]
+    PaymentImportRow:
+      type: object
+      additionalProperties: false
+      properties:
+        source_key: {type: string}
+        reservation_id: {type: string, format: uuid}
+        currency: {type: string}
+        amount: {type: string}
+        event_kind: {type: string, enum: [CONSUME, REVERSE]}
+        reverses: {type: [string, 'null']}
+        occurred_at: {type: string, format: date-time}
+        allocations:
+          type: object
+          additionalProperties: {type: string}
+        evidence_ids:
+          type: array
+          items: {type: string, format: uuid}
+      required: [source_key, reservation_id, currency, amount, event_kind, occurred_at, evidence_ids]
+    ReferenceMaterial:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        document_id:
+          type: string
+          format: uuid
+        source_digest:
+          type: string
+        kind:
+          type: string
+        coverage:
+          type: string
+        as_of:
+          type: string
+          format: date-time
+        fresh_until:
+          type: string
+          format: date-time
+        state:
+          type: string
+        maker_id:
+          type: string
+          format: uuid
+        records:
+          type: array
+          items:
+            oneOf:
+            - $ref: '#/components/schemas/ReferenceImportRow'
+            - $ref: '#/components/schemas/PaymentImportRow'
+        evidence_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        payment_events:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id: {type: string, format: uuid}
+              source_key: {type: string}
+              reservation_id: {type: string, format: uuid}
+              event_kind: {type: string}
+              amount: {type: string}
+              currency: {type: string}
+              observed: {type: boolean}
+            required: [id, source_key, reservation_id, event_kind, amount, currency, observed]
+      required: [id, document_id, source_digest, kind, coverage, as_of, fresh_until, state, maker_id, records, evidence_ids]
+    ReservableResource:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        source_key:
+          type: string
+        snapshot_id:
+          type: string
+          format: uuid
+        currency:
+          type: string
+        cap:
+          type: string
+        consumed:
+          type: string
+        held:
+          type: string
+        available:
+          type: string
+        fresh_until:
+          type: string
+          format: date-time
+      required: [id, kind, source_key, snapshot_id, currency, cap, consumed, held, available, fresh_until]
+    PolicyConfiguration:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        company_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+        name:
+          type: string
+        state:
+          type: string
+        dossier_kind:
+          type: string
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type: string
+          format: date
+        author_id:
+          type: string
+          format: uuid
+        criticality_complete:
+          type: boolean
+        finance_gate:
+          type: [object, 'null']
+          additionalProperties: false
+          properties:
+            clause_key:
+              type: string
+            amount_path:
+              type: string
+            currency_path:
+              type: string
+            resource_kinds:
+              type: array
+              items:
+                type: string
+            resource_keys:
+              type: object
+              additionalProperties:
+                type: string
+            extra_settlement:
+              type: boolean
+              enum: [true]
+            line_match:
+              $ref: '#/components/schemas/LineMatchingPolicy'
+          required: [clause_key, amount_path, currency_path, resource_kinds, resource_keys]
+        clauses:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              key:
+                type: string
+              id:
+                type: string
+                format: uuid
+              excerpt:
+                type: string
+              page:
+                type: integer
+            required: [key, id, excerpt, page]
+        critical_fields:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              clause_key:
+                type: string
+              field_path:
+                type: string
+            required: [clause_key, field_path]
+        checklist:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              clause_key:
+                type: string
+              document_kind:
+                type: string
+              mandatory:
+                type: boolean
+            required: [clause_key, document_kind, mandatory]
+      required: [id, company_id, version, name, state, dossier_kind, effective_from, effective_to, author_id, criticality_complete, finance_gate, clauses, critical_fields, checklist]
     Reservation:
       type: object
       additionalProperties: false
@@ -9877,10 +10958,21 @@ components:
           type: string
           format: uuid
         snapshot_id:
-          type: string
+          type: [string, 'null']
           format: uuid
         resource_id:
           type: string
+          format: uuid
+        resource_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        revision_id:
+          type: string
+          format: uuid
+        policy_id:
+          type: [string, 'null']
           format: uuid
         amount:
           $ref: '#/components/schemas/Money'
@@ -9902,6 +10994,9 @@ components:
       - id
       - snapshot_id
       - resource_id
+      - resource_ids
+      - revision_id
+      - policy_id
       - amount
       - remaining
       - state
@@ -10291,6 +11386,34 @@ components:
         unknown_count: *id007
         error_count: *id007
         not_applicable_count: *id007
+        comparison:
+          type: object
+          additionalProperties: false
+          description: Outcome transitions from previous to current version, ordered PASS, FAIL, UNKNOWN, ERROR, NOT_APPLICABLE.
+          properties:
+            baseline_rule_version_id:
+              type: string
+              format: uuid
+            evaluated:
+              type: integer
+              minimum: 0
+              maximum: 5000
+            transitions:
+              type: array
+              minItems: 5
+              maxItems: 5
+              items:
+                type: array
+                minItems: 5
+                maxItems: 5
+                items:
+                  type: integer
+                  minimum: 0
+                  maximum: 5000
+          required:
+          - baseline_rule_version_id
+          - evaluated
+          - transitions
       required:
       - id
       - rule_version_id

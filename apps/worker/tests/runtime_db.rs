@@ -52,6 +52,8 @@ printf '{"schema":"finance.export.receipt.v1","job_id":"%s","fence":%s,"artifact
         .env("FINANCE_WORKER_LEASE_SECONDS", "30")
         .env("FINANCE_EXPORT_ADAPTER_TIMEOUT_SECONDS", "10")
         .env("FINANCE_EXPORT_ADAPTER", &adapter)
+        .env("FINANCE_EXPORT_SYNTHETIC_RECEIPTS_ONLY", "1")
+        .env_remove("FINANCE_EXPORT_ARTIFACT_ROOT")
         .status()
         .unwrap();
     let _ = fs::remove_dir_all(&root);

@@ -29,9 +29,24 @@ fi
 FINANCE_MIGRATION_DATABASE_URL="$url" "$migrator" --apply
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_baseline -v ON_ERROR_STOP=1 <<'SQL'
 CREATE ROLE finance_probe NOLOGIN;
+-- New endpoints remain SECURITY DEFINER with scoped, non-login owners.
+DO $$ DECLARE sig text; fn oid; BEGIN
+ FOREACH sig IN ARRAY ARRAY['finance.runtime_reservation_ledger(uuid,uuid,uuid,uuid,uuid,integer)',
+ 'finance.runtime_reference_import_material(uuid,uuid,uuid,uuid)',
+ 'finance.runtime_reservable_resources(uuid,uuid,uuid,uuid,integer)',
+ 'finance.runtime_policy_configuration(uuid,uuid,uuid,uuid)'] LOOP
+ fn:=to_regprocedure(sig);
+ IF fn IS NULL OR NOT (SELECT prosecdef FROM pg_proc WHERE oid=fn) OR has_function_privilege('finance_probe',fn,'EXECUTE')
+ OR NOT has_function_privilege('finance_runtime',fn,'EXECUTE')
+ THEN RAISE EXCEPTION 'missing or insecure finance read adapter %',sig; END IF;
+ END LOOP;
+ IF has_function_privilege('finance_runtime','finance.runtime_create_reference(uuid,uuid,uuid,uuid,text,timestamptz,text,text,uuid,uuid,uuid)','EXECUTE')
+ THEN RAISE EXCEPTION 'legacy fabricated reference API still executable'; END IF;
+END $$;
+
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM public._sqlx_migrations) <> 68 OR NOT EXISTS (
+  IF (SELECT count(*) FROM public._sqlx_migrations) <> 87 OR NOT EXISTS (
     SELECT 1 FROM public._sqlx_migrations WHERE version = 20261127000100 AND success AND octet_length(checksum) = 48
   ) THEN RAISE EXCEPTION 'migration ledger mismatch'; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace WHERE e.extname = 'vector' AND n.nspname = 'finance' AND e.extversion = '0.8.0') THEN
@@ -43,13 +58,13 @@ BEGIN
   IF (SELECT rolcanlogin OR rolsuper OR rolbypassrls FROM pg_roles WHERE rolname='finance_invite_dispatcher') THEN
     RAISE EXCEPTION 'invitation dispatcher role has excessive privileges';
   END IF;
-  IF (SELECT count(*) FROM pg_tables WHERE schemaname = 'finance') <> 84 THEN
+  IF (SELECT count(*) FROM pg_tables WHERE schemaname = 'finance') <> 87 THEN
     RAISE EXCEPTION 'unexpected prototype table inventory';
   END IF;
 END $$;
 SELECT current_setting('server_version') AS postgres_version;
 SQL
-for fixture in tests/sql/staff_administration.sql tests/sql/staff_onboarding.sql; do
+for fixture in tests/sql/staff_administration.sql tests/sql/staff_onboarding.sql scripts/typed_finance_reference_assert.sql; do
   docker exec -i "$cid" psql -X -U finance_migrator -d finance_baseline -v ON_ERROR_STOP=1 -f - < "$fixture"
 done
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_baseline -v ON_ERROR_STOP=1 <<'SQL'

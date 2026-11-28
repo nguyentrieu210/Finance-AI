@@ -37,7 +37,7 @@ fn binding(proof: &AuthenticatedCommand) -> Result<(Uuid, Uuid, Uuid), Error> {
     Ok((tenant.into(), company.into(), actor.into()))
 }
 
-fn registry() -> BTreeMap<String, Type> {
+pub(crate) fn registry() -> BTreeMap<String, Type> {
     let vnd = Currency::parse("VND").expect("VND is a valid ISO currency code");
     [
         ("invoice.total", Type::Money(vnd)),
@@ -46,10 +46,37 @@ fn registry() -> BTreeMap<String, Type> {
         ("contract.remaining", Type::Money(vnd)),
         ("budget.remaining", Type::Money(vnd)),
         ("advance.remaining", Type::Money(vnd)),
+        ("invoice.remaining", Type::Money(vnd)),
+        ("contract.cap", Type::Money(vnd)),
+        ("contract.consumed", Type::Money(vnd)),
+        ("contract.other_holds", Type::Money(vnd)),
+        ("invoice.cap", Type::Money(vnd)),
+        ("invoice.consumed", Type::Money(vnd)),
+        ("invoice.other_holds", Type::Money(vnd)),
+        ("advance.cap", Type::Money(vnd)),
+        ("advance.consumed", Type::Money(vnd)),
+        ("advance.other_holds", Type::Money(vnd)),
+        ("budget.cap", Type::Money(vnd)),
+        ("budget.consumed", Type::Money(vnd)),
+        ("budget.other_holds", Type::Money(vnd)),
+        ("finance.payable_cap", Type::Money(vnd)),
+        ("finance.requested", Type::Money(vnd)),
+        ("invoice.totals", Type::MoneyList(vnd)),
         ("invoice.quantity", Type::Decimal),
+        ("invoice.date", Type::Date),
+        ("invoice.number", Type::Text),
+        ("invoice.supplier", Type::Text),
         ("invoice.verified", Type::Boolean),
         ("vendor.verified", Type::Boolean),
         ("reference.fresh", Type::Boolean),
+        ("advance.overdue", Type::Boolean),
+        ("matching.complete", Type::Boolean),
+        ("matching.allocated_value", Type::Money(vnd)),
+        ("matching.line_count", Type::Decimal),
+        ("settlement.extra_verified", Type::Boolean),
+        ("advance_settlement.applied", Type::Money(vnd)),
+        ("advance_settlement.extra", Type::Money(vnd)),
+        ("advance_settlement.requested", Type::Money(vnd)),
     ]
     .into_iter()
     .map(|(path, ty)| (path.to_owned(), ty))
@@ -374,12 +401,32 @@ pub struct Simulation {
     pub unknown_count: u32,
     pub error_count: u32,
     pub not_applicable_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comparison: Option<SimulationComparison>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SimulationComparison {
+    pub baseline_rule_version_id: Uuid,
+    pub transitions: [[u32; 5]; 5],
+    pub evaluated: u32,
+}
+
+fn simulation_result(payload: &str, comparison: Option<&str>) -> Result<Simulation, Error> {
+    let mut result: Simulation = serde_json::from_str(payload).map_err(|_| Error::Conflict)?;
+    result.comparison = comparison
+        .map(|json| serde_json::from_str(json).map_err(|_| Error::Conflict))
+        .transpose()?;
+    Ok(result)
 }
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CorpusFact {
     value: Option<Value>,
+    #[serde(default)]
+    verified_absence: bool,
     verified: bool,
     fresh: bool,
     evidence: Vec<finance_shared::ids::EvidenceId>,
@@ -407,9 +454,28 @@ fn corpus_facts(json: &str) -> Result<Vec<BTreeMap<String, compiler::Fact>>, Err
                     if raw.evidence.len() > 64 {
                         return Err(Error::InvalidInput);
                     }
+                    if raw.verified_absence
+                        && (raw.value.as_ref().is_some_and(|v| !v.is_null())
+                            || !raw.verified
+                            || !raw.fresh
+                            || raw.evidence.is_empty())
+                    {
+                        return Err(Error::InvalidInput);
+                    }
                     let value = match (ty, raw.value) {
+                        (_, None | Some(Value::Null)) if raw.verified_absence => {
+                            Some(compiler::Value::Absent(*ty))
+                        }
                         (_, None | Some(Value::Null)) => None,
+                        (Type::Text, Some(Value::String(s)))
+                            if s.len() <= 256 && !s.chars().any(char::is_control) =>
+                        {
+                            Some(compiler::Value::Text(std::sync::Arc::from(s)))
+                        }
                         (Type::Boolean, Some(Value::Bool(b))) => Some(compiler::Value::Boolean(b)),
+                        (Type::Date, Some(Value::String(s))) => Some(compiler::Value::Date(
+                            compiler::parse_date(&s).map_err(|_| Error::InvalidInput)?,
+                        )),
                         (Type::Decimal, Some(Value::String(s))) => Some(compiler::Value::Decimal(
                             Amount::parse(&s).map_err(|_| Error::InvalidInput)?,
                         )),
@@ -503,8 +569,8 @@ pub async fn simulate(
         if old != request_hash {
             return Err(Error::Conflict);
         }
-        let payload: String = sqlx::query_scalar(
-            "SELECT result::text FROM finance.rule_simulation WHERE tenant_id=$1 AND company_id=$2 AND id=$3 AND actor_id=$4",
+        let (payload, comparison): (String, Option<String>) = sqlx::query_as(
+            "SELECT result::text,comparison::text FROM finance.rule_simulation WHERE tenant_id=$1 AND company_id=$2 AND id=$3 AND actor_id=$4",
         )
         .bind(t)
         .bind(c)
@@ -513,7 +579,7 @@ pub async fn simulate(
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(Error::Forbidden)?;
-        let result = serde_json::from_str(&payload).map_err(|_| Error::Conflict)?;
+        let result = simulation_result(&payload, comparison.as_deref())?;
         recheck_authenticated(&mut tx, Some(proof)).await?;
         tx.commit().await?;
         return Ok((result, expected));
@@ -543,6 +609,7 @@ pub async fn simulate(
         unknown_count: 0,
         error_count: 0,
         not_applicable_count: 0,
+        comparison: None,
     };
     for fact in &facts {
         match compiler::evaluate(&compiled, fact).outcome {
@@ -567,23 +634,26 @@ pub async fn simulate(
             .map_err(|_| Error::InvalidInput)?;
         let comparison =
             crate::simulator::compare(&old, &compiled, &facts).map_err(|_| Error::InvalidInput)?;
-        Some(
-            serde_json::json!({
-                "baseline_rule_version_id": baseline_id,
-                "transitions": comparison.transitions,
-                "evaluated": comparison.evaluated
-            })
-            .to_string(),
-        )
+        Some(SimulationComparison {
+            baseline_rule_version_id: baseline_id,
+            transitions: comparison.transitions,
+            evaluated: comparison.evaluated,
+        })
     } else {
         None
     };
     let payload = serde_json::to_string(&result).map_err(|_| Error::InvalidInput)?;
+    let comparison_json = comparison
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|_| Error::InvalidInput)?;
+    result.comparison = comparison;
     let command: Uuid = proof.context().command.into();
     let correlation: Uuid = proof.context().correlation.into();
     sqlx::query("INSERT INTO finance.rule_simulation(tenant_id,company_id,id,rule_id,actor_id,corpus_id,corpus_digest,result,comparison) VALUES($1,$2,$3,$4,$5,$6,$7,$8::text::jsonb,$9::text::jsonb)")
         .bind(t).bind(c).bind(result.id).bind(row).bind(a).bind(input.corpus).bind(digest)
-        .bind(payload).bind(comparison).execute(&mut *tx).await?;
+        .bind(payload).bind(comparison_json).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO finance.audit_event(tenant_id,company_id,id,actor_id,command_id,correlation_id,resource_id,action) VALUES($1,$2,$3,$4,$3,$5,$6,'RULE_SIMULATED')")
         .bind(t).bind(c).bind(command).bind(a).bind(correlation).bind(result.id).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO finance.outbox(tenant_id,company_id,id,command_id,resource_id,event_type) VALUES($1,$2,$3,$3,$4,'RULE_SIMULATED')")
@@ -612,8 +682,8 @@ pub async fn get_simulation(
             GrantError::Database(e) => Error::Database(e),
         })?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let payload: Option<String> = sqlx::query_scalar(
-        "SELECT result::text FROM finance.rule_simulation WHERE tenant_id=$1 AND company_id=$2 AND actor_id=$3 AND id=$4",
+    let payload: Option<(String, Option<String>)> = sqlx::query_as(
+        "SELECT result::text,comparison::text FROM finance.rule_simulation WHERE tenant_id=$1 AND company_id=$2 AND actor_id=$3 AND id=$4",
     )
     .bind(t)
     .bind(c)
@@ -622,9 +692,39 @@ pub async fn get_simulation(
     .fetch_optional(&mut *tx)
     .await?;
     let result = payload
-        .map(|json| serde_json::from_str(&json).map_err(|_| Error::Conflict))
+        .map(|(json, comparison)| simulation_result(&json, comparison.as_deref()))
         .transpose()?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(result)
+}
+
+#[cfg(test)]
+mod corpus_tests {
+    use super::*;
+
+    #[test]
+    fn corpus_preserves_explicit_absence_without_inventing_missing_values() {
+        let evidence = "00000000-0000-0000-0000-000000000001";
+        let data = serde_json::json!([{
+            "invoice.date": {"value": null, "verified": true, "fresh": true, "evidence": [evidence]},
+            "invoice.number": {"value": null, "verified_absence": true, "verified": true, "fresh": true, "evidence": [evidence]},
+            "invoice.supplier": {"value": "Synthetic supplier", "verified": true, "fresh": true, "evidence": [evidence]}
+        }]);
+        let rows = corpus_facts(&data.to_string()).unwrap();
+        assert_eq!(rows[0]["invoice.date"].value, None);
+        assert_eq!(
+            rows[0]["invoice.number"].value,
+            Some(compiler::Value::Absent(Type::Text))
+        );
+        assert_eq!(
+            rows[0]["invoice.supplier"].value,
+            Some(compiler::Value::Text(std::sync::Arc::from(
+                "Synthetic supplier"
+            )))
+        );
+        let mut invalid = data;
+        invalid[0]["invoice.number"]["fresh"] = serde_json::json!(false);
+        assert!(corpus_facts(&invalid.to_string()).is_err());
+    }
 }

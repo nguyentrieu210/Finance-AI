@@ -296,6 +296,23 @@ pub async fn complete(
     lease: Lease,
     artifacts: &[Artifact<'_>],
 ) -> Result<i64, WorkerError> {
+    complete_inner(pool, lease, artifacts, false).await
+}
+
+pub async fn complete_verified(
+    pool: &PgPool,
+    lease: Lease,
+    artifacts: &[Artifact<'_>],
+) -> Result<i64, WorkerError> {
+    complete_inner(pool, lease, artifacts, true).await
+}
+
+async fn complete_inner(
+    pool: &PgPool,
+    lease: Lease,
+    artifacts: &[Artifact<'_>],
+    verified: bool,
+) -> Result<i64, WorkerError> {
     let Some((manifest, total_bytes)) = manifest_digest(artifacts) else {
         return Err(WorkerError::InvalidManifest);
     };
@@ -326,18 +343,39 @@ pub async fn complete(
     if !allowed {
         return Err(WorkerError::Forbidden);
     }
-    let result =
-        sqlx::query_scalar::<_, i64>("SELECT finance.complete_export_job($1,$2,$3,$4,$5,$6,$7,$8)")
-            .bind(tenant)
-            .bind(company)
-            .bind(lease.job_id)
-            .bind(lease.fence)
-            .bind(lease.worker_id())
-            .bind(manifest.as_slice())
-            .bind(i32::try_from(artifacts.len()).map_err(|_| WorkerError::InvalidManifest)?)
-            .bind(total_bytes)
+    let query = if verified {
+        "SELECT finance.complete_export_job_verified($1,$2,$3,$4,$5,$6,$7,$8,$9)"
+    } else {
+        "SELECT finance.complete_export_job($1,$2,$3,$4,$5,$6,$7,$8)"
+    };
+    let query = sqlx::query_scalar::<_, i64>(query)
+        .bind(tenant)
+        .bind(company)
+        .bind(lease.job_id)
+        .bind(lease.fence)
+        .bind(lease.worker_id())
+        .bind(manifest.as_slice())
+        .bind(i32::try_from(artifacts.len()).map_err(|_| WorkerError::InvalidManifest)?)
+        .bind(total_bytes);
+    let result = if verified {
+        use std::fmt::Write;
+        let manifest = artifacts
+            .iter()
+            .map(|x| {
+                let mut digest = String::with_capacity(64);
+                for b in x.expected.as_bytes() {
+                    write!(digest, "{b:02x}").expect("write to string");
+                }
+                serde_json::json!({"name":x.name,"bytes":x.bytes,"sha256":digest})
+            })
+            .collect::<Vec<_>>();
+        query
+            .bind(serde_json::Value::Array(manifest))
             .fetch_one(&mut *tx)
-            .await;
+            .await
+    } else {
+        query.fetch_one(&mut *tx).await
+    };
     let version = match result {
         Ok(version) => version,
         Err(sqlx::Error::Database(database)) if database.code().as_deref() == Some("P0002") => {
@@ -429,4 +467,103 @@ pub async fn download_export(
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(row)
+}
+
+#[derive(sqlx::FromRow)]
+pub struct Bundle {
+    pub job_id: Uuid,
+    pub artifact_fence: i64,
+    pub sha256: String,
+    pub byte_count: i64,
+}
+pub async fn bundle(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    dossier: Uuid,
+    package: Uuid,
+) -> Result<Option<Bundle>, Error> {
+    let (t, c, a) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let row =
+        sqlx::query_as::<_, Bundle>("SELECT * FROM finance.runtime_export_bundle($1,$2,$3,$4,$5)")
+            .bind(t)
+            .bind(c)
+            .bind(a)
+            .bind(dossier)
+            .bind(package)
+            .fetch_optional(&mut *tx)
+            .await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(row)
+}
+pub fn read_bundle(
+    root: &std::path::Path,
+    scope: CompanyScope,
+    bundle: &Bundle,
+) -> Option<Vec<u8>> {
+    use std::{fs, io::Read};
+    if !(1..=104857600).contains(&bundle.byte_count) || bundle.artifact_fence < 1 {
+        return None;
+    }
+    let mut path = root.to_path_buf();
+    if !root.is_absolute() || root.canonicalize().ok()?.as_path() != root {
+        return None;
+    }
+    for part in [
+        scope.tenant.to_string(),
+        scope.company.to_string(),
+        bundle.job_id.to_string(),
+        bundle.artifact_fence.to_string(),
+    ] {
+        let m = fs::symlink_metadata(&path).ok()?;
+        if !m.is_dir() || m.file_type().is_symlink() {
+            return None;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if m.permissions().mode() & 0o077 != 0 {
+                return None;
+            }
+        }
+        path.push(part);
+    }
+    let m = fs::symlink_metadata(&path).ok()?;
+    if !m.is_dir() || m.file_type().is_symlink() {
+        return None;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if m.permissions().mode() & 0o077 != 0 {
+            return None;
+        }
+    }
+    path.push("bundle.zip");
+    let m = fs::symlink_metadata(&path).ok()?;
+    if !m.is_file() || m.file_type().is_symlink() || m.len() != bundle.byte_count as u64 {
+        return None;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if m.nlink() != 1 || m.mode() & 0o077 != 0 {
+            return None;
+        }
+    }
+    let mut bytes = Vec::new();
+    fs::File::open(path)
+        .ok()?
+        .take(bundle.byte_count as u64 + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    if bytes.len() != bundle.byte_count as usize
+        || !bytes.starts_with(b"PK\x03\x04")
+        || format!("{:x}", Sha256::digest(&bytes)) != bundle.sha256
+    {
+        return None;
+    }
+    Some(bytes)
 }

@@ -104,7 +104,8 @@
       "default_scope": "company",
       "tables": [
         "match_result",
-        "match_decision"
+        "match_decision",
+        "line_reconciliation"
       ],
       "invariants": "Revision-pinned operands and evidence; fuzzy not authoritative."
     },
@@ -126,6 +127,7 @@
         "vendor_ref",
         "contract_ref",
         "contract_line",
+        "acceptance_claim",
         "invoice_ref",
         "invoice_line"
       ],
@@ -136,7 +138,8 @@
       "default_scope": "company",
       "tables": [
         "advance_ref",
-        "settlement_link"
+        "settlement_link",
+        "settlement_extra_claim"
       ],
       "invariants": "Independent verified issue/refund and disjoint consumption."
     },

@@ -74,7 +74,7 @@ fn map_pg_error(error: sqlx::Error) -> Error {
         sqlx::Error::Database(db) => match db.code().as_deref() {
             Some("22023") => Error::InvalidInput,
             Some("42501") => Error::Forbidden,
-            Some("23505") => Error::Conflict,
+            Some("23505" | "23514") => Error::Conflict,
             _ => Error::Database(error),
         },
         _ => Error::Database(error),
@@ -153,7 +153,7 @@ async fn list_filtered(
         })?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     let rows = sqlx::query_as::<_, Reference>(
-        "SELECT f.id,f.resource_kind AS kind,f.source_key,to_char(r.as_of AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS as_of,'COMPLETE'::text AS coverage,'VERIFIED'::text AS state,ARRAY[]::uuid[] AS evidence_ids FROM finance.financial_resource f JOIN finance.reference_snapshot r ON (r.tenant_id,r.company_id,r.id)=(f.tenant_id,f.company_id,f.snapshot_id) WHERE f.tenant_id=$1 AND f.company_id=$2 AND ($3::text IS NULL OR f.resource_kind=$3) AND f.resource_kind IN ('CONTRACT','ADVANCE','BUDGET','INVOICE') AND f.id>$4 AND f.coverage_complete AND f.fresh_until>statement_timestamp() AND r.state='APPROVED' AND r.fresh_until>statement_timestamp() ORDER BY f.id LIMIT $5",
+        "SELECT f.id,f.resource_kind AS kind,f.source_key,to_char(r.as_of AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS as_of,'COMPLETE'::text AS coverage,'VERIFIED'::text AS state,COALESCE(r.import_evidence, ARRAY[]::uuid[]) AS evidence_ids FROM finance.financial_resource f JOIN finance.reference_snapshot r ON (r.tenant_id,r.company_id,r.id)=(f.tenant_id,f.company_id,f.snapshot_id) WHERE f.tenant_id=$1 AND f.company_id=$2 AND ($3::text IS NULL OR f.resource_kind=$3) AND f.resource_kind IN ('CONTRACT','ADVANCE','BUDGET','INVOICE') AND f.id>$4 AND f.coverage_complete AND f.fresh_until>statement_timestamp() AND r.state='APPROVED' AND r.fresh_until>statement_timestamp() ORDER BY f.id LIMIT $5",
     )
     .bind(t)
     .bind(c)
@@ -236,6 +236,8 @@ pub struct CreateReference<'a> {
     pub kind: &'a str,
     pub as_of: &'a str,
     pub coverage: &'a str,
+    pub fresh_until: &'a str,
+    pub records: &'a serde_json::Value,
     pub reference_id: Uuid,
 }
 
@@ -249,7 +251,7 @@ pub async fn create(
         || input.reference_id.is_nil()
         || !matches!(
             input.kind,
-            "VENDOR" | "CONTRACT" | "INVOICE" | "ADVANCE" | "BUDGET" | "PAYMENT"
+            "CONTRACT" | "INVOICE" | "ADVANCE" | "BUDGET" | "PAYMENT"
         )
         || !matches!(input.coverage, "COMPLETE" | "PARTIAL" | "UNKNOWN")
         || input.as_of.is_empty()
@@ -271,7 +273,7 @@ pub async fn create(
     }
     recheck_authenticated(&mut tx, Some(proof)).await?;
     let row = sqlx::query_as::<_, ReferenceJob>(
-        "SELECT * FROM finance.runtime_create_reference($1,$2,$3,$4,$5,$6::text::timestamptz,$7,$8,$9,$10,$11)",
+        "SELECT * FROM finance.runtime_create_reference_bound($1,$2,$3,$4,$5,$6::text::timestamptz,$7,$8,$9,$10,$11,$12::text::timestamptz,$13)",
     )
     .bind(t)
     .bind(c)
@@ -284,6 +286,8 @@ pub async fn create(
     .bind(input.reference_id)
     .bind(command)
     .bind(correlation)
+    .bind(input.fresh_until)
+    .bind(input.records)
     .fetch_one(&mut *tx)
     .await
     .map_err(map_pg_error)?;
@@ -345,4 +349,82 @@ pub async fn verify(
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(row)
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ReservableResource {
+    pub id: Uuid,
+    pub kind: String,
+    pub source_key: String,
+    pub snapshot_id: Uuid,
+    pub currency: String,
+    pub cap: String,
+    pub consumed: String,
+    pub held: String,
+    pub available: String,
+    pub fresh_until: String,
+}
+pub async fn reservable(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    after: Uuid,
+    limit: i64,
+) -> Result<Vec<ReservableResource>, Error> {
+    if !(1..=100).contains(&limit) {
+        return Err(Error::InvalidInput);
+    }
+    let (t, c, a) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::FinanceApprover)
+        .await
+        .map_err(|e| match e {
+            GrantError::Forbidden => Error::Forbidden,
+            GrantError::Database(e) => Error::Database(e),
+        })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let rows = sqlx::query_as::<_, ReservableResource>(
+        "SELECT * FROM finance.runtime_reservable_resources($1,$2,$3,$4,$5::integer)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(after)
+    .bind(limit)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(map_pg_error)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(rows)
+}
+pub async fn import_material(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    id: Uuid,
+) -> Result<Option<serde_json::Value>, Error> {
+    if id.is_nil() {
+        return Err(Error::InvalidInput);
+    }
+    let (t, c, a) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    lock_roles(&mut tx, proof.context())
+        .await
+        .map_err(|e| match e {
+            GrantError::Forbidden => Error::Forbidden,
+            GrantError::Database(e) => Error::Database(e),
+        })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let material = sqlx::query_scalar::<_, Option<serde_json::Value>>(
+        "SELECT finance.runtime_reference_import_material($1,$2,$3,$4)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(map_pg_error)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(material)
 }

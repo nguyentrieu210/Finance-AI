@@ -270,6 +270,49 @@ pub(super) async fn content(
     }
     match export::download_export(&state.runtime, &proof, dossier, package).await {
         Ok(Some(row)) if row.sha256 == digest => {
+            match export::bundle(&state.runtime, &proof, dossier, package).await {
+                Ok(Some(bundle)) => {
+                    let Some(root) = std::env::var_os("FINANCE_EXPORT_ARTIFACT_ROOT") else {
+                        return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+                    };
+                    let scope = state.scope;
+                    let digest = bundle.sha256.clone();
+                    let bytes = tokio::task::spawn_blocking(move || {
+                        export::read_bundle(std::path::Path::new(&root), scope, &bundle)
+                    })
+                    .await;
+                    let Ok(Some(bytes)) = bytes else {
+                        return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+                    };
+                    let Ok(sha) = HeaderValue::from_str(&digest) else {
+                        return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+                    };
+                    return (
+                        [
+                            (
+                                header::CONTENT_TYPE,
+                                HeaderValue::from_static("application/zip"),
+                            ),
+                            (
+                                header::CONTENT_DISPOSITION,
+                                HeaderValue::from_static(
+                                    "attachment; filename=finance-package.zip",
+                                ),
+                            ),
+                            (header::CACHE_CONTROL, HeaderValue::from_static("no-store")),
+                            (
+                                header::X_CONTENT_TYPE_OPTIONS,
+                                HeaderValue::from_static("nosniff"),
+                            ),
+                            (axum::http::HeaderName::from_static("x-content-sha256"), sha),
+                        ],
+                        bytes,
+                    )
+                        .into_response();
+                }
+                Ok(None) => {}
+                Err(value) => return error(dossiers::status(value), correlation),
+            }
             let sha_header = match HeaderValue::from_str(&row.sha256) {
                 Ok(value) => value,
                 Err(_) => return error(StatusCode::SERVICE_UNAVAILABLE, correlation),

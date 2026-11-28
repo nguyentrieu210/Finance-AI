@@ -20,7 +20,10 @@ port="$(docker port "$cid" 5432/tcp)"
 source_url="postgresql://finance_migrator:$password@$port/finance_restore_source?sslmode=disable"
 restore_url="postgresql://finance_migrator:$password@$port/finance_restore?sslmode=disable"
 
-FINANCE_MIGRATION_DATABASE_URL="$source_url" "$migrator" --apply
+if ! FINANCE_MIGRATION_DATABASE_URL="$source_url" "$migrator" --apply; then
+  docker logs "$cid" 2>&1 | grep -E 'ERROR:|HINT:|DETAIL:|LINE [0-9]+:|STATEMENT:' | tail -30 >&2 || true
+  exit 1
+fi
 docker exec -i "$cid" psql -X -U finance_migrator -d finance_restore_source -v ON_ERROR_STOP=1 -f - < scripts/prototype_fixture.sql
 
 # Add one chained synthetic audit event so the drill proves more than empty-schema restore.
@@ -58,10 +61,10 @@ docker exec -i "$cid" psql -X -U finance_migrator -d finance_restore -v ON_ERROR
 DO $$
 DECLARE head_seq bigint; max_seq bigint;
 BEGIN
- IF (SELECT count(*) FROM public._sqlx_migrations WHERE success)<>68 THEN
+ IF (SELECT count(*) FROM public._sqlx_migrations WHERE success)<>87 THEN
   RAISE EXCEPTION 'restored migration ledger mismatch';
  END IF;
- IF (SELECT count(*) FROM pg_tables WHERE schemaname='finance')<>84 THEN
+ IF (SELECT count(*) FROM pg_tables WHERE schemaname='finance')<>87 THEN
   RAISE EXCEPTION 'restored table inventory mismatch';
  END IF;
  IF NOT EXISTS(

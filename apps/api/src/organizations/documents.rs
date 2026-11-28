@@ -167,7 +167,16 @@ pub(super) async fn issue_upload_grant(
         Ok(pair) => pair,
         Err(resp) => return resp,
     };
-    match repository::issue_upload_grant(&state.runtime, &proof, &key, dossier, document).await {
+    match repository::issue_upload_grant_with_storage(
+        &state.runtime,
+        &proof,
+        &key,
+        dossier,
+        document,
+        state.storage.as_ref(),
+    )
+    .await
+    {
         Ok(grant) => {
             let version = grant.dossier_version;
             dossier_versioned(StatusCode::CREATED, dossier, version, grant)
@@ -197,7 +206,7 @@ pub(super) async fn finalize(
     let Ok(Json(body)) = body else {
         return error(StatusCode::BAD_REQUEST, correlation);
     };
-    match repository::finalize(
+    match repository::finalize_with_storage(
         &state.runtime,
         &proof,
         &key,
@@ -208,6 +217,7 @@ pub(super) async fn finalize(
             generation: body.generation,
             job_id: random_id(),
         },
+        state.storage.as_ref(),
     )
     .await
     {
@@ -519,7 +529,15 @@ pub(super) async fn content(
     if decode_cursor(&key, state.scope, actor, &query.grant, time) != Some(document) {
         return error(StatusCode::FORBIDDEN, correlation);
     }
-    match repository::download_original(&state.runtime, &proof, dossier, document).await {
+    match repository::download_original_with_storage(
+        &state.runtime,
+        &proof,
+        dossier,
+        document,
+        state.storage.as_ref(),
+    )
+    .await
+    {
         Ok(Some(row)) if row.sha256 == digest => {
             let Ok(mime) = HeaderValue::from_str(&row.mime) else {
                 return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
@@ -539,6 +557,45 @@ pub(super) async fn content(
             out
         }
         Ok(_) => error(StatusCode::NOT_FOUND, correlation),
+        Err(e) => error(status(e), correlation),
+    }
+}
+
+pub(super) async fn rendered_evidence(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match authenticate_version(&state, &headers, correlation, None).await {
+        Ok(p) => p,
+        Err(s) => return error(s, correlation),
+    };
+    match repository::rendered_evidence(&state.runtime, &proof, id).await {
+        Ok(Some(row)) => {
+            let Ok(digest) = HeaderValue::from_str(&row.sha256) else {
+                return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+            };
+            let mut response = row.bytes.into_response();
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/pdf"),
+            );
+            response.headers_mut().insert(
+                header::CONTENT_DISPOSITION,
+                HeaderValue::from_static("attachment; filename=rendered-evidence.pdf"),
+            );
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response.headers_mut().insert(
+                header::X_CONTENT_TYPE_OPTIONS,
+                HeaderValue::from_static("nosniff"),
+            );
+            response.headers_mut().insert("x-content-sha256", digest);
+            response
+        }
+        Ok(None) => error(StatusCode::NOT_FOUND, correlation),
         Err(e) => error(status(e), correlation),
     }
 }

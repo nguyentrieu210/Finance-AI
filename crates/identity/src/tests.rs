@@ -219,6 +219,15 @@ async fn identity_real_database() {
         .connect(&std::env::var("FINANCE_AUDIT_TEST_ADMIN_URL").unwrap())
         .await
         .unwrap();
+    // Preserve the shared synthetic profile for subsequent integration suites.
+    let original_profile: (Option<String>, Option<String>, Option<i64>) = sqlx::query_as(
+        "SELECT display_name,email,profile_issued_at FROM finance.identity_subject WHERE tenant_id=$1 AND id=$2",
+    )
+    .bind(id(1))
+    .bind(id(1001))
+    .fetch_one(&admin)
+    .await
+    .unwrap();
     // Isolated fixture only: signed claims populate the existing identity.
     let mut profile_claims = serde_json::json!({
         "iss":"https://synthetic.invalid","sub":"requester","aud":"finance-api",
@@ -268,6 +277,15 @@ async fn identity_real_database() {
         v.authenticate(&pool, &t, scope(1, 10)).await,
         Err(IdentityError::Forbidden)
     );
+    sqlx::query("UPDATE finance.identity_subject SET display_name=$1,email=$2,profile_issued_at=$3 WHERE tenant_id=$4 AND id=$5")
+        .bind(original_profile.0)
+        .bind(original_profile.1)
+        .bind(original_profile.2)
+        .bind(id(1))
+        .bind(id(1001))
+        .execute(&admin)
+        .await
+        .unwrap();
     pool.close().await;
     admin.close().await;
 }

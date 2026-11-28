@@ -314,6 +314,13 @@ struct Requirement {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct CriticalField {
+    clause_key: String,
+    field_path: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Create {
     company_id: Uuid,
     name: String,
@@ -325,6 +332,10 @@ pub(super) struct Create {
     source_document_id: Uuid,
     clauses: Vec<Clause>,
     checklist: Vec<Requirement>,
+    #[serde(default)]
+    critical_fields: Vec<CriticalField>,
+    #[serde(default)]
+    finance_gate: Option<serde_json::Value>,
 }
 
 pub(super) async fn create(
@@ -360,6 +371,17 @@ pub(super) async fn create(
         .map(|r| r.document_kind.clone())
         .collect();
     let mandatory: Vec<_> = body.checklist.iter().map(|r| r.mandatory).collect();
+    let critical_keys: Vec<_> = body
+        .critical_fields
+        .iter()
+        .map(|x| x.clause_key.clone())
+        .collect();
+    let critical_paths: Vec<_> = body
+        .critical_fields
+        .iter()
+        .map(|x| x.field_path.clone())
+        .collect();
+    let finance_gate = body.finance_gate.as_ref().map(serde_json::Value::to_string);
     let draft = repository::CreateDraft {
         id: random_id(),
         company: body.company_id,
@@ -373,9 +395,39 @@ pub(super) async fn create(
         checklist_keys: &checklist_keys,
         document_kinds: &document_kinds,
         mandatory: &mandatory,
+        critical_keys: &critical_keys,
+        critical_paths: &critical_paths,
+        finance_gate: finance_gate.as_deref(),
     };
     match repository::create(&state.runtime, &proof, &key, draft).await {
         Ok(row) => receipt(row, StatusCode::CREATED),
+        Err(e) => error(dossiers::status(e), correlation),
+    }
+}
+
+pub(super) async fn configuration(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match dossiers::authenticate_version(&state, &headers, correlation, None).await {
+        Ok(p) => p,
+        Err(s) => return error(s, correlation),
+    };
+    match repository::configuration(&state.runtime, &proof, id).await {
+        Ok(Some(value)) => {
+            let mut response = value.into_response();
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/json"),
+            );
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Ok(None) => error(StatusCode::NOT_FOUND, correlation),
         Err(e) => error(dossiers::status(e), correlation),
     }
 }

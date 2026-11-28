@@ -17,11 +17,11 @@ export function Dashboard() {
   }
   function clear(){abort.current?.abort();credential.current='';setToken('');setConnected(false);setBusy(false);setItems([]);setStatus('Đã ngắt kết nối.');}
   return <section aria-labelledby="dashboard-title"><h2 id="dashboard-title">Dashboard vận hành</h2>
-    <p>Không suy diễn first-pass acceptance hoặc active handling time nếu chưa có lịch sử trạng thái bất biến.</p>
+    <p>KPI duyệt lần đầu chỉ hiển thị khi hồ sơ đã duyệt có lịch sử quyết định đầy đủ; thời gian xử lý chưa được suy diễn.</p>
     <label htmlFor="dashboard-token">Token Requester sandbox</label><div className="actions"><input id="dashboard-token" type="password" autoComplete="off" maxLength={16384} value={token} disabled={busy||connected} onChange={e=>setToken(e.target.value)}/>
       <button className="primary" disabled={busy||connected||!token.trim()} onClick={()=>{credential.current=token.trim();setToken('');void load();}}>Kết nối</button><button disabled={busy} onClick={clear}>Ngắt kết nối</button></div>
-    <p role="status">{status}</p><div className="table-wrap"><table><thead><tr><th>Metric</th><th>Giá trị</th><th>Đơn vị</th><th>As of</th></tr></thead>
-      <tbody>{items.map(row=><tr key={row.name}><td>{row.name}</td><td>{row.value}</td><td>{row.unit}</td><td>{row.as_of}</td></tr>)}</tbody></table></div>
+    <p role="status">{status}</p><div className="table-wrap"><table><thead><tr><th>Metric</th><th>Giá trị</th><th>Đơn vị</th><th>Mẫu số</th><th>As of</th></tr></thead>
+      <tbody>{items.map(row=><tr key={row.name}><td>{row.name}</td><td>{row.value}</td><td>{row.unit}</td><td>{row.denominator ?? '—'}</td><td>{row.as_of}</td></tr>)}</tbody></table></div>
     <div className="actions"><button disabled={!connected||busy} onClick={()=>void load()}>Làm mới</button></div>
   </section>;
 }

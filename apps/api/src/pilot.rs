@@ -222,7 +222,8 @@ pub async fn build(config: Config) -> Result<Router, Error> {
     let readiness_runtime = runtime.clone();
     let readiness_lookup = lookup.clone();
     let state =
-        OrganizationState::configured(runtime, lookup, store, config.scope, config.cursor_key);
+        OrganizationState::configured(runtime, lookup, store, config.scope, config.cursor_key)
+            .with_storage(finance_documents::s3::S3::from_env().map_err(|_| Error::Config)?);
     Ok(router(state)
         .route("/health/live", get(|| async { Json(API_LIVENESS) }))
         .route(

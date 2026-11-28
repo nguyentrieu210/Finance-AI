@@ -228,6 +228,19 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(membership["subject_id"], membership_subject);
     assert_eq!(membership["active"], true);
     assert_eq!(membership["roles"].as_array().unwrap().len(), 2);
+
+    let (profiles_status, profiles) =
+        request(&app, "/v1/memberships?limit=100", Some(&token)).await;
+    assert_eq!(profiles_status, StatusCode::OK);
+    let requester_profile = profiles["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["subject_id"] == "00000000-0000-0000-0000-0000000003e9")
+        .expect("synthetic requester membership is present");
+    assert_eq!(requester_profile["display_name"], "Synthetic Requester");
+    assert_eq!(requester_profile["email"], "requester@example.invalid");
+    assert_eq!(requester_profile["roles"], json!(["REQUESTER"]));
     let membership_uri = format!("/v1/memberships/{membership_subject}");
     assert_eq!(
         request(&app, &membership_uri, Some(&token)).await.0,
@@ -339,7 +352,17 @@ async fn scoped_organization_http_real_database() {
     ] {
         let (status, page) = request(&app, uri, Some(&requester)).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(page["items"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            page["items"].as_array().unwrap().len(),
+            if kind == "ADVANCE" { 2 } else { 1 }
+        );
+        assert!(
+            page["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|item| item["kind"] == kind)
+        );
         assert_eq!(page["items"][0]["kind"], kind);
         assert_eq!(page["items"][0]["coverage"], "COMPLETE");
         assert_eq!(page["items"][0]["state"], "VERIFIED");
@@ -1050,6 +1073,17 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(simulation["pass_count"], 1);
     assert_eq!(simulation["fail_count"], 1);
     assert_eq!(simulation["unknown_count"], 1);
+    assert_eq!(simulation["comparison"]["evaluated"], 3);
+    assert_eq!(
+        simulation["comparison"]["transitions"],
+        json!([
+            [1, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0],
+            [0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0]
+        ])
+    );
     let replay = app
         .clone()
         .oneshot(simulate(&policy_admin, "simulation-one"))
@@ -1806,6 +1840,13 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(serde_json::from_slice::<Value>(&bytes).unwrap(), revised);
     let (dashboard_status, dashboard) = request(&app, "/v1/dashboard", Some(&requester)).await;
     assert_eq!(dashboard_status, StatusCode::OK);
+    assert!(
+        dashboard["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["name"] == "reviews.accepted_history_unknown")
+    );
     let total = dashboard["items"]
         .as_array()
         .unwrap()

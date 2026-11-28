@@ -62,6 +62,7 @@ pub struct OrganizationState {
     verifier: Arc<VerifierStore>,
     scope: CompanyScope,
     cursor_key: [u8; 32],
+    storage: Option<finance_documents::s3::S3>,
 }
 
 impl OrganizationState {
@@ -89,7 +90,13 @@ impl OrganizationState {
             verifier,
             scope,
             cursor_key,
+            storage: None,
         }
+    }
+
+    pub(crate) fn with_storage(mut self, storage: Option<finance_documents::s3::S3>) -> Self {
+        self.storage = storage;
+        self
     }
 }
 
@@ -557,6 +564,10 @@ pub fn router(state: OrganizationState) -> Router {
         )
         .route("/v1/evidence/{evidence_id}", get(documents::evidence))
         .route(
+            "/v1/evidence/{evidence_id}/rendered",
+            get(documents::rendered_evidence),
+        )
+        .route(
             "/v1/dossiers/{dossier_id}/checks",
             get(checks::list).post(checks::run),
         )
@@ -571,8 +582,16 @@ pub fn router(state: OrganizationState) -> Router {
             get(matches::list).post(matches::confirm),
         )
         .route(
+            "/v1/dossiers/{dossier_id}/line-reconciliations",
+            get(matches::line_history).post(matches::reconcile_lines),
+        )
+        .route(
             "/v1/dossiers/{dossier_id}/reservations",
-            get(reservations::list),
+            get(reservations::list).post(reservations::bind),
+        )
+        .route(
+            "/v1/dossiers/{dossier_id}/reservations/{reservation_id}/release",
+            axum::routing::post(reservations::release),
         )
         .route(
             "/v1/dossiers/{dossier_id}/fields/decisions",
@@ -642,6 +661,10 @@ pub fn router(state: OrganizationState) -> Router {
         .route("/v1/policies", get(policies::list).post(policies::create))
         .route("/v1/policies/{item_id}", get(policies::get))
         .route(
+            "/v1/policies/{item_id}/configuration",
+            get(policies::configuration),
+        )
+        .route(
             "/v1/policies/{item_id}/submit",
             axum::routing::post(policies::submit),
         )
@@ -666,6 +689,11 @@ pub fn router(state: OrganizationState) -> Router {
             get(references::all).post(references::create),
         )
         .route("/v1/references/{item_id}", get(references::get))
+        .route(
+            "/v1/references/{item_id}/material",
+            get(references::material),
+        )
+        .route("/v1/reservable-resources", get(references::reservable))
         .route(
             "/v1/references/{item_id}/verify",
             axum::routing::post(references::verify),

@@ -5,6 +5,8 @@ use finance_shared::money::Money;
 pub mod compiler;
 pub mod repository;
 
+pub mod preflight;
+pub mod runtime;
 pub mod simulator;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

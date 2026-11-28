@@ -29,6 +29,40 @@ pub(super) struct CreateBody {
     kind: String,
     as_of: String,
     coverage: String,
+    fresh_until: Option<String>,
+    #[serde(default)]
+    records: Vec<ImportRow>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct NormalizedResource {
+    source_key: String,
+    currency: String,
+    cap: String,
+    consumed: String,
+    evidence_ids: Vec<Uuid>,
+    details: serde_json::Value,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PaymentRow {
+    source_key: String,
+    currency: String,
+    amount: String,
+    reservation_id: Uuid,
+    event_kind: String,
+    reverses: Option<String>,
+    occurred_at: String,
+    evidence_ids: Vec<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    allocations: Option<std::collections::BTreeMap<Uuid, String>>,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(untagged)]
+enum ImportRow {
+    Resource(NormalizedResource),
+    Payment(PaymentRow),
 }
 
 #[derive(Deserialize)]
@@ -222,6 +256,29 @@ pub(super) async fn create(
         return error(StatusCode::BAD_REQUEST, correlation);
     };
     let as_of = parsed_as_of.with_timezone(&chrono::Utc).to_rfc3339();
+    let fresh_until = match body.fresh_until.as_deref() {
+        Some(raw) => match chrono::DateTime::parse_from_rfc3339(raw) {
+            Ok(value) if value > parsed_as_of => value.to_rfc3339(),
+            _ => return error(StatusCode::BAD_REQUEST, correlation),
+        },
+        None if body.records.is_empty() => {
+            (parsed_as_of + chrono::TimeDelta::seconds(1)).to_rfc3339()
+        }
+        None => return error(StatusCode::BAD_REQUEST, correlation),
+    };
+    if body
+        .records
+        .iter()
+        .any(|row| matches!(row, ImportRow::Payment(_)) != (body.kind == "PAYMENT"))
+    {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    if body.records.len() > 10000 {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let Ok(records) = serde_json::to_value(&body.records) else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
     match finance_financial::references::create(
         &state.runtime,
         &proof,
@@ -231,6 +288,8 @@ pub(super) async fn create(
             kind: &body.kind,
             as_of: &as_of,
             coverage: &body.coverage,
+            fresh_until: &fresh_until,
+            records: &records,
             reference_id: random_id(),
         },
     )
@@ -293,5 +352,85 @@ pub(super) async fn verify(
     {
         Ok(reference) => receipt(reference),
         Err(value) => error(dossiers::status(value), correlation),
+    }
+}
+
+pub(super) async fn material(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match dossiers::authenticate_version(&state, &headers, correlation, None).await {
+        Ok(p) => p,
+        Err(s) => return error(s, correlation),
+    };
+    match finance_financial::references::import_material(&state.runtime, &proof, id).await {
+        Ok(Some(value)) => {
+            let mut response = Json(value).into_response();
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Ok(None) => error(StatusCode::NOT_FOUND, correlation),
+        Err(e) => error(dossiers::status(e), correlation),
+    }
+}
+pub(super) async fn reservable(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    query: Result<Query<PageQuery>, QueryRejection>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match dossiers::authenticate_version(&state, &headers, correlation, None).await {
+        Ok(p) => p,
+        Err(s) => return error(s, correlation),
+    };
+    let Principal::User(actor) = proof.context().actor else {
+        return error(StatusCode::FORBIDDEN, correlation);
+    };
+    let Ok(Query(query)) = query else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let limit = query.limit.unwrap_or(50);
+    if !(1..=100).contains(&limit) {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let Some(time) = now() else {
+        return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+    };
+    let key: [u8; 32] = Sha256::digest(
+        [
+            b"finance.reservable.cursor/v1".as_slice(),
+            &state.cursor_key,
+        ]
+        .concat(),
+    )
+    .into();
+    let after = match query.cursor {
+        None => Uuid::nil(),
+        Some(value) => match decode_cursor(&key, state.scope, actor, &value, time) {
+            Some(id) => id,
+            None => return error(StatusCode::BAD_REQUEST, correlation),
+        },
+    };
+    match finance_financial::references::reservable(&state.runtime, &proof, after, limit).await {
+        Ok(items) => {
+            let next = if items.len() == limit as usize {
+                items
+                    .last()
+                    .map(|row| encode_cursor(&key, state.scope, actor, row.id, time + 300))
+            } else {
+                None
+            };
+            let mut response =
+                Json(serde_json::json!({"items":items,"next_cursor":next})).into_response();
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Err(e) => error(dossiers::status(e), correlation),
     }
 }

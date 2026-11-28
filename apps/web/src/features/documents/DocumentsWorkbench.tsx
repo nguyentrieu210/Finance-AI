@@ -14,6 +14,8 @@ export function DocumentsWorkbench() {
   const [version, setVersion] = useState('');
   const [docs, setDocs] = useState<Document[]>([]);
   const [grant, setGrant] = useState<UploadGrant | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploaded, setUploaded] = useState<string | null>(null);
   const [downloadInfo, setDownloadInfo] = useState<Download | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [replacementId, setReplacementId] = useState('');
@@ -32,6 +34,8 @@ export function DocumentsWorkbench() {
     setConnected(false);
     setDocs([]);
     setGrant(null);
+    setSelectedFile(null);
+    setUploaded(null);
     setDownloadInfo(null);
     setJob(null);
     setStatus('Đã ngắt kết nối.');
@@ -102,6 +106,7 @@ export function DocumentsWorkbench() {
       }
       const data = await res.json() as UploadGrant;
       setGrant(data);
+      setUploaded(null);
       setStatus(`Đã cấp grant generation=${data.generation}.`);
     } catch {
       setStatus('Lỗi mạng khi cấp upload grant.');
@@ -110,9 +115,42 @@ export function DocumentsWorkbench() {
     }
   }
 
+  async function uploadSelected() {
+    if (!grant || !selectedFile || !credential.current) return;
+    const doc = docs.find(item => item.id === grant.document_id);
+    if (!doc || selectedFile.size < 1 || selectedFile.size > 25 * 1024 * 1024) return;
+    setBusy(true);
+    try {
+      const target = new URL(grant.upload_url);
+      if (target.hostname === 'upload.synthetic.local' || (target.protocol !== 'https:' && target.hostname !== '127.0.0.1')) {
+        setStatus('Storage chưa được cấu hình hoặc URL không hợp lệ.');
+        return;
+      }
+      if (Date.parse(grant.expires_at) <= Date.now()) { setStatus('Grant hết hạn.'); return; }
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', await selectedFile.arrayBuffer()));
+      const hash = Array.from(digest, b => b.toString(16).padStart(2, '0')).join('');
+      if (hash !== doc.sha256 || btoa(String.fromCharCode(...digest)) !== grant.checksum_sha256_base64) {
+        setStatus('File không khớp SHA-256 chứng từ.'); return;
+      }
+      const response = await fetch(target, {
+        method: 'PUT', headers: {
+          'Content-Type': grant.content_type,
+          'If-None-Match': '*',
+          'x-amz-checksum-sha256': grant.checksum_sha256_base64,
+        }, body: selectedFile, credentials: 'omit', redirect: 'error',
+        cache: 'no-store', referrerPolicy: 'no-referrer',
+      });
+      if (!response.ok) { setStatus(`Upload thất bại (${response.status}).`); return; }
+      setUploaded(grant.document_id);
+      setStatus('Đã tải file; có thể xác minh và đưa vào hàng đợi quét.');
+    } catch { setStatus('Không tải được file; kiểm tra kết nối và CORS storage.'); }
+    finally { setBusy(false); }
+  }
+
   async function finalizeDoc(doc: Document) {
     const id = dossierId.trim();
-    const gen = grant && grant.document_id === doc.id ? grant.generation : 1;
+    if (!grant || grant.document_id !== doc.id || uploaded !== doc.id) { setStatus('Cần upload đúng file trước khi finalize.'); return; }
+    const gen = grant.generation;
     if (!credential.current || !id || !version.trim()) return;
     setBusy(true);
     setStatus(`Đang finalize ${doc.id} (gen ${gen})...`);
@@ -229,13 +267,17 @@ export function DocumentsWorkbench() {
         <td>{doc.id}</td><td>{doc.file_name}</td><td>{doc.kind}</td><td>{doc.state}</td>
         <td className="actions">
           <button type="button" disabled={busy} onClick={() => void issueGrant(doc.id)}>Upload Grant</button>
-          <button type="button" disabled={busy} onClick={() => void finalizeDoc(doc)}>Finalize</button>
+          <button type="button" disabled={busy || uploaded !== doc.id} onClick={() => void finalizeDoc(doc)}>Finalize</button>
           <button type="button" disabled={busy || !replacementId.trim()} onClick={() => void supersedeDoc(doc.id)}>Supersede</button>
           <button type="button" disabled={busy} onClick={() => void requestDownload(doc.id)}>Download</button>
         </td>
       </tr>)}</tbody>
     </table></div>
-    {grant && <p>Grant gen {grant.generation}: {grant.upload_url} (checksum {grant.checksum_sha256_base64})</p>}
+    {grant && <div className="actions">
+      <span>Grant thế hệ {grant.generation}, hết hạn {grant.expires_at}</span>
+      <input type="file" aria-label="Chọn chứng từ" disabled={busy} onChange={e => { setSelectedFile(e.target.files?.[0] ?? null); setUploaded(null); }} />
+      <button type="button" disabled={busy || !selectedFile} onClick={() => void uploadSelected()}>Tải file lên</button>
+    </div>}
     {job && <p>Job {job.id}: {job.state}</p>}
     {downloadInfo && <p>Download URL: {downloadInfo.url} (hết hạn {downloadInfo.expires_at})</p>}
   </section>;

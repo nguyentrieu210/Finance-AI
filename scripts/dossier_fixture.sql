@@ -55,12 +55,73 @@ INSERT INTO finance.dossier_revision(tenant_id,company_id,dossier_id,id,owner_id
 VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
 '00000000-0000-0000-0000-000000001800','00000000-0000-0000-0000-000000001801',
 '00000000-0000-0000-0000-0000000003e9',0);
-INSERT INTO finance.check_run(
- tenant_id,company_id,id,dossier_id,revision_id,dossier_version,actor_id,policy_id,business_day,input_hash,blocked)
-VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
-'00000000-0000-0000-0000-000000001802','00000000-0000-0000-0000-000000001800',
-'00000000-0000-0000-0000-000000001801',0,'00000000-0000-0000-0000-0000000003e9',
-'00000000-0000-0000-0000-000000001600','2027-01-01',decode(repeat('18',32),'hex'),false);
+-- Wave 1 READY fixture: source-bound advance, independently verified settlement.
+DO $$
+DECLARE
+ t uuid:='00000000-0000-0000-0000-000000000001'; c uuid:='00000000-0000-0000-0000-00000000000a';
+ a uuid:='00000000-0000-0000-0000-0000000003e9'; maker uuid:='00000000-0000-0000-0000-0000000003f0'; checker uuid:='00000000-0000-0000-0000-0000000003f1';
+ d uuid:='00000000-0000-0000-0000-000000001800'; rev uuid:='00000000-0000-0000-0000-000000001801'; pid uuid:='00000000-0000-0000-0000-000000001600';
+ hold_id uuid:='00000000-0000-0000-0000-000000001805'; sid uuid:='00000000-0000-0000-0000-000000001820'; rid uuid:='00000000-0000-0000-0000-000000001821';
+ doc uuid; j uuid; ocr uuid; ext uuid; ev uuid; src_doc uuid; src_ev uuid; payload bytea;
+ owner_id uuid; dossier_id uuid; revision_id uuid; kind text; detail jsonb; material jsonb; facts jsonb; field record; i integer;
+BEGIN
+ PERFORM set_config('finance.tenant_id',t::text,true);
+ PERFORM set_config('finance.company_id',c::text,true);
+ PERFORM set_config('finance.actor_id',a::text,true);
+ FOR i IN 1..2 LOOP
+  doc:=gen_random_uuid();j:=gen_random_uuid();ocr:=gen_random_uuid();ext:=gen_random_uuid();ev:=gen_random_uuid();
+  IF i=1 THEN
+   owner_id:=maker; dossier_id:='00000000-0000-0000-0000-000000001a00'; revision_id:='00000000-0000-0000-0000-000000001a01';
+   kind:='ADVANCE_REQUEST';src_doc:=doc;src_ev:=ev;
+   payload:=convert_to('%PDF-1.4'||chr(10)||'Synthetic advance ledger: SYN-ADVANCE, EMP-SYN, VND 100 issued','UTF8');
+  ELSE
+   owner_id:=a; dossier_id:=d;revision_id:=rev;kind:='ADVANCE_SETTLEMENT';
+   payload:=convert_to('%PDF-1.4'||chr(10)||'Synthetic settlement: SYN-ADVANCE, EMP-SYN, VND 10 requested and applied, extra 0','UTF8');
+  END IF;
+  INSERT INTO finance.upload_intent(tenant_id,company_id,id,dossier_id,revision_id,actor_id,filename,declared_bytes,declared_sha256,declared_mime,state,generation,document_kind)
+  VALUES(t,c,doc,dossier_id,revision_id,owner_id,'synthetic-wave1.pdf',octet_length(payload),sha256(payload),'application/pdf','FINALIZED',1,kind);
+  INSERT INTO finance.upload_grant(tenant_id,company_id,intent_id,generation,staging_key,issued_at,expires_at)
+  VALUES(t,c,doc,1,'staging/'||doc::text||'/1',statement_timestamp(),statement_timestamp()+interval '5 minutes');
+  INSERT INTO finance.document_blob(tenant_id,company_id,id,generation,byte_count,sha256_digest,mime,synthetic_bytes,scan_state,scan_engine,scan_engine_digest,scanned_at)
+  VALUES(t,c,doc,1,octet_length(payload),sha256(payload),'application/pdf',payload,'CLEAN','CLAMAV',decode(repeat('44',32),'hex'),clock_timestamp());
+  INSERT INTO finance.document_ref(tenant_id,company_id,id,dossier_id,revision_id) VALUES(t,c,doc,dossier_id,revision_id);
+  INSERT INTO finance.outbox(tenant_id,company_id,id,command_id,resource_id,event_type) VALUES(t,c,j,j,doc,'SYNTHETIC_OCR_REQUESTED');
+  INSERT INTO finance.job(tenant_id,company_id,id,state,attempts,fence) VALUES(t,c,j,'SUCCEEDED',1,1);
+  INSERT INTO finance.job_attempt(tenant_id,company_id,job_id,fence,worker_id,state,lease_until,finished_at)
+  VALUES(t,c,j,1,'00000000-0000-0000-0000-000000006001','SUCCEEDED',clock_timestamp(),clock_timestamp());
+  INSERT INTO finance.ocr_run(tenant_id,company_id,id,document_id,revision_id,source_digest,generation,job_id,fence,engine,model_digest,config_digest,page_count,result_digest)
+  VALUES(t,c,ocr,doc,revision_id,sha256(payload),1,j,1,'TESSERACT_SYNTHETIC',decode(repeat('45',32),'hex'),decode(repeat('46',32),'hex'),1,decode(repeat('47',32),'hex'));
+  INSERT INTO finance.evidence(tenant_id,company_id,id,ocr_run_id,page,block_index,x0,y0,x1,y1,excerpt,confidence)
+  VALUES(t,c,ev,ocr,1,0,1000,1000,500000,50000,convert_from(payload,'UTF8'),9900);
+  IF i=2 THEN
+   INSERT INTO finance.extraction_run(tenant_id,company_id,id,ocr_run_id,schema_version) VALUES(t,c,ext,ocr,'local.rows.v2');
+   FOR field IN SELECT * FROM (VALUES ('advance_settlement.applied','10'),('advance_settlement.requested','10'),('advance_settlement.extra','0'),('advance_settlement.currency','VND'),('advance_settlement.beneficiary_key','EMP-SYN'),('advance_settlement.allocations','{"SYN-ADVANCE":"10"}')) f(path,value) LOOP
+    INSERT INTO finance.extracted_field(tenant_id,company_id,run_id,field_path,state,normalized_value,source_page,block_indexes)
+    VALUES(t,c,ext,field.path,'CANDIDATE',field.value,1,ARRAY[0]);
+    INSERT INTO finance.field_decision(tenant_id,company_id,id,run_id,field_path,dossier_id,revision_id,dossier_version,actor_id,disposition,normalized_value,reason,evidence_ids)
+    VALUES(t,c,gen_random_uuid(),ext,field.path,d,rev,0,checker,'CONFIRMED_CANDIDATE',field.value,'Synthetic independently confirmed fixture',ARRAY[ev]);
+   END LOOP;
+  END IF;
+ END LOOP;
+ detail:=jsonb_build_object('beneficiary_key','EMP-SYN','purpose','Synthetic advance','issued_on',((clock_timestamp() AT TIME ZONE 'UTC')::date-1)::text,'due_date',((clock_timestamp() AT TIME ZONE 'UTC')::date+30)::text,'issued','100','settled','0','refunded','0');
+ INSERT INTO finance.reference_snapshot(tenant_id,company_id,id,source_system,external_version,source_digest,as_of,fresh_until,maker_id,source_document_id,import_payload,import_evidence)
+ SELECT t,c,sid,'MANUAL_API','ADVANCE:COMPLETE:READY-FIXTURE',b.sha256_digest,clock_timestamp()-interval '1 minute',clock_timestamp()+interval '1 day',maker,src_doc,
+ jsonb_build_array(jsonb_build_object('source_key','SYN-ADVANCE','currency','VND','cap','100','consumed','0','details',detail,'evidence_ids',jsonb_build_array(src_ev))),ARRAY[src_ev]
+ FROM finance.document_blob b WHERE (b.tenant_id,b.company_id,b.id)=(t,c,src_doc);
+ INSERT INTO finance.source_coverage(tenant_id,company_id,snapshot_id,resource_kind,complete,watermark) VALUES(t,c,sid,'ADVANCE',true,'READY-FIXTURE');
+ INSERT INTO finance.financial_resource(tenant_id,company_id,id,currency,cap,consumed,coverage_complete,fresh_until,snapshot_id,resource_kind,source_key,reference_details)
+ VALUES(t,c,rid,'VND',100,0,true,clock_timestamp()+interval '1 day',sid,'ADVANCE',jsonb_build_array('MANUAL_API','SYN-ADVANCE')::text,detail);
+ UPDATE finance.reference_snapshot SET state='APPROVED',checker_id=checker WHERE id=sid;
+ material:=finance.bound_finance_material(t,c,d,rev,pid,0,ARRAY[rid]);
+ IF material IS NULL THEN RAISE EXCEPTION 'READY fixture has no verified bound material'; END IF;
+ PERFORM finance.reserve_bound_material(t,c,hold_id,rev,material,ARRAY[rid]);
+ UPDATE finance.reservation SET binding_policy_id=pid,binding_actor_id=checker,binding_key='synthetic-ready-hold',binding_request_hash=sha256('synthetic-ready-hold'::bytea),binding_material_hash=sha256(convert_to(material::text,'UTF8')),binding_version=0,binding_reason='Synthetic independently verified hold' WHERE id=hold_id;
+ facts:=finance.runtime_verified_financial_facts(t,c,d,rev,pid,0);
+ IF facts IS NULL OR jsonb_array_length(facts)=0 THEN RAISE EXCEPTION 'READY fixture has no verified financial facts'; END IF;
+ INSERT INTO finance.check_run(tenant_id,company_id,id,dossier_id,revision_id,dossier_version,actor_id,policy_id,business_day,input_hash,blocked,financial_digest)
+ VALUES(t,c,'00000000-0000-0000-0000-000000001802',d,rev,0,a,pid,(clock_timestamp() AT TIME ZONE 'UTC')::date,decode(repeat('18',32),'hex'),false,sha256(convert_to(facts::text,'UTF8')));
+END $$;
+
 INSERT INTO finance.check_result(tenant_id,company_id,run_id,rule_key,outcome,severity,detail_code)
 VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
 '00000000-0000-0000-0000-000000001802','ready.synthetic','PASS','BLOCK','SYNTHETIC_PASS'),
@@ -80,15 +141,6 @@ VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000
 '00000000-0000-0000-0000-000000001600','Synthetic settlement package',1,'PUBLISHED','PDF',
 decode(repeat('1a',32),'hex'),'00000000-0000-0000-0000-0000000003e8',
 '00000000-0000-0000-0000-0000000003e9',clock_timestamp());
-INSERT INTO finance.reservation(
- tenant_id,company_id,id,revision_id,currency,amount,resource_ids,state,remaining)
-VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
-'00000000-0000-0000-0000-000000001805','00000000-0000-0000-0000-000000001801',
-'VND',10,ARRAY['00000000-0000-0000-0000-000000001210'::uuid],'RESERVED',10);
-INSERT INTO finance.reservation_line(tenant_id,company_id,reservation_id,resource_id,amount)
-VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a',
-'00000000-0000-0000-0000-000000001805','00000000-0000-0000-0000-000000001210',10);
-
 -- Older successful check for the same revision must not authorize READY.
 INSERT INTO finance.check_run(
  tenant_id,company_id,id,dossier_id,revision_id,dossier_version,actor_id,policy_id,business_day,input_hash,blocked,created_at)

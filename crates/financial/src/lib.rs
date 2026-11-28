@@ -2,6 +2,7 @@
 //! Synthetic-only domain prototype. No authorization, durable mutation or production claim.
 use finance_shared::money::Money;
 
+pub mod arithmetic;
 pub mod payment;
 pub mod references;
 pub mod reservations;

@@ -1,4 +1,8 @@
 #![forbid(unsafe_code)]
+mod artifact_store;
+mod ocr;
+mod render_material;
+mod scan;
 use finance_core::jobs::{self, Failure, FailureResult, JobError, Lease};
 use finance_shared::{
     ids::{CompanyId, CompanyScope, TenantId},
@@ -37,6 +41,9 @@ struct Config {
     adapter: PathBuf,
     adapter_config: Option<PathBuf>,
     adapter_endpoint: Option<String>,
+    artifact_root: Option<PathBuf>,
+    ocr: Option<ocr::Config>,
+    scan: Option<scan::Config>,
 }
 
 impl Config {
@@ -82,6 +89,21 @@ impl Config {
         {
             return Err("export adapter endpoint invalid");
         }
+        let artifact_root = env::var_os("FINANCE_EXPORT_ARTIFACT_ROOT").map(PathBuf::from);
+        let synthetic_receipt_only =
+            env::var("FINANCE_EXPORT_SYNTHETIC_RECEIPTS_ONLY").as_deref() == Ok("1");
+        if artifact_root.is_none() && !synthetic_receipt_only {
+            return Err("independent export artifact readback configuration missing");
+        }
+        if artifact_root
+            .as_ref()
+            .is_some_and(|path| !artifact_store::valid_root(path))
+        {
+            return Err("export artifact root must be an existing private absolute directory");
+        }
+        if artifact_root.is_some() && synthetic_receipt_only {
+            return Err("export artifact verification mode is ambiguous");
+        }
         Ok((
             Self {
                 database_url,
@@ -93,6 +115,9 @@ impl Config {
                 adapter,
                 adapter_config,
                 adapter_endpoint,
+                artifact_root,
+                ocr: ocr::Config::from_env()?,
+                scan: scan::Config::from_env()?,
             },
             once,
         ))
@@ -220,7 +245,11 @@ fn validate_receipt(
     Ok(owned)
 }
 
-async fn invoke_adapter(config: &Config, lease: Lease) -> Result<Receipt, RunFailure> {
+async fn invoke_adapter(
+    config: &Config,
+    lease: Lease,
+    material: Option<Vec<u8>>,
+) -> Result<Receipt, RunFailure> {
     let scope = lease.scope();
     let mut command = Command::new(&config.adapter);
     command
@@ -236,7 +265,11 @@ async fn invoke_adapter(config: &Config, lease: Lease) -> Result<Receipt, RunFai
         .arg(Uuid::from(scope.company).to_string())
         .arg("--fence")
         .arg(lease.fence.to_string())
-        .stdin(Stdio::null())
+        .stdin(if material.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true);
@@ -246,9 +279,21 @@ async fn invoke_adapter(config: &Config, lease: Lease) -> Result<Receipt, RunFai
     if let Some(endpoint) = &config.adapter_endpoint {
         command.env("FINANCE_EXPORT_STORAGE_ENDPOINT", endpoint);
     }
+    if let Some(root) = &config.artifact_root {
+        command.env("FINANCE_EXPORT_ARTIFACT_ROOT", root);
+    }
     let mut child = command.spawn().map_err(|_| RunFailure::Permanent)?;
     let stdout = child.stdout.take().ok_or(RunFailure::Permanent)?;
+    let stdin = child.stdin.take();
     let operation = async move {
+        if let (Some(mut stdin), Some(material)) = (stdin, material) {
+            use tokio::io::AsyncWriteExt;
+            stdin
+                .write_all(&material)
+                .await
+                .map_err(|_| RunFailure::Transient)?;
+            stdin.shutdown().await.map_err(|_| RunFailure::Transient)?;
+        }
         let mut bytes = Vec::new();
         let mut bounded = stdout.take((MAX_RECEIPT_BYTES + 1) as u64);
         bounded
@@ -278,7 +323,14 @@ async fn render_with_heartbeat(
     config: &Config,
     lease: Lease,
 ) -> Result<Receipt, RunFailure> {
-    let mut adapter = Box::pin(invoke_adapter(config, lease));
+    let mut adapter = Box::pin(async {
+        let material = if config.artifact_root.is_some() {
+            Some(render_material::load(pool, lease).await?)
+        } else {
+            None
+        };
+        invoke_adapter(config, lease, material).await
+    });
     let interval_seconds =
         u64::try_from((config.lease_seconds / 3).max(1)).map_err(|_| RunFailure::Permanent)?;
     let mut heartbeat = time::interval(Duration::from_secs(interval_seconds));
@@ -298,7 +350,19 @@ async fn render_with_heartbeat(
 
 async fn process_export(pool: &PgPool, config: &Config, lease: Lease) -> Result<(), RunFailure> {
     let receipt = render_with_heartbeat(pool, config, lease).await?;
-    let owned = validate_receipt(receipt, lease.job_id, lease.fence)?;
+    let mut owned = validate_receipt(receipt, lease.job_id, lease.fence)?;
+    if let Some(root) = &config.artifact_root {
+        let root = root.clone();
+        owned = tokio::task::spawn_blocking(move || {
+            artifact_store::verify(&root, lease, &owned)?;
+            Ok::<_, RunFailure>(owned)
+        })
+        .await
+        .map_err(|_| RunFailure::Transient)??;
+        jobs::heartbeat(pool, lease, config.lease_seconds)
+            .await
+            .map_err(job_failure)?;
+    }
     let artifacts: Vec<_> = owned
         .iter()
         .map(|item| Artifact {
@@ -308,16 +372,19 @@ async fn process_export(pool: &PgPool, config: &Config, lease: Lease) -> Result<
             bytes: item.bytes,
         })
         .collect();
-    export::complete(pool, lease, &artifacts)
-        .await
-        .map(|_| ())
-        .map_err(|error| match error {
-            export::WorkerError::StaleLease => RunFailure::Stale,
-            export::WorkerError::Database(_) => RunFailure::Transient,
-            export::WorkerError::InvalidManifest
-            | export::WorkerError::NotExportJob
-            | export::WorkerError::Forbidden => RunFailure::Permanent,
-        })
+    if config.artifact_root.is_some() {
+        export::complete_verified(pool, lease, &artifacts).await
+    } else {
+        export::complete(pool, lease, &artifacts).await
+    }
+    .map(|_| ())
+    .map_err(|error| match error {
+        export::WorkerError::StaleLease => RunFailure::Stale,
+        export::WorkerError::Database(_) => RunFailure::Transient,
+        export::WorkerError::InvalidManifest
+        | export::WorkerError::NotExportJob
+        | export::WorkerError::Forbidden => RunFailure::Permanent,
+    })
 }
 
 async fn settle_failure(pool: &PgPool, lease: Lease, failure: RunFailure) {
@@ -330,10 +397,22 @@ async fn settle_failure(pool: &PgPool, lease: Lease, failure: RunFailure) {
         return;
     };
     match jobs::fail(pool, lease, kind).await {
-        Ok(FailureResult::Retry) => eprintln!("finance-worker: export retry scheduled"),
-        Ok(FailureResult::Dead) => eprintln!("finance-worker: export moved to dead letter"),
-        Err(JobError::StaleLease) => eprintln!("finance-worker: stale export failure ignored"),
-        Err(_) => eprintln!("finance-worker: failed to persist export failure"),
+        Ok(FailureResult::Retry) => eprintln!("finance-worker: job retry scheduled"),
+        Ok(FailureResult::Dead) => eprintln!("finance-worker: job moved to dead letter"),
+        Err(JobError::StaleLease) => eprintln!("finance-worker: stale job failure ignored"),
+        Err(_) => eprintln!("finance-worker: failed to persist job failure"),
+    }
+}
+
+fn preflight_error(error: sqlx::Error) -> RunFailure {
+    match error
+        .as_database_error()
+        .and_then(|db| db.code())
+        .as_deref()
+    {
+        Some("40001") => RunFailure::Stale,
+        Some("42501" | "23514" | "23505" | "P0002") => RunFailure::Permanent,
+        _ => RunFailure::Transient,
     }
 }
 
@@ -349,26 +428,58 @@ async fn process_preflight(pool: &PgPool, lease: Lease) -> Result<(), RunFailure
     .execute(&mut *tx)
     .await
     .map_err(|_| RunFailure::Transient)?;
-    sqlx::query("SELECT finance.complete_preflight_job($1,$2,$3,$4,$5)")
+    let material: serde_json::Value =
+        sqlx::query_scalar("SELECT finance.runtime_preflight_rule_material($1,$2,$3,$4,$5)")
+            .bind(t)
+            .bind(c)
+            .bind(lease.job_id)
+            .bind(lease.fence)
+            .bind(lease.worker_id())
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(preflight_error)?;
+    let rows =
+        finance_rule_engine::preflight::evaluate(&material).map_err(|_| RunFailure::Permanent)?;
+    let results = serde_json::to_value(rows).map_err(|_| RunFailure::Permanent)?;
+    sqlx::query("SELECT finance.complete_preflight_with_rules($1,$2,$3,$4,$5,$6,$7)")
         .bind(t)
         .bind(c)
         .bind(lease.job_id)
         .bind(lease.fence)
         .bind(lease.worker_id())
+        .bind(material)
+        .bind(results)
         .execute(&mut *tx)
         .await
-        .map_err(
-            |e| match e.as_database_error().and_then(|db| db.code()).as_deref() {
-                Some("40001") => RunFailure::Stale,
-                Some("42501" | "23514" | "23505" | "P0002") => RunFailure::Permanent,
-                _ => RunFailure::Transient,
-            },
-        )?;
+        .map_err(preflight_error)?;
     tx.commit().await.map_err(|_| RunFailure::Transient)?;
     Ok(())
 }
 
 async fn cycle(pool: &PgPool, config: &Config) -> Result<bool, RunFailure> {
+    if let Some(scan_config) = &config.scan {
+        jobs::dispatch_event(pool, config.scope, scan::EVENT, 100)
+            .await
+            .map_err(job_failure)?;
+        if let Some(lease) = jobs::claim_event(
+            pool,
+            config.scope,
+            config.worker,
+            config.lease_seconds,
+            scan::EVENT,
+        )
+        .await
+        .map_err(job_failure)?
+        {
+            return match scan::process(pool, scan_config, lease, config.lease_seconds).await {
+                Ok(()) => Ok(true),
+                Err(failure) => {
+                    settle_failure(pool, lease, failure).await;
+                    Err(failure)
+                }
+            };
+        }
+    }
     jobs::dispatch_event(pool, config.scope, PREFLIGHT_EVENT, 100)
         .await
         .map_err(job_failure)?;
@@ -389,6 +500,31 @@ async fn cycle(pool: &PgPool, config: &Config) -> Result<bool, RunFailure> {
                 Err(failure)
             }
         };
+    }
+    if let Some(ocr_config) = &config.ocr {
+        for event in ocr::EVENTS {
+            jobs::dispatch_event(pool, config.scope, event, 100)
+                .await
+                .map_err(job_failure)?;
+            if let Some(lease) = jobs::claim_event(
+                pool,
+                config.scope,
+                config.worker,
+                config.lease_seconds,
+                event,
+            )
+            .await
+            .map_err(job_failure)?
+            {
+                return match ocr::process(pool, ocr_config, lease, config.lease_seconds).await {
+                    Ok(()) => Ok(true),
+                    Err(failure) => {
+                        settle_failure(pool, lease, failure).await;
+                        Err(failure)
+                    }
+                };
+            }
+        }
     }
     jobs::dispatch_event(pool, config.scope, EXPORT_EVENT, 100)
         .await
