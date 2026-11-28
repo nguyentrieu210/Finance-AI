@@ -1,6 +1,10 @@
 import re
 
 
+HTTP_METHODS = {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
+MUTATING_METHODS = {"post", "put", "patch", "delete"}
+
+
 def validate_operation_parameters(path, method, path_item, operation):
     """Validate path placeholders against inherited and operation parameters.
 
@@ -29,8 +33,18 @@ def validate_operation_parameters(path, method, path_item, operation):
         f"{path} {method}: path placeholders {sorted(placeholders)} do not match "
         f"declared parameters {sorted(declared_path_parameters)}"
     )
-    if method != "get" and operation.get("x-idempotent") is not True:
+    if method in MUTATING_METHODS and operation.get("x-idempotent") is not True:
         assert any(
             parameter["name"] == "Idempotency-Key" and parameter.get("required")
             for parameter in effective.values()
         ), f"{path} {method}: required Idempotency-Key parameter missing"
+
+ 
+def validate_path_item_parameters(path, path_item):
+    """Check declared operations, ignoring Path Item metadata such as parameters."""
+    assert isinstance(path_item, dict), f"{path}: path item must be a mapping"
+    for method, operation in path_item.items():
+        if method not in HTTP_METHODS:
+            continue
+        assert isinstance(operation, dict), f"{path} {method}: operation must be a mapping"
+        validate_operation_parameters(path, method, path_item, operation)
