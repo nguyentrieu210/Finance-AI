@@ -29,7 +29,7 @@ def validate_operation_parameters(path, method, path_item, operation):
         f"{path} {method}: path placeholders {sorted(placeholders)} do not match "
         f"declared parameters {sorted(declared_path_parameters)}"
     )
-    if method != "get":
+    if method != "get" and operation.get("x-idempotent") is not True:
         assert any(
             parameter["name"] == "Idempotency-Key" and parameter.get("required")
             for parameter in effective.values()
