@@ -2989,7 +2989,6 @@ async fn complete_api_contracts_real_database() {
     assert_eq!(d2_status, StatusCode::CREATED);
     let doc2_id = d2["document_id"].as_str().unwrap().to_string();
     let v_before_g1 = d2_ver.unwrap();
-    let mut ver = v_before_g1.clone();
 
     let grant_uri = format!("/v1/dossiers/{dossier_id}/documents/{doc1_id}/upload-grants");
     let (g1_st, g1, g1_ver) = post_contract(
@@ -3031,7 +3030,7 @@ async fn complete_api_contracts_real_database() {
     .await;
     assert_eq!(g2_st, StatusCode::CREATED);
     assert_eq!(g2["generation"], 2);
-    ver = g2_ver.unwrap();
+    let mut ver = g2_ver.unwrap();
 
     // Superseded grant replay must fail with 409 UPLOAD_GRANT_INACTIVE
     let (sup_replay_st, sup_replay, _) = post_contract(
