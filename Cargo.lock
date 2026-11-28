@@ -756,6 +756,7 @@ dependencies = [
 name = "finance-rule-engine"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "finance-core",
  "finance-identity",
  "finance-permissions",

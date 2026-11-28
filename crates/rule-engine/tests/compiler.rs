@@ -82,3 +82,128 @@ fn reject_unknown_path_currency_arity_and_arbitrary_operator() {
         );
     }
 }
+
+fn decimal(value: &str) -> Json {
+    json!({"literal": value, "value_type": "decimal"})
+}
+
+fn date(value: &str) -> Json {
+    json!({"literal": value, "value_type": "date"})
+}
+
+fn call(op: &str, args: Vec<Json>) -> Json {
+    json!({"op": op, "args": args})
+}
+
+fn outcome(node: Json) -> Outcome {
+    let compiled = compiler::compile(&rule(node), &BTreeMap::new()).unwrap();
+    compiler::evaluate(&compiled, &BTreeMap::new()).outcome
+}
+
+#[test]
+fn decimal_multiply_and_divide_are_exact_or_error() {
+    for (op, a, b, expected) in [
+        ("mul", "0.125", "0.08", "0.01"),
+        ("mul", "-2.5", "4", "-10"),
+        ("mul", "0.00000005", "0.2", "0.00000001"),
+        ("div", "1", "8", "0.125"),
+        ("div", "0.00000001", "0.00000002", "0.5"),
+        ("div", "3", "-2", "-1.5"),
+        ("div", "100", "0.001", "100000"),
+    ] {
+        assert_eq!(
+            outcome(call(
+                "eq",
+                vec![call(op, vec![decimal(a), decimal(b)]), decimal(expected)]
+            )),
+            Outcome::Pass
+        );
+    }
+    for (op, a, b) in [
+        ("div", "1", "0"),
+        ("div", "1", "3"),
+        ("div", "1", "512"),
+        ("mul", "0.00000001", "0.1"),
+        ("mul", "99999999999999999999", "2"),
+    ] {
+        assert_eq!(
+            outcome(call(
+                "eq",
+                vec![call(op, vec![decimal(a), decimal(b)]), decimal("0")]
+            )),
+            Outcome::Error
+        );
+    }
+}
+
+#[test]
+fn date_rules_use_calendar_days_and_reject_invalid_dates() {
+    assert_eq!(
+        outcome(call(
+            "eq",
+            vec![
+                call("date_diff", vec![date("2024-03-01"), date("2024-02-28")]),
+                decimal("2")
+            ]
+        )),
+        Outcome::Pass
+    );
+    assert_eq!(
+        outcome(call("lt", vec![date("2024-02-29"), date("2024-03-01")])),
+        Outcome::Pass
+    );
+    for invalid in ["2023-02-29", "2024-2-09", "0000-01-01"] {
+        assert_eq!(
+            compiler::compile(
+                &rule(call("eq", vec![date(invalid), date("2024-01-01")])),
+                &BTreeMap::new()
+            )
+            .err(),
+            Some(Error::InvalidLiteral)
+        );
+    }
+    assert_eq!(
+        compiler::compile(
+            &rule(call("add", vec![date("2024-01-01"), date("2024-01-01")])),
+            &BTreeMap::new()
+        )
+        .err(),
+        Some(Error::TypeMismatch)
+    );
+}
+
+#[test]
+fn exists_distinguishes_verified_absence_from_unknown() {
+    let registry = BTreeMap::from([("invoice.date".to_owned(), Type::Date)]);
+    let exists = call("exists", vec![json!({"ref": "invoice.date"})]);
+    let compiled = compiler::compile(&rule(exists.clone()), &registry).unwrap();
+    let negated = compiler::compile(&rule(call("not", vec![exists])), &registry).unwrap();
+    let mut facts = BTreeMap::new();
+    assert_eq!(compiler::evaluate(&compiled, &facts).outcome, Outcome::Unknown);
+    let evidence = EvidenceId::try_from(Uuid::from_u128(2)).unwrap();
+    facts.insert(
+        "invoice.date".to_owned(),
+        Fact {
+            value: None,
+            verified: true,
+            fresh: true,
+            evidence: vec![evidence],
+        },
+    );
+    let result = compiler::evaluate(&compiled, &facts);
+    assert_eq!(result.outcome, Outcome::Fail);
+    assert_eq!(result.evidence, vec![evidence]);
+    assert_eq!(compiler::evaluate(&negated, &facts).outcome, Outcome::Pass);
+    let comparison = compiler::compile(
+        &rule(call("eq", vec![json!({"ref": "invoice.date"}), date("2024-01-01")])),
+        &registry,
+    )
+    .unwrap();
+    assert_eq!(compiler::evaluate(&comparison, &facts).outcome, Outcome::Unknown);
+    facts.get_mut("invoice.date").unwrap().fresh = false;
+    assert_eq!(compiler::evaluate(&negated, &facts).outcome, Outcome::Unknown);
+    let fact = facts.get_mut("invoice.date").unwrap();
+    fact.fresh = true;
+    fact.value = Some(Value::Date(chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()));
+    assert_eq!(compiler::evaluate(&compiled, &facts).outcome, Outcome::Pass);
+}

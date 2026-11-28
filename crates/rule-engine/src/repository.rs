@@ -47,6 +47,7 @@ fn registry() -> BTreeMap<String, Type> {
         ("budget.remaining", Type::Money(vnd)),
         ("advance.remaining", Type::Money(vnd)),
         ("invoice.quantity", Type::Decimal),
+        ("invoice.date", Type::Date),
         ("invoice.verified", Type::Boolean),
         ("vendor.verified", Type::Boolean),
         ("reference.fresh", Type::Boolean),
@@ -410,6 +411,9 @@ fn corpus_facts(json: &str) -> Result<Vec<BTreeMap<String, compiler::Fact>>, Err
                     let value = match (ty, raw.value) {
                         (_, None | Some(Value::Null)) => None,
                         (Type::Boolean, Some(Value::Bool(b))) => Some(compiler::Value::Boolean(b)),
+                        (Type::Date, Some(Value::String(s))) => Some(compiler::Value::Date(
+                            compiler::parse_date(&s).map_err(|_| Error::InvalidInput)?,
+                        )),
                         (Type::Decimal, Some(Value::String(s))) => Some(compiler::Value::Decimal(
                             Amount::parse(&s).map_err(|_| Error::InvalidInput)?,
                         )),

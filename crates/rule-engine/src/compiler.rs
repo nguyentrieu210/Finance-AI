@@ -1,6 +1,7 @@
-//! Bounded typed JSON compiler for the scalar boolean/money/decimal subset.
+//! Bounded typed JSON compiler for scalar boolean, money, decimal and date rules.
 //! Unsupported schema operators fail compilation, not evaluation to PASS.
 use crate::Outcome;
+use chrono::NaiveDate;
 use finance_shared::{
     ids::EvidenceId,
     money::{Amount, Currency, Money},
@@ -13,6 +14,7 @@ pub enum Type {
     Boolean,
     Money(Currency),
     Decimal,
+    Date,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -20,6 +22,7 @@ pub enum Value {
     Boolean(bool),
     Money(Money),
     Decimal(Amount),
+    Date(NaiveDate),
 }
 
 impl Value {
@@ -28,6 +31,7 @@ impl Value {
             Self::Boolean(_) => Type::Boolean,
             Self::Money(m) => Type::Money(m.currency),
             Self::Decimal(_) => Type::Decimal,
+            Self::Date(_) => Type::Date,
         }
     }
 }
@@ -115,6 +119,10 @@ enum Op {
     Not,
     Add,
     Sub,
+    Mul,
+    Div,
+    Exists,
+    DateDiff,
 }
 
 enum Node {
@@ -170,9 +178,21 @@ fn valid_path(path: &str) -> bool {
         && path.split('.').all(|p| !p.is_empty())
 }
 
+pub(crate) fn parse_date(value: &str) -> Result<NaiveDate, Error> {
+    if value.len() != 10 {
+        return Err(Error::InvalidLiteral);
+    }
+    let date = NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|_| Error::InvalidLiteral)?;
+    if date.format("%Y-%m-%d").to_string() != value || value.starts_with("0000") {
+        return Err(Error::InvalidLiteral);
+    }
+    Ok(date)
+}
+
 fn literal(raw: Literal) -> Result<Value, Error> {
     match (raw.value_type.as_str(), raw.literal, raw.currency) {
         ("boolean", serde_json::Value::Bool(b), None) => Ok(Value::Boolean(b)),
+        ("date", serde_json::Value::String(s), None) => Ok(Value::Date(parse_date(&s)?)),
         ("decimal", serde_json::Value::String(s), None) if s.len() <= 32 => Ok(Value::Decimal(
             Amount::parse(&s).map_err(|_| Error::InvalidLiteral)?,
         )),
@@ -218,12 +238,16 @@ fn compile_node(
                 "not" => Op::Not,
                 "add" => Op::Add,
                 "sub" => Op::Sub,
+                "mul" => Op::Mul,
+                "div" => Op::Div,
+                "exists" => Op::Exists,
+                "date_diff" => Op::DateDiff,
                 _ => return Err(Error::UnsupportedOperator),
             };
             let arity = c.args.len();
             if !(1..=16).contains(&arity)
                 || match op {
-                    Op::Not => arity != 1,
+                    Op::Not | Op::Exists => arity != 1,
                     Op::And | Op::Or => arity < 2,
                     _ => arity != 2,
                 }
@@ -243,7 +267,10 @@ fn compile_node(
                 Op::And | Op::Or | Op::Not if first == Type::Boolean => Type::Boolean,
                 Op::Eq | Op::Ne => Type::Boolean,
                 Op::Lt | Op::Lte | Op::Gt | Op::Gte if first != Type::Boolean => Type::Boolean,
-                Op::Add | Op::Sub if first != Type::Boolean => first,
+                Op::Add | Op::Sub if matches!(first, Type::Money(_) | Type::Decimal) => first,
+                Op::Mul | Op::Div if first == Type::Decimal => Type::Decimal,
+                Op::Exists => Type::Boolean,
+                Op::DateDiff if first == Type::Date => Type::Decimal,
                 _ => return Err(Error::TypeMismatch),
             };
             Ok(Node::Call(op, args, ty))
@@ -290,6 +317,7 @@ pub fn compile(json: &[u8], registry: &BTreeMap<String, Type>) -> Result<Compile
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum Eval {
     Known(Value),
+    Absent,
     Unknown,
     Error,
 }
@@ -324,7 +352,7 @@ fn eval(
             match f.value {
                 Some(value) if value.ty() == *ty => Known(value),
                 Some(_) => Error,
-                None => Unknown,
+                None => Absent,
             }
         }
         Node::Call(op, args, _) => {
@@ -340,7 +368,7 @@ fn eval(
                     let dominant = matches!(op, Op::Or);
                     if values.contains(&Known(Value::Boolean(dominant))) {
                         Known(Value::Boolean(dominant))
-                    } else if values.contains(&Unknown) {
+                    } else if values.contains(&Unknown) || values.contains(&Absent) {
                         Unknown
                     } else {
                         Known(Value::Boolean(!dominant))
@@ -348,8 +376,14 @@ fn eval(
                 }
                 Op::Not => match values[0] {
                     Known(Value::Boolean(b)) => Known(Value::Boolean(!b)),
-                    Unknown => Unknown,
+                    Unknown | Absent => Unknown,
                     _ => Error,
+                },
+                Op::Exists => match values[0] {
+                    Known(_) => Known(Value::Boolean(true)),
+                    Absent => Known(Value::Boolean(false)),
+                    Unknown => Unknown,
+                    Error => Error,
                 },
                 _ => {
                     let [Known(a), Known(b)] = values.as_slice() else {
@@ -370,6 +404,30 @@ fn binary(op: Op, a: Value, b: Value) -> Eval {
         } else {
             a != b
         }));
+    }
+    if let (Value::Date(x), Value::Date(y)) = (a, b) {
+        return match op {
+            Op::Lt => Known(Value::Boolean(x < y)),
+            Op::Lte => Known(Value::Boolean(x <= y)),
+            Op::Gt => Known(Value::Boolean(x > y)),
+            Op::Gte => Known(Value::Boolean(x >= y)),
+            Op::DateDiff => match Amount::parse(&x.signed_duration_since(y).num_days().to_string()) {
+                Ok(amount) => Known(Value::Decimal(amount)),
+                Err(_) => Error,
+            },
+            _ => Error,
+        };
+    }
+    if matches!(op, Op::Mul | Op::Div) {
+        return match (a, b) {
+            (Value::Decimal(x), Value::Decimal(y)) => {
+                match exact_decimal(op, x, y) {
+                    Some(amount) => Known(Value::Decimal(amount)),
+                    None => Error,
+                }
+            }
+            _ => Error,
+        };
     }
     let (x, y) = match (a, b) {
         (Value::Money(x), Value::Money(y)) if x.currency == y.currency => (x.amount, y.amount),
@@ -404,6 +462,117 @@ fn binary(op: Op, a: Value, b: Value) -> Eval {
     }
 }
 
+// Work with integer mantissas, never an implicitly rounded decimal result.
+fn amount_from_parts(mut n: i128, mut scale: i32) -> Option<Amount> {
+    if n == 0 {
+        return Amount::parse("0").ok();
+    }
+    while scale > 0 && n % 10 == 0 {
+        n /= 10;
+        scale -= 1;
+    }
+    if scale < 0 {
+        n = n.checked_mul(10_i128.checked_pow((-scale) as u32)?)?;
+        scale = 0;
+    }
+    if scale > 8 {
+        return None;
+    }
+    let sign = if n < 0 { "-" } else { "" };
+    let digits = n.unsigned_abs().to_string();
+    let s = scale as usize;
+    let text = if s == 0 {
+        format!("{sign}{digits}")
+    } else if digits.len() <= s {
+        format!("{sign}0.{}{digits}", "0".repeat(s - digits.len()))
+    } else {
+        let (integer, fraction) = digits.split_at(digits.len() - s);
+        format!("{sign}{integer}.{fraction}")
+    };
+    Amount::parse(&text).ok()
+}
+
+fn gcd(mut a: i128, mut b: i128) -> i128 {
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a
+}
+
+fn exact_decimal(op: Op, x: Amount, y: Amount) -> Option<Amount> {
+    let x = x.decimal();
+    let y = y.decimal();
+    let mut a = x.mantissa();
+    let mut b = y.mantissa();
+    match op {
+        Op::Mul => {
+            let mut scale = (x.scale() + y.scale()) as i32;
+            if a == 0 || b == 0 {
+                return Amount::parse("0").ok();
+            }
+            // Cancel powers of ten before multiplying to avoid intermediate overflow.
+            while scale > 0 {
+                if a % 10 == 0 {
+                    a /= 10;
+                } else if b % 10 == 0 {
+                    b /= 10;
+                } else if a % 2 == 0 && b % 5 == 0 {
+                    a /= 2;
+                    b /= 5;
+                } else if a % 5 == 0 && b % 2 == 0 {
+                    a /= 5;
+                    b /= 2;
+                } else {
+                    break;
+                }
+                scale -= 1;
+            }
+            amount_from_parts(a.checked_mul(b)?, scale)
+        }
+        Op::Div => {
+            if b == 0 {
+                return None;
+            }
+            if a == 0 {
+                return Amount::parse("0").ok();
+            }
+            let divisor = gcd(a.abs(), b.abs());
+            a /= divisor;
+            b /= divisor;
+            if b < 0 {
+                a = -a;
+                b = -b;
+            }
+            let mut twos = 0_u32;
+            let mut fives = 0_u32;
+            while b % 2 == 0 {
+                b /= 2;
+                twos += 1;
+            }
+            while b % 5 == 0 {
+                b /= 5;
+                fives += 1;
+            }
+            if b != 1 {
+                return None; // Nonterminating decimal: no approved rounding policy.
+            }
+            let digits = twos.max(fives);
+            let mut scale = digits as i32 + x.scale() as i32 - y.scale() as i32;
+            while scale > 0 && a % 10 == 0 {
+                a /= 10;
+                scale -= 1;
+            }
+            if scale > 8 {
+                return None;
+            }
+            a = a.checked_mul(2_i128.checked_pow(digits - twos)?)?;
+            a = a.checked_mul(5_i128.checked_pow(digits - fives)?)?;
+            amount_from_parts(a, scale)
+        }
+        _ => None,
+    }
+}
+
 pub fn evaluate(compiled: &Compiled, facts: &BTreeMap<String, Fact>) -> Evaluation {
     let mut evidence = Vec::new();
     let mut evaluated_refs = Vec::new();
@@ -413,7 +582,7 @@ pub fn evaluate(compiled: &Compiled, facts: &BTreeMap<String, Fact>) -> Evaluati
         .map(|n| eval(n, facts, &mut evidence, &mut evaluated_refs));
     let outcome = match applicable {
         Some(Eval::Known(Value::Boolean(false))) => Outcome::NotApplicable,
-        Some(Eval::Unknown) => Outcome::Unknown,
+        Some(Eval::Unknown | Eval::Absent) => Outcome::Unknown,
         Some(Eval::Error) => Outcome::Error,
         None | Some(Eval::Known(Value::Boolean(true))) => match eval(
             &compiled.condition,
@@ -423,7 +592,7 @@ pub fn evaluate(compiled: &Compiled, facts: &BTreeMap<String, Fact>) -> Evaluati
         ) {
             Eval::Known(Value::Boolean(true)) => Outcome::Pass,
             Eval::Known(Value::Boolean(false)) => Outcome::Fail,
-            Eval::Unknown => Outcome::Unknown,
+            Eval::Unknown | Eval::Absent => Outcome::Unknown,
             _ => Outcome::Error,
         },
         _ => Outcome::Error,
