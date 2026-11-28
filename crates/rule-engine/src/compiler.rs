@@ -1,4 +1,4 @@
-//! Bounded typed JSON compiler for scalar boolean, money, decimal and date rules.
+//! Bounded typed JSON compiler for scalar and complete-collection rules.
 //! Unsupported schema operators fail compilation, not evaluation to PASS.
 use crate::Outcome;
 use chrono::NaiveDate;
@@ -10,6 +10,30 @@ use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+/// Exact unit identity; conversion requires a separately approved rule.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Unit {
+    bytes: [u8; 32],
+    len: u8,
+}
+
+impl Unit {
+    pub fn parse(value: &str) -> Result<Self, Error> {
+        if value.is_empty()
+            || value.len() > 32
+            || !value.bytes().all(|b| b.is_ascii_alphanumeric() || b"._/-".contains(&b))
+        {
+            return Err(Error::InvalidLiteral);
+        }
+        let mut bytes = [0; 32];
+        bytes[..value.len()].copy_from_slice(value.as_bytes());
+        Ok(Self {
+            bytes,
+            len: value.len() as u8,
+        })
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Type {
     Boolean,
@@ -19,6 +43,10 @@ pub enum Type {
     Text,
     Enum,
     Set,
+    Quantity(Unit),
+    DecimalList,
+    MoneyList(Currency),
+    BooleanList,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -30,6 +58,10 @@ pub enum Value {
     Text(Arc<str>),
     Enum(Arc<str>),
     Set(Arc<BTreeSet<String>>),
+    Quantity(Amount, Unit),
+    DecimalList(Arc<[Option<Amount>]>),
+    MoneyList(Currency, Arc<[Option<Amount>]>),
+    BooleanList(Arc<[Option<bool>]>),
     /// Explicit independently verified absence, distinct from a missing fact.
     Absent(Type),
 }
@@ -44,6 +76,10 @@ impl Value {
             Self::Text(_) => Type::Text,
             Self::Enum(_) => Type::Enum,
             Self::Set(_) => Type::Set,
+            Self::Quantity(_, unit) => Type::Quantity(*unit),
+            Self::DecimalList(_) => Type::DecimalList,
+            Self::MoneyList(currency, _) => Type::MoneyList(*currency),
+            Self::BooleanList(_) => Type::BooleanList,
             Self::Absent(ty) => *ty,
         }
     }
@@ -53,6 +89,8 @@ impl Value {
             Self::Text(s) => valid_text(s),
             Self::Enum(s) => valid_text(s) && !s.is_empty(),
             Self::Set(items) => valid_set(items),
+            Self::DecimalList(items) | Self::MoneyList(_, items) => items.len() <= 5000,
+            Self::BooleanList(items) => items.len() <= 5000,
             _ => true,
         }
     }
@@ -119,6 +157,7 @@ struct Literal {
     literal: serde_json::Value,
     value_type: String,
     currency: Option<String>,
+    unit: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -147,6 +186,9 @@ enum Op {
     DateDiff,
     In,
     Count,
+    Sum,
+    All,
+    Any,
 }
 
 enum Node {
@@ -224,6 +266,20 @@ fn valid_set(items: &BTreeSet<String>) -> bool {
 }
 
 fn literal(raw: Literal) -> Result<Value, Error> {
+    if raw.value_type == "quantity" {
+        return match (raw.literal, raw.currency, raw.unit) {
+            (serde_json::Value::String(s), None, Some(unit)) if s.len() <= 32 => {
+                Ok(Value::Quantity(
+                    Amount::parse(&s).map_err(|_| Error::InvalidLiteral)?,
+                    Unit::parse(&unit)?,
+                ))
+            }
+            _ => Err(Error::InvalidLiteral),
+        };
+    }
+    if raw.unit.is_some() {
+        return Err(Error::InvalidLiteral);
+    }
     match (raw.value_type.as_str(), raw.literal, raw.currency) {
         ("boolean", serde_json::Value::Bool(b), None) => Ok(Value::Boolean(b)),
         ("date", serde_json::Value::String(s), None) => Ok(Value::Date(parse_date(&s)?)),
@@ -299,12 +355,15 @@ fn compile_node(
                 "date_diff" => Op::DateDiff,
                 "in" => Op::In,
                 "count" => Op::Count,
+                "sum" => Op::Sum,
+                "all" => Op::All,
+                "any" => Op::Any,
                 _ => return Err(Error::UnsupportedOperator),
             };
             let arity = c.args.len();
             if !(1..=16).contains(&arity)
                 || match op {
-                    Op::Not | Op::Exists | Op::Count => arity != 1,
+                    Op::Not | Op::Exists | Op::Count | Op::Sum | Op::All | Op::Any => arity != 1,
                     Op::And | Op::Or => arity < 2,
                     _ => arity != 2,
                 }
@@ -326,18 +385,36 @@ fn compile_node(
             }
             let ty = match op {
                 Op::And | Op::Or | Op::Not if first == Type::Boolean => Type::Boolean,
-                Op::Eq | Op::Ne => Type::Boolean,
-                Op::Lt | Op::Lte | Op::Gt | Op::Gte
-                    if matches!(first, Type::Money(_) | Type::Decimal | Type::Date) =>
+                Op::Eq | Op::Ne
+                    if !matches!(first, Type::DecimalList | Type::MoneyList(_) | Type::BooleanList) =>
                 {
                     Type::Boolean
                 }
-                Op::Add | Op::Sub if matches!(first, Type::Money(_) | Type::Decimal) => first,
+                Op::Lt | Op::Lte | Op::Gt | Op::Gte
+                    if matches!(first, Type::Money(_) | Type::Decimal | Type::Date | Type::Quantity(_)) =>
+                {
+                    Type::Boolean
+                }
+                Op::Add | Op::Sub
+                    if matches!(first, Type::Money(_) | Type::Decimal | Type::Quantity(_)) =>
+                {
+                    first
+                }
                 Op::Mul | Op::Div if first == Type::Decimal => Type::Decimal,
                 Op::Exists => Type::Boolean,
                 Op::DateDiff if first == Type::Date => Type::Decimal,
                 Op::In => Type::Boolean,
-                Op::Count if first == Type::Set => Type::Decimal,
+                Op::Count
+                    if matches!(first, Type::Set | Type::DecimalList | Type::MoneyList(_) | Type::BooleanList) =>
+                {
+                    Type::Decimal
+                }
+                Op::Sum if first == Type::DecimalList => Type::Decimal,
+                Op::Sum if matches!(first, Type::MoneyList(_)) => match first {
+                    Type::MoneyList(currency) => Type::Money(currency),
+                    _ => unreachable!(),
+                },
+                Op::All | Op::Any if first == Type::BooleanList => Type::Boolean,
                 _ => return Err(Error::TypeMismatch),
             };
             Ok(Node::Call(op, args, ty))
@@ -453,13 +530,10 @@ fn eval(
                     Unknown => Unknown,
                     Error => Error,
                 },
-                Op::Count => match &values[0] {
-                    Known(Value::Set(items)) => match Amount::parse(&items.len().to_string()) {
-                        Ok(amount) => Known(Value::Decimal(amount)),
-                        Err(_) => Error,
-                    },
+                Op::Count | Op::Sum | Op::All | Op::Any => match &values[0] {
+                    Known(value) => aggregate(*op, value),
                     Unknown | Absent => Unknown,
-                    _ => Error,
+                    Error => Error,
                 },
                 _ => {
                     let [Known(a), Known(b)] = values.as_slice() else {
@@ -470,6 +544,61 @@ fn eval(
             }
         }
     }
+}
+
+fn aggregate(op: Op, value: &Value) -> Eval {
+    use Eval::*;
+    if matches!(op, Op::Count) {
+        let count = match value {
+            Value::Set(items) => items.len(),
+            Value::DecimalList(items) | Value::MoneyList(_, items) => items.len(),
+            Value::BooleanList(items) => items.len(),
+            _ => return Error,
+        };
+        return match Amount::parse(&count.to_string()) {
+            Ok(amount) => Known(Value::Decimal(amount)),
+            Err(_) => Error,
+        };
+    }
+    if matches!(op, Op::All | Op::Any) {
+        let Value::BooleanList(items) = value else {
+            return Error;
+        };
+        let dominant = matches!(op, Op::Any);
+        return if items.contains(&Some(dominant)) {
+            Known(Value::Boolean(dominant))
+        } else if items.contains(&None) {
+            Unknown
+        } else {
+            Known(Value::Boolean(!dominant))
+        };
+    }
+    let (items, currency) = match value {
+        Value::DecimalList(items) => (items, None),
+        Value::MoneyList(currency, items) => (items, Some(*currency)),
+        _ => return Error,
+    };
+    let mut total = Amount::parse("0").expect("zero is representable");
+    let mut unknown = false;
+    for item in items.iter() {
+        match item {
+            Some(amount) => match total.checked_add(*amount) {
+                Ok(next) => total = next,
+                Err(_) => return Error,
+            },
+            None => unknown = true,
+        }
+    }
+    if unknown {
+        return Unknown;
+    }
+    Known(match currency {
+        Some(currency) => Value::Money(Money {
+            amount: total,
+            currency,
+        }),
+        None => Value::Decimal(total),
+    })
 }
 
 fn binary(op: Op, a: &Value, b: &Value) -> Eval {
@@ -516,6 +645,7 @@ fn binary(op: Op, a: &Value, b: &Value) -> Eval {
     let (x, y) = match (a, b) {
         (Value::Money(x), Value::Money(y)) if x.currency == y.currency => (x.amount, y.amount),
         (Value::Decimal(x), Value::Decimal(y)) => (*x, *y),
+        (Value::Quantity(x, ux), Value::Quantity(y, uy)) if ux == uy => (*x, *y),
         _ => return Error,
     };
     let x_dec = x.decimal();
@@ -537,6 +667,7 @@ fn binary(op: Op, a: &Value, b: &Value) -> Eval {
                         amount,
                         currency: m.currency,
                     }),
+                    Value::Quantity(_, unit) => Value::Quantity(amount, *unit),
                     _ => Value::Decimal(amount),
                 }),
                 Err(_) => Error,

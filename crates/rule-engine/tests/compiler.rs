@@ -271,3 +271,95 @@ fn duplicate_set_items_and_cross_type_membership_rejected() {
         Some(Error::TypeMismatch)
     );
 }
+
+#[test]
+fn quantities_cannot_mix_units_or_currencies() {
+    let quantity = |value: &str, unit: &str| {
+        json!({"literal": value, "value_type": "quantity", "unit": unit})
+    };
+    assert_eq!(
+        outcome(call(
+            "eq",
+            vec![
+                call("add", vec![quantity("2", "kg"), quantity("3", "kg")]),
+                quantity("5", "kg")
+            ]
+        )),
+        Outcome::Pass
+    );
+    assert_eq!(
+        compiler::compile(
+            &rule(call("eq", vec![quantity("1", "kg"), quantity("1", "m")])),
+            &BTreeMap::new()
+        )
+        .err(),
+        Some(Error::TypeMismatch)
+    );
+    assert_eq!(
+        compiler::compile(
+            &rule(call("eq", vec![quantity("1", ""), quantity("1", "")])),
+            &BTreeMap::new()
+        )
+        .err(),
+        Some(Error::InvalidLiteral)
+    );
+}
+
+#[test]
+fn collection_aggregates_distinguish_empty_unknown_and_incomplete() {
+    use std::sync::Arc;
+
+    let registry = BTreeMap::from([
+        ("rows.amounts".to_owned(), Type::DecimalList),
+        ("rows.flags".to_owned(), Type::BooleanList),
+    ]);
+    let sum = compiler::compile(
+        &rule(call(
+            "eq",
+            vec![call("sum", vec![json!({"ref": "rows.amounts"})]), decimal("5")],
+        )),
+        &registry,
+    )
+    .unwrap();
+    let all = compiler::compile(
+        &rule(call("all", vec![json!({"ref": "rows.flags"})])),
+        &registry,
+    )
+    .unwrap();
+    let any = compiler::compile(
+        &rule(call("any", vec![json!({"ref": "rows.flags"})])),
+        &registry,
+    )
+    .unwrap();
+    let evidence = EvidenceId::try_from(Uuid::from_u128(4)).unwrap();
+    let verified = |value| Fact {
+        value: Some(value),
+        verified: true,
+        fresh: true,
+        evidence: vec![evidence],
+    };
+    let mut facts = BTreeMap::from([
+        (
+            "rows.amounts".to_owned(),
+            verified(Value::DecimalList(Arc::from([
+                Some(Amount::parse("2").unwrap()),
+                Some(Amount::parse("3").unwrap()),
+            ]))),
+        ),
+        (
+            "rows.flags".to_owned(),
+            verified(Value::BooleanList(Arc::from([Some(false), None]))),
+        ),
+    ]);
+    assert_eq!(compiler::evaluate(&sum, &facts).outcome, Outcome::Pass);
+    assert_eq!(compiler::evaluate(&all, &facts).outcome, Outcome::Fail);
+    assert_eq!(compiler::evaluate(&any, &facts).outcome, Outcome::Unknown);
+    facts.get_mut("rows.amounts").unwrap().value =
+        Some(Value::DecimalList(Arc::from([None])));
+    assert_eq!(compiler::evaluate(&sum, &facts).outcome, Outcome::Unknown);
+    facts.get_mut("rows.flags").unwrap().value = Some(Value::BooleanList(Arc::from([])));
+    assert_eq!(compiler::evaluate(&all, &facts).outcome, Outcome::Pass);
+    assert_eq!(compiler::evaluate(&any, &facts).outcome, Outcome::Fail);
+    facts.get_mut("rows.flags").unwrap().verified = false;
+    assert_eq!(compiler::evaluate(&all, &facts).outcome, Outcome::Unknown);
+}
