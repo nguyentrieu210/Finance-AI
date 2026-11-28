@@ -30,6 +30,8 @@ pub enum Value {
     Text(Arc<str>),
     Enum(Arc<str>),
     Set(Arc<BTreeSet<String>>),
+    /// Explicit independently verified absence, distinct from a missing fact.
+    Absent(Type),
 }
 
 impl Value {
@@ -42,6 +44,7 @@ impl Value {
             Self::Text(_) => Type::Text,
             Self::Enum(_) => Type::Enum,
             Self::Set(_) => Type::Set,
+            Self::Absent(ty) => *ty,
         }
     }
 
@@ -414,9 +417,10 @@ fn eval(
                 return Unknown;
             }
             match &f.value {
+                Some(Value::Absent(absent_type)) if absent_type == ty => Absent,
                 Some(value) if value.ty() == *ty && value.valid() => Known(value.clone()),
                 Some(_) => Error,
-                None => Absent,
+                None => Unknown,
             }
         }
         Node::Call(op, args, _) => {

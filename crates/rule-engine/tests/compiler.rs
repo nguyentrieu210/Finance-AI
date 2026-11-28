@@ -190,6 +190,8 @@ fn exists_distinguishes_verified_absence_from_unknown() {
             evidence: vec![evidence],
         },
     );
+    assert_eq!(compiler::evaluate(&compiled, &facts).outcome, Outcome::Unknown);
+    facts.get_mut("invoice.date").unwrap().value = Some(Value::Absent(Type::Date));
     let result = compiler::evaluate(&compiled, &facts);
     assert_eq!(result.outcome, Outcome::Fail);
     assert_eq!(result.evidence, vec![evidence]);

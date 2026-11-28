@@ -95,6 +95,9 @@ pub async fn retrieve(
     .bind(request.limit)
     .fetch_all(&mut *tx)
     .await?;
+    if let Some(first) = rows.first() {
+        crate::guidance::extractive(first.policy_id, &rows).map_err(|_| Error::Conflict)?;
+    }
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(rows)
