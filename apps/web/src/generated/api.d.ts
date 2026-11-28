@@ -1770,7 +1770,7 @@ export interface components {
             as_of: string;
         };
         Download: {
-            /** Format: uri */
+            /** Format: uri-reference */
             url: string;
             /** Format: date-time */
             expires_at: string;
