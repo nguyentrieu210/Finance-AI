@@ -1,175 +1,60 @@
 import { useEffect, useRef, useState } from 'react';
-import type { components } from '../../generated/api';
 import { VerifiedContracts } from '../contracts/VerifiedContracts';
 import { VerifiedAdvances } from '../advances/VerifiedAdvances';
 import { VerifiedBudgets } from '../budget/VerifiedBudgets';
-
-type Job = components['schemas']['Job'];
-type Reference = components['schemas']['Reference'];
-
-const defaultKind: Record<'E12' | 'E13' | 'E14', Reference['kind']> = {
-  E12: 'CONTRACT',
-  E13: 'ADVANCE',
-  E14: 'BUDGET',
-};
-
-export function ReferenceWorkbench({ module }: { module: 'E12' | 'E13' | 'E14' }) {
-  const [token, setToken] = useState('');
-  const [activeToken, setActiveToken] = useState('');
-  const [documentId, setDocumentId] = useState('00000000-0000-0000-0000-000000001a02');
-  const [kind, setKind] = useState<Reference['kind']>(defaultKind[module]);
-  const [coverage, setCoverage] = useState<Reference['coverage']>('COMPLETE');
-  const [refId, setRefId] = useState('');
-  const [evidenceId, setEvidenceId] = useState('00000000-0000-0000-0000-000000002333');
-  const [reason, setReason] = useState('Xác minh tham chiếu từ chứng từ nguồn');
-  const [job, setJob] = useState<Job | null>(null);
-  const [verifiedRef, setVerifiedRef] = useState<Reference | null>(null);
-  const [status, setStatus] = useState('Chưa kết nối.');
-  const [busy, setBusy] = useState(false);
-  const credential = useRef('');
-
-  useEffect(() => {
-    setKind(defaultKind[module]);
-  }, [module]);
-
-  useEffect(() => () => {
-    credential.current = '';
-  }, []);
-
-  function disconnect() {
-    credential.current = '';
-    setToken('');
-    setActiveToken('');
-    setJob(null);
-    setVerifiedRef(null);
-    setStatus('Đã ngắt kết nối.');
-  }
-
-  async function createReference() {
-    if (!credential.current || !documentId.trim()) return;
-    setBusy(true);
-    setStatus('Đang tạo bản ghi tham chiếu...');
-    try {
-      const res = await fetch('/v1/references', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + credential.current,
-          'Content-Type': 'application/json',
-          'Idempotency-Key': 'ui-ref-create-' + crypto.randomUUID(),
-        },
-        body: JSON.stringify({
-          document_id: documentId.trim(),
-          kind,
-          as_of: new Date().toISOString(),
-          coverage,
-        }),
-        cache: 'no-store',
-        credentials: 'omit',
-      });
-      if (!res.ok) {
-        setStatus(`Tạo tham chiếu thất bại (${res.status}).`);
-        return;
-      }
-      const data = await res.json() as Job;
-      setJob(data);
-      setRefId(data.id);
-      setStatus(`Đã tạo reference ${data.id} (PENDING).`);
-    } catch {
-      setStatus('Lỗi mạng khi tạo tham chiếu.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function verifyReference() {
-    const id = refId.trim();
-    const ev = evidenceId.trim();
-    if (!credential.current || !id || !ev || !reason.trim()) return;
-    setBusy(true);
-    setStatus(`Đang đọc phiên bản và xác minh ${id}...`);
-    try {
-      const getRes = await fetch('/v1/references/' + encodeURIComponent(id), {
-        headers: { Authorization: 'Bearer ' + credential.current },
-        cache: 'no-store',
-        credentials: 'omit',
-      });
-      const ver = getRes.headers.get('finance-version');
-      if (!getRes.ok || !ver) {
-        setStatus(`Không lấy được Finance-Version tham chiếu (${getRes.status}).`);
-        return;
-      }
-      const res = await fetch(`/v1/references/${encodeURIComponent(id)}/verify`, {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + credential.current,
-          'Content-Type': 'application/json',
-          'Idempotency-Key': 'ui-ref-verify-' + crypto.randomUUID(),
-          'If-Finance-Version': ver,
-        },
-        body: JSON.stringify({ reason: reason.trim(), evidence_ids: [ev] }),
-        cache: 'no-store',
-        credentials: 'omit',
-      });
-      if (!res.ok) {
-        setStatus(`Xác minh tham chiếu thất bại (${res.status}).`);
-        return;
-      }
-      const data = await res.json() as Reference;
-      setVerifiedRef(data);
-      setStatus(`Đã xác minh ${data.id}: ${data.state}.`);
-    } catch {
-      setStatus('Lỗi mạng khi xác minh tham chiếu.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return <section aria-labelledby="ref-wb-title">
-    <h2 id="ref-wb-title">Quản trị Tham chiếu Tài chính ({module})</h2>
-    <div className="sandbox-connection">
-      <label htmlFor="ref-wb-token">Token sandbox</label>
-      <div className="actions">
-        <input id="ref-wb-token" type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} disabled={busy || Boolean(activeToken)} maxLength={16384} />
-        <button className="primary" type="button" disabled={busy || Boolean(activeToken) || !token.trim()} onClick={() => {
-          const clean = token.trim();
-          credential.current = clean;
-          setToken('');
-          setActiveToken(clean);
-          setStatus('Đã nạp token.');
-        }}>Kết nối</button>
-        <button type="button" onClick={disconnect}>Ngắt kết nối</button>
-      </div>
-    </div>
-    {activeToken && <>
-      {module === 'E12' && <VerifiedContracts token={activeToken} />}
-      {module === 'E13' && <VerifiedAdvances token={activeToken} />}
-      {module === 'E14' && <VerifiedBudgets token={activeToken} />}
-      <div className="actions">
-        <input value={documentId} onChange={e => setDocumentId(e.target.value)} placeholder="Document UUID" aria-label="Document UUID" />
-        <select value={kind} onChange={e => setKind(e.target.value as Reference['kind'])} aria-label="Loại tham chiếu">
-          <option value="CONTRACT">CONTRACT</option>
-          <option value="ADVANCE">ADVANCE</option>
-          <option value="BUDGET">BUDGET</option>
-          <option value="VENDOR">VENDOR</option>
-          <option value="INVOICE">INVOICE</option>
-          <option value="PAYMENT">PAYMENT</option>
-        </select>
-        <select value={coverage} onChange={e => setCoverage(e.target.value as Reference['coverage'])} aria-label="Coverage">
-          <option value="COMPLETE">COMPLETE</option>
-          <option value="PARTIAL">PARTIAL</option>
-          <option value="UNKNOWN">UNKNOWN</option>
-        </select>
-        <button type="button" disabled={busy} onClick={() => void createReference()}>Tạo Reference</button>
-      </div>
-      <div className="actions">
-        <input value={refId} onChange={e => setRefId(e.target.value)} placeholder="Reference UUID" aria-label="Reference UUID" />
-        <input value={evidenceId} onChange={e => setEvidenceId(e.target.value)} placeholder="Evidence UUID" aria-label="Evidence UUID" />
-        <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Lý do verify" aria-label="Lý do verify" />
-        <button type="button" disabled={busy || !refId.trim()} onClick={() => void verifyReference()}>Xác minh (Approver)</button>
-      </div>
-    </>}
-    <p role="status" aria-live="polite">{status}</p>
-    {job && <p>Reference job: {job.id} ({job.state})</p>}
-    {verifiedRef && <p>Đã xác minh {verifiedRef.kind}: {verifiedRef.source_key} ({verifiedRef.state})</p>}
-  </section>;
+import { api,errorMessage,ids,isAmount,isUuid,key,kinds,type Row,type Material,type ResourceKind } from './financeClient';
+type DraftRow={source_key:string;currency:string;cap:string;consumed:string;evidence:string};
+const empty=():DraftRow=>({source_key:'',currency:'',cap:'',consumed:'',evidence:''});
+const defaultKind:Record<'E12'|'E13'|'E14',ResourceKind>={E12:'CONTRACT',E13:'ADVANCE',E14:'BUDGET'};
+export function ReferenceWorkbench({module}:{module:'E12'|'E13'|'E14'}){
+ const [token,setToken]=useState(''),[activeToken,setActiveToken]=useState('');
+ const [documentId,setDocumentId]=useState(''),[kind,setKind]=useState<ResourceKind>(defaultKind[module]);
+ const [coverage,setCoverage]=useState('UNKNOWN'),[asOf,setAsOf]=useState(''),[fresh,setFresh]=useState('');
+ const [rows,setRows]=useState<DraftRow[]>([empty()]),[refId,setRefId]=useState(''),[material,setMaterial]=useState<Material|null>(null);
+ const [reason,setReason]=useState(''),[evidence,setEvidence]=useState(''),[checked,setChecked]=useState(false),[version,setVersion]=useState<string|null>(null);
+ const [busy,setBusy]=useState(false),[status,setStatus]=useState('Chưa kết nối.');
+ const credential=useRef(''),attempt=useRef<{body:string;key:string}|null>(null);
+ useEffect(()=>{setKind(defaultKind[module]);setRows([empty()]);setMaterial(null);setChecked(false);setVersion(null)},[module]);
+ useEffect(()=>()=>{credential.current=''},[]);
+ function clear(){credential.current='';setToken('');setActiveToken('');setMaterial(null);setChecked(false);setVersion(null);setStatus('Đã ngắt kết nối.');attempt.current=null;}
+ function update(i:number,patch:Partial<DraftRow>){setRows(old=>old.map((r,j)=>i===j?{...r,...patch}:r))}
+ async function create(){
+  if(!credential.current||!isUuid(documentId.trim())){setStatus('Cần UUID chứng từ nguồn đã quét sạch.');return}
+  const dates=[new Date(asOf),new Date(fresh)];
+  if(!asOf||!fresh||!dates.every(d=>Number.isFinite(d.getTime()))||dates[1]<=dates[0]||dates[0]>new Date()){setStatus('Kiểm tra thời điểm dữ liệu và hạn hiệu lực.');return}
+  const records:Row[]=rows.map(r=>({source_key:r.source_key.trim(),currency:r.currency.trim().toUpperCase(),cap:r.cap.trim(),consumed:r.consumed.trim(),evidence_ids:ids(r.evidence)}));
+  if(!records.length||records.some(r=>!r.source_key||!/^([A-Z]{3})$/.test(r.currency)||!isAmount(r.cap)||!isAmount(r.consumed)||!r.evidence_ids.length||r.evidence_ids.some(x=>!isUuid(x)))||new Set(records.map(r=>r.source_key)).size!==records.length||new Set(records.flatMap(r=>r.evidence_ids)).size>50){setStatus('Mỗi dòng cần mã nguồn duy nhất, tiền tệ, số tiền chính xác và bằng chứng UUID; tối đa 50 bằng chứng mỗi bản nhập.');return}
+  const body=JSON.stringify({document_id:documentId.trim(),kind,coverage,as_of:dates[0].toISOString(),fresh_until:dates[1].toISOString(),records});
+  if(attempt.current?.body!==body)attempt.current={body,key:key('ref-create')};
+  setBusy(true);
+  try{const {data}=await api<{id:string}>(credential.current,'/v1/references',{method:'POST',headers:{'Idempotency-Key':attempt.current.key},body});setRefId(data.id);setMaterial(null);setVersion(null);setChecked(false);setStatus('Đã tạo bản nhập '+data.id+'. Chuyển cho người duyệt độc lập.');}
+  catch(e){setStatus('Không tạo được: '+errorMessage(e))}finally{setBusy(false)}
+ }
+ async function inspect(){
+  if(!isUuid(refId.trim()))return;
+  setBusy(true);setMaterial(null);setChecked(false);setVersion(null);
+  try{const path='/v1/references/'+encodeURIComponent(refId.trim());const {data}=await api<Material>(credential.current,path+'/material');const meta=await api<unknown>(credential.current,path);setMaterial(data);setVersion(meta.version);setEvidence(data.evidence_ids.join(', '));setStatus('Đã đọc bản nhập bất biến. Đối chiếu từng dòng với tài liệu nguồn trước khi xác minh.')}
+  catch(e){setStatus('Không đọc được bản nhập: '+errorMessage(e))}finally{setBusy(false)}
+ }
+ async function verify(){
+  if(!material||!version||!checked||!reason.trim()||material.id!==refId.trim()||material.state!=='DRAFT')return;
+  const ev=ids(evidence);
+  if(!ev.length||ev.length>50||ev.some(x=>!isUuid(x))||material.records.some(r=>!r.evidence_ids.some(x=>ev.includes(x)))){setStatus('Phải đối chiếu bằng chứng cho mọi dòng.');return}
+  const body=JSON.stringify({reason:reason.trim(),evidence_ids:ev});
+  if(attempt.current?.body!==body)attempt.current={body,key:key('ref-verify')};
+  setBusy(true);
+  try{await api(credential.current,'/v1/references/'+material.id+'/verify',{method:'POST',headers:{'If-Finance-Version':version,'Idempotency-Key':attempt.current.key},body});setMaterial({...material,state:'APPROVED'});setChecked(false);setStatus('Đã xác minh độc lập. Nguồn đủ điều kiện xuất hiện trong danh sách giữ hạn mức.')}
+  catch(e){setStatus('Xác minh thất bại: '+errorMessage(e))}finally{setBusy(false)}
+ }
+ return <section><h2>Quản trị nguồn tài chính</h2><div className="actions"><input aria-label="Token" type="password" autoComplete="off" value={token} onChange={e=>setToken(e.target.value)} disabled={busy||Boolean(activeToken)}/><button disabled={busy||!token.trim()||Boolean(activeToken)} onClick={()=>{credential.current=token.trim();setActiveToken(credential.current);setToken('');setStatus('Đã kết nối.')}}>Kết nối</button><button disabled={busy} onClick={clear}>Ngắt</button></div>
+ {activeToken&&<>
+ {module==='E12'&&<VerifiedContracts token={activeToken}/>}
+ {module==='E13'&&<VerifiedAdvances token={activeToken}/>}
+ {module==='E14'&&<VerifiedBudgets token={activeToken}/>}
+ <h3>Nhập bảng hạn mức từ chứng từ nguồn</h3><div className="actions"><label>UUID chứng từ<input value={documentId} onChange={e=>setDocumentId(e.target.value)}/></label><label>Loại<select value={kind} onChange={e=>setKind(e.target.value as ResourceKind)}>{kinds.map(k=><option key={k}>{k}</option>)}</select></label><label>Độ phủ<select value={coverage} onChange={e=>setCoverage(e.target.value)}>{['UNKNOWN','PARTIAL','COMPLETE'].map(k=><option key={k}>{k}</option>)}</select></label><label>Thời điểm số liệu<input type="datetime-local" value={asOf} onChange={e=>setAsOf(e.target.value)}/></label><label>Hết hiệu lực<input type="datetime-local" value={fresh} onChange={e=>setFresh(e.target.value)}/></label></div>
+ <div className="table-wrap"><table><thead><tr><th>Mã nguồn</th><th>Tiền tệ</th><th>Hạn mức</th><th>Đã sử dụng</th><th>UUID bằng chứng</th><th></th></tr></thead><tbody>{rows.map((r,i)=><tr key={i}>{(['source_key','currency','cap','consumed','evidence'] as const).map(k=><td key={k}><input aria-label={k+' '+(i+1)} value={r[k]} onChange={e=>update(i,{[k]:e.target.value})}/></td>)}<td><button disabled={busy||rows.length===1} onClick={()=>setRows(old=>old.filter((_,j)=>i!==j))}>Xóa dòng</button></td></tr>)}</tbody></table></div>
+ <div className="actions"><button disabled={busy||rows.length>=1000} onClick={()=>setRows(old=>[...old,empty()])}>Thêm dòng</button><button className="primary" disabled={busy} onClick={()=>void create()}>Lưu bản nhập</button></div>
+ <h3>Duyệt bản nhập độc lập</h3><div className="actions"><input aria-label="UUID bản nhập" value={refId} onChange={e=>{setRefId(e.target.value);setMaterial(null);setChecked(false);setVersion(null)}}/><button disabled={busy} onClick={()=>void inspect()}>Đọc bản nhập</button></div>
+ {material&&<><p>{material.kind} · {material.coverage} · {material.state} · Hết hạn {material.fresh_until}</p><p>Nguồn {material.document_id} · SHA-256 <code>{material.source_digest}</code></p><div className="table-wrap"><table><thead><tr><th>Mã nguồn</th><th>Tiền tệ</th><th>Hạn mức</th><th>Đã dùng</th><th>Bằng chứng</th></tr></thead><tbody>{material.records.map(r=><tr key={r.source_key}><td>{r.source_key}</td><td>{r.currency}</td><td>{r.cap}</td><td>{r.consumed}</td><td>{r.evidence_ids.join(', ')}</td></tr>)}</tbody></table></div><label>UUID bằng chứng đã đối chiếu<textarea value={evidence} onChange={e=>{setEvidence(e.target.value);setChecked(false)}}/></label><label>Lý do xác minh<input value={reason} onChange={e=>setReason(e.target.value)}/></label><label><input type="checkbox" checked={checked} onChange={e=>setChecked(e.target.checked)}/> Đã đối chiếu mọi dòng với nguồn, xác nhận độ phủ và hiệu lực.</label><button className="primary" disabled={busy||!checked||!version||material.coverage!=='COMPLETE'||material.state!=='DRAFT'||!reason.trim()} onClick={()=>void verify()}>Xác minh</button></>}
+ </>}<p role="status">{status}</p></section>
 }
