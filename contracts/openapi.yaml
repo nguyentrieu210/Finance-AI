@@ -4311,6 +4311,7 @@ paths:
       tags: [E02, E03]
       summary: Submit verified email claim for an issued invitation
       x-release-gate: pilot
+      x-idempotent: true
       security:
       - oidc: []
       responses:
