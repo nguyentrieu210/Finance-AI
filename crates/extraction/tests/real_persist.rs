@@ -122,9 +122,9 @@ async fn real_candidate_persistence() {
             Field::AmountBeforeTax => "invoice.net",
             Field::TaxAmount => "invoice.tax",
             Field::TotalAmount => "invoice.total",
-            Field::ContractNumber => "invoice.contract_number",
-            Field::RequestedAmount => "invoice.requested",
-            Field::Currency => "invoice.currency",
+            // This legacy synthetic.rows.v1 SQL entry point accepts exactly six fields.
+            // The expanded extraction schema is persisted by the separate runtime worker.
+            Field::ContractNumber | Field::RequestedAmount | Field::Currency => continue,
         };
         let state = match field.state {
             State::Unknown => "UNKNOWN",
@@ -152,6 +152,7 @@ async fn real_candidate_persistence() {
             json!({"path":path,"state":state,"value":value,"page":source_page,"indexes":indexes}),
         );
     }
+    assert_eq!(fields.len(), 6, "legacy synthetic.rows.v1 field contract");
     let fields = Value::Array(fields);
     let submit = |f, source_digest: &Vec<u8>| {
         sqlx::query_scalar::<_,Uuid>("SELECT finance.prototype_record_synthetic_ocr($1,$2,$3,$4,$5,$6,$7,1,$8,$9,$10,$11,$12)")
