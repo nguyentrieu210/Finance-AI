@@ -21,7 +21,9 @@ impl Unit {
     pub fn parse(value: &str) -> Result<Self, Error> {
         if value.is_empty()
             || value.len() > 32
-            || !value.bytes().all(|b| b.is_ascii_alphanumeric() || b"._/-".contains(&b))
+            || !value
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._/-".contains(&b))
         {
             return Err(Error::InvalidLiteral);
         }
@@ -31,6 +33,10 @@ impl Unit {
             bytes,
             len: value.len() as u8,
         })
+    }
+
+    pub fn as_str(&self) -> &str {
+        std::str::from_utf8(&self.bytes[..usize::from(self.len)]).expect("validated ASCII unit")
     }
 }
 
