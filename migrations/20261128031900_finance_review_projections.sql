@@ -62,6 +62,7 @@ BEGIN
  CROSS JOIN LATERAL(SELECT coalesce(sum(r.remaining),0) amount FROM finance.reservation_line l JOIN finance.reservation r ON (r.tenant_id,r.company_id,r.id)=(l.tenant_id,l.company_id,l.reservation_id)
  WHERE (l.tenant_id,l.company_id,l.resource_id)=(t,c,f.id) AND r.state IN ('RESERVED','COMMITTED','PARTIAL')) h
  WHERE (f.tenant_id,f.company_id)=(t,c) AND f.id>after_id AND f.coverage_complete AND sc.complete AND s.state='APPROVED' AND s.source_document_id IS NOT NULL AND f.fresh_until>statement_timestamp() AND s.fresh_until>statement_timestamp()
+ AND COALESCE(finance.reference_details_eligible(f.resource_kind,f.reference_details,(statement_timestamp() AT TIME ZONE 'UTC')::date),false)
  ORDER BY f.id LIMIT n;
 END $$;
 ALTER FUNCTION finance.runtime_reservable_resources(uuid,uuid,uuid,uuid,integer) OWNER TO finance_reference_writer;

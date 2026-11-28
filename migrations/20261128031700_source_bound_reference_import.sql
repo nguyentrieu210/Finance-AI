@@ -92,7 +92,7 @@ BEGIN
   OR item->>'consumed' IS NULL OR item->>'consumed' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$'
   OR (item->>'consumed')::numeric>(item->>'cap')::numeric
   OR kind NOT IN ('CONTRACT','INVOICE','ADVANCE','BUDGET')
-  OR (SELECT count(*) FROM jsonb_object_keys(item))<>5
+  OR (SELECT count(*) FROM jsonb_object_keys(item))<>6 OR NOT COALESCE(finance.validate_reference_details(kind,item,(as_of_ts AT TIME ZONE 'UTC')::date),false)
   THEN RAISE EXCEPTION 'invalid normalized resource row' USING ERRCODE='23514'; END IF;
  END LOOP;
  IF (SELECT count(DISTINCT item->>'source_key') FROM jsonb_array_elements(records) item)<>jsonb_array_length(records)
@@ -184,8 +184,9 @@ BEGIN
    (item->>'occurred_at')::timestamptz,(item->>'reservation_id')::uuid,item->>'event_kind',item->>'reverses'
   FROM jsonb_array_elements(r.import_payload) item;
  ELSE
- INSERT INTO finance.financial_resource(tenant_id,company_id,id,currency,cap,consumed,coverage_complete,fresh_until,snapshot_id,resource_kind,source_key)
- SELECT t,c,gen_random_uuid(),item->>'currency',(item->>'cap')::numeric,(item->>'consumed')::numeric,true,r.fresh_until,ref_id,rkind,jsonb_build_array('MANUAL_API',item->>'source_key')::text
+ IF EXISTS(SELECT 1 FROM jsonb_array_elements(r.import_payload) item WHERE NOT COALESCE(finance.validate_reference_details(rkind,item,(r.as_of AT TIME ZONE 'UTC')::date),false)) THEN RAISE EXCEPTION 'invalid typed reference' USING ERRCODE='23514'; END IF;
+ INSERT INTO finance.financial_resource(tenant_id,company_id,id,currency,cap,consumed,coverage_complete,fresh_until,snapshot_id,resource_kind,source_key,reference_details)
+ SELECT t,c,gen_random_uuid(),item->>'currency',(item->>'cap')::numeric,(item->>'consumed')::numeric,true,r.fresh_until,ref_id,rkind,jsonb_build_array('MANUAL_API',item->>'source_key')::text,(item->'details')||jsonb_build_object('frozen_on',(r.as_of AT TIME ZONE 'UTC')::date)
  FROM jsonb_array_elements(r.import_payload) item;
  END IF;
  UPDATE finance.reference_snapshot SET state='APPROVED',checker_id=a

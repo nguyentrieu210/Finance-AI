@@ -36,7 +36,7 @@ pub(super) struct CreateBody {
 
 #[derive(Deserialize,Serialize)]
 #[serde(deny_unknown_fields)]
-struct NormalizedResource {source_key:String,currency:String,cap:String,consumed:String,evidence_ids:Vec<Uuid>}
+struct NormalizedResource {source_key:String,currency:String,cap:String,consumed:String,evidence_ids:Vec<Uuid>,details:serde_json::Value}
 #[derive(Deserialize,Serialize)]
 #[serde(deny_unknown_fields)]
 struct PaymentRow {source_key:String,currency:String,amount:String,reservation_id:Uuid,event_kind:String,reverses:Option<String>,occurred_at:String,evidence_ids:Vec<Uuid>}
