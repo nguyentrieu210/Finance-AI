@@ -23,13 +23,21 @@ pub fn identity(a: &InvoiceIdentity<'_>, b: &InvoiceIdentity<'_>) -> Match {
     if a.scope != b.scope {
         return Match::Different;
     }
+    let normalize = |s: &str| {
+        let s = s.trim();
+        !s.is_empty() && s.len() <= 128 && !s.chars().any(char::is_control)
+    };
     if [a.issuer, a.series, a.number, b.issuer, b.series, b.number]
         .iter()
-        .any(|s| s.trim().is_empty())
+        .any(|s| !normalize(s))
     {
         return Match::Unknown;
     }
-    if (a.issuer, a.series, a.number) == (b.issuer, b.series, b.number) {
+    // Trim surrounding whitespace only: case, punctuation and leading zeros
+    // are significant until an issuer-specific normalization policy is approved.
+    if (a.issuer.trim(), a.series.trim(), a.number.trim())
+        == (b.issuer.trim(), b.series.trim(), b.number.trim())
+    {
         Match::Equal
     } else {
         Match::Different
@@ -59,6 +67,38 @@ pub fn amount(a: Option<Money>, b: Option<Money>, tolerance: Money) -> Match {
 mod tests {
     use super::*;
     use finance_shared::money::{Amount, Currency};
+
+    #[test]
+    fn e10_at01_issuer_series_and_number_remain_distinct() {
+        use finance_shared::ids::{CompanyId, TenantId};
+        use uuid::Uuid;
+        let scope = CompanyScope {
+            tenant: TenantId::try_from(Uuid::from_u128(1)).unwrap(),
+            company: CompanyId::try_from(Uuid::from_u128(2)).unwrap(),
+        };
+        let first = InvoiceIdentity {
+            scope,
+            issuer: "VENDOR-01",
+            series: "S1",
+            number: "0007",
+        };
+        let mut other = InvoiceIdentity {
+            scope,
+            issuer: " VENDOR-01 ",
+            series: "S1",
+            number: "0007",
+        };
+        assert_eq!(identity(&first, &other), Match::Equal);
+        other.issuer = "VENDOR-02";
+        assert_eq!(identity(&first, &other), Match::Different);
+        other.issuer = "VENDOR-01";
+        other.number = "7";
+        assert_eq!(identity(&first, &other), Match::Different);
+        other.number = "";
+        assert_eq!(identity(&first, &other), Match::Unknown);
+        other.number = "00\n07";
+        assert_eq!(identity(&first, &other), Match::Unknown);
+    }
 
     #[test]
     fn explicit_tolerance_and_currency() {
