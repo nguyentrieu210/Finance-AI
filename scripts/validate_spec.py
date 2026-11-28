@@ -1,6 +1,7 @@
 from pathlib import Path
-import yaml, json, re
+import yaml, json
 from collections import Counter
+from openapi_parameters import validate_operation_parameters
 R=Path(__file__).resolve().parents[1]
 def load(p): return yaml.safe_load((R/p).read_text())
 t=load('agents/task-graph.yaml'); q=load('tests/requirements.yaml'); a=load('tests/acceptance.yaml'); api=load('contracts/openapi.yaml')
@@ -28,8 +29,7 @@ def walk(v):
 walk(api)
 for path,items in api['paths'].items():
     for method,o in items.items():
-        assert set(re.findall(r'\{(\w+)\}',path))=={p['name'] for p in o['parameters'] if p['in']=='path'}
-        if method!='get':assert any(p['name']=='Idempotency-Key' and p['required'] for p in o['parameters'])
+        validate_operation_parameters(path, method, items, o)
 try:
     from jsonschema import Draft202012Validator
     Draft202012Validator.check_schema(json.loads((R/'contracts/rule-dsl.schema.json').read_text()))
