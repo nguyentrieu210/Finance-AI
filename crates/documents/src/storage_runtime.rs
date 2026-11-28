@@ -18,17 +18,16 @@ pub struct Metadata {
 
 impl Metadata {
     pub fn object(&self,t: Uuid,c: Uuid,document: Uuid) -> Result<Object,Error> {
-        let invalid = |_| Error::Conflict;
         Ok(Object {
             binding: Binding {
                 scope: CompanyScope {
-                    tenant: TenantId::try_from(t).map_err(invalid)?,
-                    company: CompanyId::try_from(c).map_err(invalid)?,
+                    tenant: TenantId::try_from(t).map_err(|_| Error::Conflict)?,
+                    company: CompanyId::try_from(c).map_err(|_| Error::Conflict)?,
                 },
-                document: ResourceId::try_from(document).map_err(invalid)?,
-                revision: RevisionId::try_from(self.revision_id).map_err(invalid)?,
+                document: ResourceId::try_from(document).map_err(|_| Error::Conflict)?,
+                revision: RevisionId::try_from(self.revision_id).map_err(|_| Error::Conflict)?,
             },
-            generation: Version::try_from(self.generation).map_err(invalid)?,
+            generation: Version::try_from(self.generation).map_err(|_| Error::Conflict)?,
             size: u64::try_from(self.byte_count).map_err(|_| Error::Conflict)?,
             mime: DeclaredMime::parse(&self.mime).map_err(|_| Error::Conflict)?,
             digest: Sha256Digest::parse(&self.sha256).map_err(|_| Error::Conflict)?,

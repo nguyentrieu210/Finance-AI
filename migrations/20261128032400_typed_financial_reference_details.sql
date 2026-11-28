@@ -32,6 +32,7 @@ BEGIN
  cap:=finance.reference_nonnegative(item,'cap'); used:=finance.reference_nonnegative(item,'consumed');
  CASE kind
  WHEN 'CONTRACT' THEN
+  IF detail-ARRAY['contract_key','installment_key','vendor_key','effective_from','effective_until','base_cap','addenda','installment_gross','retention','advance_deduction','paid','acceptance_lines']<>'{}'::jsonb THEN RETURN false; END IF;
   PERFORM finance.reference_text(detail,'contract_key');PERFORM finance.reference_text(detail,'installment_key');PERFORM finance.reference_text(detail,'vendor_key');
   IF finance.reference_text(detail,'installment_key')<>item->>'source_key' OR finance.reference_date(detail,'effective_from')>=finance.reference_date(detail,'effective_until') THEN RETURN false; END IF;
   gross:=finance.reference_nonnegative(detail,'base_cap');
@@ -48,6 +49,7 @@ BEGIN
   IF gross<0 OR cap<>least(gross,finance.reference_nonnegative(detail,'installment_gross'))-deduction
    OR used<>finance.reference_nonnegative(detail,'paid') THEN RETURN false; END IF;
  WHEN 'ADVANCE' THEN
+  IF detail-ARRAY['beneficiary_key','purpose','issued_on','due_date','issued','settled','refunded','extension']<>'{}'::jsonb THEN RETURN false; END IF;
   PERFORM finance.reference_text(detail,'beneficiary_key');PERFORM finance.reference_text(detail,'purpose');
   IF finance.reference_date(detail,'issued_on')>day OR finance.reference_date(detail,'due_date')<finance.reference_date(detail,'issued_on') THEN RETURN false; END IF;
   due:=finance.reference_date(detail,'due_date');
@@ -59,11 +61,13 @@ BEGIN
   IF cap<>finance.reference_nonnegative(detail,'issued') OR cap<=0
    OR used<>finance.reference_nonnegative(detail,'settled')+finance.reference_nonnegative(detail,'refunded') THEN RETURN false; END IF;
  WHEN 'BUDGET' THEN
+  IF detail-ARRAY['cost_center','account','budget_version','period_start','period_end','approved_limit','external_unmatched_commitments','actual','disjoint_verified']<>'{}'::jsonb THEN RETURN false; END IF;
   PERFORM finance.reference_text(detail,'cost_center');PERFORM finance.reference_text(detail,'account');PERFORM finance.reference_text(detail,'budget_version');
   IF finance.reference_date(detail,'period_start')>=finance.reference_date(detail,'period_end') OR detail->'disjoint_verified' IS DISTINCT FROM 'true'::jsonb
    OR cap<>finance.reference_nonnegative(detail,'approved_limit')-finance.reference_nonnegative(detail,'external_unmatched_commitments')
    OR used<>finance.reference_nonnegative(detail,'actual') THEN RETURN false; END IF;
  WHEN 'INVOICE' THEN
+  IF detail-ARRAY['issuer','series','number','invoice_date','eligible_total','paid']<>'{}'::jsonb THEN RETURN false; END IF;
   IF finance.reference_text(detail,'issuer')||'|'||finance.reference_text(detail,'series')||'|'||finance.reference_text(detail,'number')<>item->>'source_key'
    OR position('|' in detail->>'issuer')>0 OR position('|' in detail->>'series')>0 OR position('|' in detail->>'number')>0
    OR finance.reference_date(detail,'invoice_date')>day OR cap<>finance.reference_nonnegative(detail,'eligible_total') OR used<>finance.reference_nonnegative(detail,'paid')
