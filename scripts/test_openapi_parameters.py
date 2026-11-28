@@ -19,6 +19,14 @@ class OpenApiParameterValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "Idempotency-Key"):
             validate_operation_parameters("/items", "post", {}, {})
 
+    def test_explicitly_idempotent_mutation_can_omit_key(self):
+        validate_operation_parameters(
+            "/invitations/claim",
+            "post",
+            {},
+            {"operationId": "claimStaffInvitation", "x-idempotent": True},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
