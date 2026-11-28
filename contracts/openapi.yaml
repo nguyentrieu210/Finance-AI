@@ -10544,6 +10544,20 @@ components:
           items:
             type: string
             format: uuid
+        payment_events:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id: {type: string, format: uuid}
+              source_key: {type: string}
+              reservation_id: {type: string, format: uuid}
+              event_kind: {type: string}
+              amount: {type: string}
+              currency: {type: string}
+              observed: {type: boolean}
+            required: [id, source_key, reservation_id, event_kind, amount, currency, observed]
       required: [id, document_id, source_digest, kind, coverage, as_of, fresh_until, state, maker_id, records, evidence_ids]
     ReservableResource:
       type: object

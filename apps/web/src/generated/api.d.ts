@@ -1813,6 +1813,7 @@ export interface components {
             state: string;
             maker_id: string;
             records: (components["schemas"]["ReferenceImportRow"] | components["schemas"]["PaymentImportRow"])[];
+            payment_events?: {id:string;source_key:string;reservation_id:string;event_kind:string;amount:string;currency:string;observed:boolean}[];
             evidence_ids: string[];
         };
         ReservableResource: {

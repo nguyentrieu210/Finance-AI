@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { PaymentImport } from './PaymentImport';
+import { PaymentObserve } from './PaymentObserve';
 import { VerifiedContracts } from '../contracts/VerifiedContracts';
 import { VerifiedAdvances } from '../advances/VerifiedAdvances';
 import { VerifiedBudgets } from '../budget/VerifiedBudgets';
@@ -44,7 +45,7 @@ export function ReferenceWorkbench({module}:{module:'E12'|'E13'|'E14'}){
   const body=JSON.stringify({reason:reason.trim(),evidence_ids:ev});
   if(attempt.current?.body!==body)attempt.current={body,key:key('ref-verify')};
   setBusy(true);
-  try{await api(credential.current,'/v1/references/'+material.id+'/verify',{method:'POST',headers:{'If-Finance-Version':version,'Idempotency-Key':attempt.current.key},body});setMaterial({...material,state:'APPROVED'});setChecked(false);setStatus('Đã xác minh độc lập. Nguồn đủ điều kiện xuất hiện trong danh sách giữ hạn mức.')}
+  try{await api(credential.current,'/v1/references/'+material.id+'/verify',{method:'POST',headers:{'If-Finance-Version':version,'Idempotency-Key':attempt.current.key},body});setMaterial((await api<Material>(credential.current,'/v1/references/'+material.id+'/material')).data);setChecked(false);setStatus('Đã xác minh độc lập. Nguồn đủ điều kiện xuất hiện trong danh sách giữ hạn mức.')}
   catch(e){setStatus('Xác minh thất bại: '+errorMessage(e))}finally{setBusy(false)}
  }
  return <section><h2>Quản trị nguồn tài chính</h2><div className="actions"><input aria-label="Token" type="password" autoComplete="off" value={token} onChange={e=>setToken(e.target.value)} disabled={busy||Boolean(activeToken)}/><button disabled={busy||!token.trim()||Boolean(activeToken)} onClick={()=>{credential.current=token.trim();setActiveToken(credential.current);setToken('');setStatus('Đã kết nối.')}}>Kết nối</button><button disabled={busy} onClick={clear}>Ngắt</button></div>
@@ -58,5 +59,6 @@ export function ReferenceWorkbench({module}:{module:'E12'|'E13'|'E14'}){
  <PaymentImport token={activeToken}/>
  <h3>Duyệt bản nhập độc lập</h3><div className="actions"><input aria-label="UUID bản nhập" value={refId} onChange={e=>{setRefId(e.target.value);setMaterial(null);setChecked(false);setVersion(null)}}/><button disabled={busy} onClick={()=>void inspect()}>Đọc bản nhập</button></div>
  {material&&<><p>{material.kind} · {material.coverage} · {material.state} · Hết hạn {material.fresh_until}</p><p>Nguồn {material.document_id} · SHA-256 <code>{material.source_digest}</code></p><div className="table-wrap"><table><thead><tr><th>Mã nguồn</th><th>Tiền tệ</th><th>Hạn mức</th><th>Đã dùng</th><th>Bằng chứng</th><th>Chi tiết</th></tr></thead><tbody>{material.records.map(r=><tr key={r.source_key}><td>{r.source_key}</td><td>{r.currency}</td><td>{'cap' in r?r.cap:r.amount}</td><td>{'consumed' in r?r.consumed:r.event_kind+' · '+r.reservation_id+(r.reverses?' · đảo '+r.reverses:'')}</td><td>{r.evidence_ids.join(', ')}</td><td>{'details' in r?<pre>{JSON.stringify(r.details,null,2)}</pre>:r.occurred_at}</td></tr>)}</tbody></table></div><label>UUID bằng chứng đã đối chiếu<textarea value={evidence} onChange={e=>{setEvidence(e.target.value);setChecked(false)}}/></label><label>Lý do xác minh<input value={reason} onChange={e=>setReason(e.target.value)}/></label><label><input type="checkbox" checked={checked} onChange={e=>setChecked(e.target.checked)}/> Đã đối chiếu mọi dòng với nguồn, xác nhận độ phủ và hiệu lực.</label><button className="primary" disabled={busy||!checked||!version||material.coverage!=='COMPLETE'||material.state!=='DRAFT'||!reason.trim()} onClick={()=>void verify()}>Xác minh</button></>}
+ {material?.kind==='PAYMENT'&&material.state==='APPROVED'&&<PaymentObserve token={activeToken} material={material} onApplied={()=>void inspect()}/>}
  </>}<p role="status">{status}</p></section>
 }
