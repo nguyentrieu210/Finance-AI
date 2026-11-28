@@ -153,7 +153,7 @@ async fn list_filtered(
         })?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     let rows = sqlx::query_as::<_, Reference>(
-        "SELECT f.id,f.resource_kind AS kind,f.source_key,to_char(r.as_of AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS as_of,'COMPLETE'::text AS coverage,'VERIFIED'::text AS state,ARRAY[]::uuid[] AS evidence_ids FROM finance.financial_resource f JOIN finance.reference_snapshot r ON (r.tenant_id,r.company_id,r.id)=(f.tenant_id,f.company_id,f.snapshot_id) WHERE f.tenant_id=$1 AND f.company_id=$2 AND ($3::text IS NULL OR f.resource_kind=$3) AND f.resource_kind IN ('CONTRACT','ADVANCE','BUDGET','INVOICE') AND f.id>$4 AND f.coverage_complete AND f.fresh_until>statement_timestamp() AND r.state='APPROVED' AND r.fresh_until>statement_timestamp() ORDER BY f.id LIMIT $5",
+        "SELECT f.id,f.resource_kind AS kind,f.source_key,to_char(r.as_of AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS as_of,'COMPLETE'::text AS coverage,'VERIFIED'::text AS state,COALESCE(r.import_evidence, ARRAY[]::uuid[]) AS evidence_ids FROM finance.financial_resource f JOIN finance.reference_snapshot r ON (r.tenant_id,r.company_id,r.id)=(f.tenant_id,f.company_id,f.snapshot_id) WHERE f.tenant_id=$1 AND f.company_id=$2 AND ($3::text IS NULL OR f.resource_kind=$3) AND f.resource_kind IN ('CONTRACT','ADVANCE','BUDGET','INVOICE') AND f.id>$4 AND f.coverage_complete AND f.fresh_until>statement_timestamp() AND r.state='APPROVED' AND r.fresh_until>statement_timestamp() ORDER BY f.id LIMIT $5",
     )
     .bind(t)
     .bind(c)
