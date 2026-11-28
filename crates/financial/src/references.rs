@@ -230,24 +230,29 @@ pub async fn get(
     Ok(row)
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct CreateReference<'a> {
+    pub document_id: Uuid,
+    pub kind: &'a str,
+    pub as_of: &'a str,
+    pub coverage: &'a str,
+    pub reference_id: Uuid,
+}
+
 pub async fn create(
     pool: &PgPool,
     proof: &AuthenticatedCommand,
     key: &IdempotencyKey,
-    document_id: Uuid,
-    kind: &str,
-    as_of: &str,
-    coverage: &str,
-    reference_id: Uuid,
+    input: CreateReference<'_>,
 ) -> Result<ReferenceJob, Error> {
-    if document_id.is_nil()
-        || reference_id.is_nil()
+    if input.document_id.is_nil()
+        || input.reference_id.is_nil()
         || !matches!(
-            kind,
+            input.kind,
             "VENDOR" | "CONTRACT" | "INVOICE" | "ADVANCE" | "BUDGET" | "PAYMENT"
         )
-        || !matches!(coverage, "COMPLETE" | "PARTIAL" | "UNKNOWN")
-        || as_of.is_empty()
+        || !matches!(input.coverage, "COMPLETE" | "PARTIAL" | "UNKNOWN")
+        || input.as_of.is_empty()
     {
         return Err(Error::InvalidInput);
     }
@@ -271,12 +276,12 @@ pub async fn create(
     .bind(t)
     .bind(c)
     .bind(a)
-    .bind(document_id)
-    .bind(kind)
-    .bind(as_of)
-    .bind(coverage)
+    .bind(input.document_id)
+    .bind(input.kind)
+    .bind(input.as_of)
+    .bind(input.coverage)
     .bind(key.as_str())
-    .bind(reference_id)
+    .bind(input.reference_id)
     .bind(command)
     .bind(correlation)
     .fetch_one(&mut *tx)

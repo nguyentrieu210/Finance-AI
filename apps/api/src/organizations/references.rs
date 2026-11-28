@@ -11,7 +11,7 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use finance_financial::references::{Reference, ReferenceReceipt};
+use finance_financial::references::{CreateReference, Reference, ReferenceReceipt};
 use finance_shared::{
     contracts::{Principal, Version},
     http_contract::{IdempotencyKey, VersionTarget, VersionToken},
@@ -226,11 +226,13 @@ pub(super) async fn create(
         &state.runtime,
         &proof,
         &key,
-        body.document_id,
-        &body.kind,
-        &as_of,
-        &body.coverage,
-        random_id(),
+        CreateReference {
+            document_id: body.document_id,
+            kind: &body.kind,
+            as_of: &as_of,
+            coverage: &body.coverage,
+            reference_id: random_id(),
+        },
     )
     .await
     {

@@ -10,7 +10,9 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use finance_documents::repository::{self, Document, Metadata, UploadGrantError};
+use finance_documents::repository::{
+    self, Document, FinalizeInput, Metadata, PipelineJobInput, UploadGrantError,
+};
 use finance_identity::AuthenticatedCommand;
 use finance_shared::{
     contracts::{Principal, Version},
@@ -199,11 +201,13 @@ pub(super) async fn finalize(
         &state.runtime,
         &proof,
         &key,
-        dossier,
-        document,
-        &body.sha256,
-        body.generation,
-        random_id(),
+        FinalizeInput {
+            dossier,
+            document,
+            sha256: &body.sha256,
+            generation: body.generation,
+            job_id: random_id(),
+        },
     )
     .await
     {
@@ -270,11 +274,13 @@ async fn run_pipeline(
         &state.runtime,
         &proof,
         &key,
-        dossier,
-        document,
-        operation,
-        &value,
-        random_id(),
+        PipelineJobInput {
+            dossier,
+            document,
+            operation,
+            value: &value,
+            job_id: random_id(),
+        },
     )
     .await
     {

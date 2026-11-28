@@ -431,21 +431,26 @@ pub async fn issue_upload_grant(
     Ok(grant)
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct FinalizeInput<'a> {
+    pub dossier: Uuid,
+    pub document: Uuid,
+    pub sha256: &'a str,
+    pub generation: i64,
+    pub job_id: Uuid,
+}
+
 pub async fn finalize(
     pool: &PgPool,
     proof: &AuthenticatedCommand,
     key: &IdempotencyKey,
-    dossier: Uuid,
-    document: Uuid,
-    sha256: &str,
-    generation: i64,
-    job_id: Uuid,
+    input: FinalizeInput<'_>,
 ) -> Result<PipelineJob, Error> {
-    if dossier.is_nil()
-        || document.is_nil()
-        || job_id.is_nil()
-        || generation < 1
-        || Sha256Digest::parse(sha256).is_err()
+    if input.dossier.is_nil()
+        || input.document.is_nil()
+        || input.job_id.is_nil()
+        || input.generation < 1
+        || Sha256Digest::parse(input.sha256).is_err()
     {
         return Err(Error::InvalidInput);
     }
@@ -469,13 +474,13 @@ pub async fn finalize(
     .bind(t)
     .bind(c)
     .bind(a)
-    .bind(dossier)
-    .bind(document)
+    .bind(input.dossier)
+    .bind(input.document)
     .bind(expected)
-    .bind(sha256)
-    .bind(generation)
+    .bind(input.sha256)
+    .bind(input.generation)
     .bind(key.as_str())
-    .bind(job_id)
+    .bind(input.job_id)
     .bind(command)
     .bind(correlation)
     .fetch_one(&mut *tx)
@@ -540,23 +545,28 @@ pub async fn supersede(
     Ok(row)
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct PipelineJobInput<'a> {
+    pub dossier: Uuid,
+    pub document: Uuid,
+    pub operation: &'a str,
+    pub value: &'a str,
+    pub job_id: Uuid,
+}
+
 pub async fn request_pipeline_job(
     pool: &PgPool,
     proof: &AuthenticatedCommand,
     key: &IdempotencyKey,
-    dossier: Uuid,
-    document: Uuid,
-    operation: &str,
-    value: &str,
-    job_id: Uuid,
+    input: PipelineJobInput<'_>,
 ) -> Result<PipelineJob, Error> {
-    if dossier.is_nil()
-        || document.is_nil()
-        || job_id.is_nil()
-        || value.trim().is_empty()
-        || value.len() > 4096
+    if input.dossier.is_nil()
+        || input.document.is_nil()
+        || input.job_id.is_nil()
+        || input.value.trim().is_empty()
+        || input.value.len() > 4096
         || !matches!(
-            operation,
+            input.operation,
             "document.ocr" | "document.classify" | "document.extract"
         )
     {
@@ -582,13 +592,13 @@ pub async fn request_pipeline_job(
     .bind(t)
     .bind(c)
     .bind(a)
-    .bind(dossier)
-    .bind(document)
+    .bind(input.dossier)
+    .bind(input.document)
     .bind(expected)
-    .bind(operation)
-    .bind(value)
+    .bind(input.operation)
+    .bind(input.value)
     .bind(key.as_str())
-    .bind(job_id)
+    .bind(input.job_id)
     .bind(command)
     .bind(correlation)
     .fetch_one(&mut *tx)
