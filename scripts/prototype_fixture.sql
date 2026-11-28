@@ -38,8 +38,8 @@ WHERE tenant_id='00000000-0000-0000-0000-000000000001'
   AND id='00000000-0000-0000-0000-000000001200';
 
 -- One non-overlapping PUBLISHED policy for runtime read tests (SETTLEMENT only).
-INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,checker_id,state,effective_from,effective_until,source_digest,published_at,criticality_complete) VALUES
-('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001600','SETTLEMENT','00000000-0000-0000-0000-0000000003e8','00000000-0000-0000-0000-0000000003e9','PUBLISHED','2026-01-01','2030-01-01',decode(repeat('16',32),'hex'),now(),true);
+INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,checker_id,state,effective_from,effective_until,source_digest,published_at,criticality_complete,finance_gate) VALUES
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001600','SETTLEMENT','00000000-0000-0000-0000-0000000003e8','00000000-0000-0000-0000-0000000003e9','PUBLISHED','2026-01-01','2030-01-01',decode(repeat('16',32),'hex'),now(),true,'{"clause_key":"SYN_SETTLEMENT","amount_path":"advance_settlement.applied","currency_path":"advance_settlement.currency","resource_kinds":["ADVANCE"],"resource_keys":{"ADVANCE":"advance_settlement.allocations"}}'::jsonb);
 
 -- E17 operational diagnostic fixture: insert content while DRAFT, then freeze as PUBLISHED.
 INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,effective_from,effective_until,source_digest)

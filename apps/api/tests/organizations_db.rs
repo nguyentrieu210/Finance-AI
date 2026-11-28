@@ -352,7 +352,17 @@ async fn scoped_organization_http_real_database() {
     ] {
         let (status, page) = request(&app, uri, Some(&requester)).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(page["items"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            page["items"].as_array().unwrap().len(),
+            if kind == "ADVANCE" { 2 } else { 1 }
+        );
+        assert!(
+            page["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|item| item["kind"] == kind)
+        );
         assert_eq!(page["items"][0]["kind"], kind);
         assert_eq!(page["items"][0]["coverage"], "COMPLETE");
         assert_eq!(page["items"][0]["state"], "VERIFIED");
