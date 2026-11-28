@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 mod artifact_store;
+mod ocr;
 use finance_core::jobs::{self, Failure, FailureResult, JobError, Lease};
 use finance_shared::{
     ids::{CompanyId, CompanyScope, TenantId},
@@ -39,6 +40,7 @@ struct Config {
     adapter_config: Option<PathBuf>,
     adapter_endpoint: Option<String>,
     artifact_root: Option<PathBuf>,
+    ocr: Option<ocr::Config>,
 }
 
 impl Config {
@@ -107,6 +109,7 @@ impl Config {
                 adapter_config,
                 adapter_endpoint,
                 artifact_root,
+                ocr: ocr::Config::from_env()?,
             },
             once,
         ))
@@ -418,6 +421,29 @@ async fn cycle(pool: &PgPool, config: &Config) -> Result<bool, RunFailure> {
                 Err(failure)
             }
         };
+    }
+    if let Some(ocr_config) = &config.ocr {
+        jobs::dispatch_event(pool, config.scope, ocr::EVENT, 100)
+            .await
+            .map_err(job_failure)?;
+        if let Some(lease) = jobs::claim_event(
+            pool,
+            config.scope,
+            config.worker,
+            config.lease_seconds,
+            ocr::EVENT,
+        )
+        .await
+        .map_err(job_failure)?
+        {
+            return match ocr::process(pool, ocr_config, lease, config.lease_seconds).await {
+                Ok(()) => Ok(true),
+                Err(failure) => {
+                    settle_failure(pool, lease, failure).await;
+                    Err(failure)
+                }
+            };
+        }
     }
     jobs::dispatch_event(pool, config.scope, EXPORT_EVENT, 100)
         .await

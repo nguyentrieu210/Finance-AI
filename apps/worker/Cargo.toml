@@ -7,6 +7,9 @@ publish.workspace = true
 
 [dependencies]
 finance-core = { path = "../../crates/core" }
+finance-document-intelligence = { path = "../../crates/document-intelligence" }
+finance-extraction = { path = "../../crates/extraction" }
+finance-ocr = { path = "../../crates/ocr" }
 finance-shared = { path = "../../crates/shared" }
 finance-templates = { path = "../../crates/templates" }
 serde.workspace = true

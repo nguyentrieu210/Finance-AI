@@ -116,7 +116,6 @@ pub(super) fn verify(root: &Path, lease: Lease, artifacts: &[OwnedArtifact]) -> 
 mod tests {
     use super::*;
     use finance_shared::upload_contract::Sha256Digest;
-    use uuid::Uuid;
 
     #[test]
     #[cfg(unix)]
@@ -124,7 +123,8 @@ mod tests {
         use std::os::unix::fs::{OpenOptionsExt, PermissionsExt, symlink};
         use std::io::Write;
 
-        let root = std::env::temp_dir().join(format!("finance-artifact-{}", Uuid::new_v4()));
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!("finance-artifact-{}-{nonce}", std::process::id()));
         fs::create_dir(&root).unwrap();
         fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
         let payload = b"%PDF-1.7 synthetic";

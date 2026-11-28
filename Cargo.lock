@@ -815,6 +815,9 @@ name = "finance-worker"
 version = "0.1.0"
 dependencies = [
  "finance-core",
+ "finance-document-intelligence",
+ "finance-extraction",
+ "finance-ocr",
  "finance-shared",
  "finance-templates",
  "serde",
