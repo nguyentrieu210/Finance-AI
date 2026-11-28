@@ -228,6 +228,19 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(membership["subject_id"], membership_subject);
     assert_eq!(membership["active"], true);
     assert_eq!(membership["roles"].as_array().unwrap().len(), 2);
+
+    let (profiles_status, profiles) =
+        request(&app, "/v1/memberships?limit=100", Some(&token)).await;
+    assert_eq!(profiles_status, StatusCode::OK);
+    let requester_profile = profiles["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["subject_id"] == "00000000-0000-0000-0000-0000000003e9")
+        .expect("synthetic requester membership is present");
+    assert_eq!(requester_profile["display_name"], "Synthetic Requester");
+    assert_eq!(requester_profile["email"], "requester@example.invalid");
+    assert_eq!(requester_profile["roles"], json!(["REQUESTER"]));
     let membership_uri = format!("/v1/memberships/{membership_subject}");
     assert_eq!(
         request(&app, &membership_uri, Some(&token)).await.0,
