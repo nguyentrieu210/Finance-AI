@@ -7169,6 +7169,10 @@ export interface operations {
                         document_kind: string;
                         mandatory: boolean;
                     }[];
+                    critical_fields?: {
+                        clause_key: string;
+                        field_path: string;
+                    }[];
                 };
             };
         };

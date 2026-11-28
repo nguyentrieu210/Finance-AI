@@ -259,6 +259,8 @@ pub struct CreateDraft<'a> {
     pub checklist_keys: &'a [String],
     pub document_kinds: &'a [String],
     pub mandatory: &'a [bool],
+    pub critical_keys: &'a [String],
+    pub critical_paths: &'a [String],
 }
 
 pub async fn create(
@@ -286,6 +288,8 @@ pub async fn create(
         || input.checklist_keys.len() != input.document_kinds.len()
         || input.checklist_keys.len() != input.mandatory.len()
         || !input.mandatory.iter().any(|value| *value)
+        || input.critical_paths.len()>200
+        || input.critical_keys.len()!=input.critical_paths.len()
     {
         return Err(AppError::InvalidInput);
     }
@@ -297,7 +301,7 @@ pub async fn create(
     let command: Uuid = proof.context().command.into();
     let correlation: Uuid = proof.context().correlation.into();
     let row = sqlx::query_as::<_, PublishedPolicy>(
-        "SELECT * FROM finance.runtime_policy_create($1,$2,$3,$4,$5,$6,$7,$8::text::date,$9::text::date,$10,$11,$12,$13,$14,$15,$16,$17)",
+        "SELECT * FROM finance.runtime_policy_create_configured($1,$2,$3,$4,$5,$6,$7,$8::text::date,$9::text::date,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)",
     )
     .bind(t)
     .bind(c)
@@ -316,6 +320,8 @@ pub async fn create(
     .bind(input.mandatory)
     .bind(command)
     .bind(correlation)
+    .bind(input.critical_keys)
+    .bind(input.critical_paths)
     .fetch_one(&mut *tx)
     .await
     .map_err(
