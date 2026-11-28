@@ -2,7 +2,7 @@
 //! verified evidence. Unknown currency, coverage, or reference data cannot
 //! silently become a numeric fact.
 use crate::{Outcome, compiler::{self,Fact,Severity,Type,Value},repository::registry};
-use finance_shared::ids::EvidenceId;
+use finance_shared::{ids::EvidenceId,money::{Amount,Currency,Money}};
 use serde::{Deserialize,Serialize};
 use std::{collections::{BTreeMap,BTreeSet},sync::Arc};
 use uuid::Uuid;
@@ -54,17 +54,30 @@ pub fn evaluate(material:&serde_json::Value)->Result<Vec<ResultRow>, &'static st
             let field=fields[0];
             if !field.verified||field.evidence.is_empty(){continue}
             let Some(raw)=field.value.as_deref()else{continue};
+            let mut evidence=field.evidence.clone();
             let value=match ty {
                 Type::Date=>compiler::parse_date(raw).ok().map(Value::Date),
                 Type::Text if raw.len()<=256&&!raw.chars().any(char::is_control)=>Some(Value::Text(Arc::from(raw))),
-                // No authoritative currency/coverage projection is present in
-                // the dossier field schema. Do not reinterpret an amount as VND.
+                Type::Money(expected) => {
+                    let currency_path=format!("{}.currency",path.split('.').next().unwrap_or_default());
+                    let currency=rows.get(currency_path.as_str()).and_then(|items| {
+                        let mut same=items.iter().filter(|item|item.document==field.document);
+                        let item=*same.next()?;
+                        if same.next().is_some()||!item.verified||item.evidence.is_empty(){return None}
+                        let code=Currency::parse(item.value.as_deref()?).ok()?;
+                        if code!=*expected{return None}
+                        evidence.extend(item.evidence.iter().copied());
+                        evidence.sort();evidence.dedup();
+                        Some(code)
+                    });
+                    currency.and_then(|currency|Amount::parse(raw).ok().map(|amount|Value::Money(Money{amount,currency})))
+                },
                 _=>None,
             };
-            facts.insert(path.clone(),Fact{value,verified:true,fresh:true,evidence:field.evidence.clone()});
+            facts.insert(path.clone(),Fact{value,verified:true,fresh:true,evidence});
         }
     }
-    let invoice_paths=["invoice.number","invoice.date","invoice.supplier","invoice.net","invoice.tax","invoice.total"];
+    let invoice_paths=["invoice.number","invoice.date","invoice.supplier","invoice.net","invoice.tax","invoice.total","invoice.currency"];
     let invoice:Option<Vec<_>>=invoice_paths.iter().map(|path|rows.get(path).and_then(|rows|(rows.len()==1).then_some(rows[0]))).collect();
     if let Some(invoice)=invoice {
         if invoice.iter().all(|f|f.document==invoice[0].document&&f.verified&&f.value.is_some()&&!f.evidence.is_empty()){
@@ -106,5 +119,12 @@ mod tests {
             "evidence":["00000000-0000-0000-0000-000000000004"]}]});
         let rows=evaluate(&material).unwrap();
         assert_eq!(rows[0].outcome,"UNKNOWN");
+        let mut material=material;
+        material["fields"].as_array_mut().unwrap().push(json!({"path":"invoice.currency","document":"00000000-0000-0000-0000-000000000003","value":"VND","verified":true,"evidence":["00000000-0000-0000-0000-000000000005"]}));
+        let rows=evaluate(&material).unwrap();
+        assert_eq!(rows[0].outcome,"PASS");
+        assert_eq!(rows[0].evidence.len(),2);
+        material["fields"][1]["value"]=json!("USD");
+        assert_eq!(evaluate(&material).unwrap()[0].outcome,"UNKNOWN");
     }
 }

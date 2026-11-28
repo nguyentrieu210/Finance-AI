@@ -15,7 +15,8 @@ ALTER TABLE finance.extracted_field DROP CONSTRAINT extracted_field_field_path_c
  'advance_request.contract_number','advance_request.date','advance_request.requested',
  'advance_settlement.contract_number','advance_settlement.date','advance_settlement.requested',
  'acceptance_record.contract_number','acceptance_record.date','acceptance_record.total',
- 'payment_voucher.date','payment_voucher.requested'));
+ 'payment_voucher.date','payment_voucher.requested',
+ 'invoice.currency','contract.currency','contract_appendix.currency','payment_request.currency','advance_request.currency','advance_settlement.currency','acceptance_record.currency','payment_voucher.currency'));
 
 CREATE FUNCTION finance.local_ocr_source(t uuid,c uuid,j uuid,f bigint,w uuid)
 RETURNS TABLE(document_id uuid,revision_id uuid,generation bigint,source_digest bytea,content bytea,object_version text,byte_count bigint,mime text,kind text,event_type text)
@@ -81,14 +82,14 @@ BEGIN
    WHERE s.document_id=doc AND s.revision_id=rev AND s.generation=g AND s.source_digest=source AND s.kind=kind AND s.event_type=evt)
  THEN RAISE EXCEPTION 'wrong OCR source' USING ERRCODE='23514'; END IF;
  expected_paths:=CASE kind
- WHEN 'INVOICE' THEN ARRAY['invoice.number','invoice.date','invoice.supplier','invoice.net','invoice.tax','invoice.total']
- WHEN 'CONTRACT' THEN ARRAY['contract.number','contract.date','contract.supplier','contract.total']
- WHEN 'CONTRACT_APPENDIX' THEN ARRAY['contract_appendix.number','contract_appendix.date','contract_appendix.supplier','contract_appendix.total']
- WHEN 'PAYMENT_REQUEST' THEN ARRAY['payment_request.contract_number','payment_request.invoice_number','payment_request.date','payment_request.supplier','payment_request.requested']
- WHEN 'ADVANCE_REQUEST' THEN ARRAY['advance_request.contract_number','advance_request.date','advance_request.requested']
- WHEN 'ADVANCE_SETTLEMENT' THEN ARRAY['advance_settlement.contract_number','advance_settlement.date','advance_settlement.requested']
- WHEN 'ACCEPTANCE_RECORD' THEN ARRAY['acceptance_record.contract_number','acceptance_record.date','acceptance_record.total']
- WHEN 'PAYMENT_VOUCHER' THEN ARRAY['payment_voucher.date','payment_voucher.requested']
+ WHEN 'INVOICE' THEN ARRAY['invoice.number','invoice.date','invoice.supplier','invoice.net','invoice.tax','invoice.total','invoice.currency']
+ WHEN 'CONTRACT' THEN ARRAY['contract.number','contract.date','contract.supplier','contract.total','contract.currency']
+ WHEN 'CONTRACT_APPENDIX' THEN ARRAY['contract_appendix.number','contract_appendix.date','contract_appendix.supplier','contract_appendix.total','contract_appendix.currency']
+ WHEN 'PAYMENT_REQUEST' THEN ARRAY['payment_request.contract_number','payment_request.invoice_number','payment_request.date','payment_request.supplier','payment_request.requested','payment_request.currency']
+ WHEN 'ADVANCE_REQUEST' THEN ARRAY['advance_request.contract_number','advance_request.date','advance_request.requested','advance_request.currency']
+ WHEN 'ADVANCE_SETTLEMENT' THEN ARRAY['advance_settlement.contract_number','advance_settlement.date','advance_settlement.requested','advance_settlement.currency']
+ WHEN 'ACCEPTANCE_RECORD' THEN ARRAY['acceptance_record.contract_number','acceptance_record.date','acceptance_record.total','acceptance_record.currency']
+ WHEN 'PAYMENT_VOUCHER' THEN ARRAY['payment_voucher.date','payment_voucher.requested','payment_voucher.currency']
  ELSE NULL END;
  IF expected_paths IS NULL OR jsonb_array_length(fields)<>cardinality(expected_paths)
  THEN RAISE EXCEPTION 'unsupported extraction schema' USING ERRCODE='23514'; END IF;

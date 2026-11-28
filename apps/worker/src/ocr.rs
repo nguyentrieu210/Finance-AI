@@ -183,6 +183,7 @@ fn candidates_for(kind: Kind,pages: &[PageResult], rotations: &[Rotation]) -> Re
             Field::TaxAmount=>"tax",
             Field::TotalAmount=>"total",
             Field::RequestedAmount=>"requested",
+            Field::Currency=>"currency",
         };
         let path=format!("{prefix}.{suffix}");
         let state = match field.state {
@@ -352,7 +353,7 @@ mod tests {
         assert_eq!(png_dimensions(&png),Err(RunFailure::Permanent));
         let tsv = "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n1\t1\t0\t0\t0\t0\t0\t0\t100\t100\t-1\t\n";
         let (_,fields) = candidates(tsv,100,100).unwrap();
-        assert_eq!(fields.as_array().unwrap().len(),6);
+        assert_eq!(fields.as_array().unwrap().len(),7);
         assert!(fields.as_array().unwrap().iter().all(|f| f["state"]=="UNKNOWN"));
     }
 }
