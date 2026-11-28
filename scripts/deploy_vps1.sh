@@ -6,6 +6,8 @@ export LC_ALL=C
 
 readonly REPO=/opt/finance-ai
 readonly BUILD_ROOT=/opt/namviet-finance-build
+readonly RUST_IMAGE=rust:1.85.1-slim-bookworm
+readonly CARGO_CACHE=/root/.cargo
 readonly API_BINARY=/usr/local/lib/namviet-finance/finance-api
 readonly API_UNIT=namviet-finance-api.service
 readonly WEB_UNIT=finance-web-dev.service
@@ -96,10 +98,11 @@ preflight() {
   check_checkout
   check_runtime
   check_disk
-  command -v cargo >/dev/null || die "Cargo is unavailable"
+  command -v docker >/dev/null || die "Docker is unavailable"
+  docker image inspect "$RUST_IMAGE" >/dev/null 2>&1 || die "pinned Rust build image is unavailable"
+  [[ -d "$CARGO_CACHE" ]] || die "Cargo cache directory is unavailable"
   command -v npm >/dev/null || die "npm is unavailable"
   command -v python3 >/dev/null || die "Python 3 is unavailable"
-  command -v docker >/dev/null || die "Docker is unavailable"
 }
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -113,10 +116,29 @@ api_old_moved=0
 index_swapped=0
 deploy_started=0
 migration_applied=0
+build_container=""
+
+start_build_container() {
+  build_container="namviet-finance-build-${timestamp}-${BASHPID}"
+  docker run -d --name "$build_container" -e CARGO_HOME=/cache/cargo -e CARGO_TARGET_DIR=/target -v "$CARGO_CACHE:/cache/cargo" -v "$REPO:/workspace" -v "$BUILD_ROOT:/target" -w /workspace "$RUST_IMAGE" tail -f /dev/null >/dev/null || die "could not start the pinned Rust build container"
+}
+
+cargo() {
+  [[ -n "$build_container" ]] || die "Rust build container is not initialized"
+  docker exec "$build_container" cargo "$@"
+}
+
+cleanup_build_container() {
+  if [[ -n "$build_container" ]]; then
+    docker rm -f "$build_container" >/dev/null 2>&1 || true
+    build_container=""
+  fi
+}
 
 restore_on_error() {
   local rc=${1:-$?}
   trap - ERR
+  cleanup_build_container
   if (( deploy_started )); then
     log "deployment health check failed; restoring the previous API and frontend index"
     if (( index_swapped )) && [[ -s "$old_index" ]]; then
@@ -143,6 +165,7 @@ restore_on_error() {
   exit "$rc"
 }
 trap restore_on_error ERR
+trap cleanup_build_container EXIT
 
 preflight
 if [[ "$mode" == "--preflight" ]]; then
@@ -151,7 +174,7 @@ if [[ "$mode" == "--preflight" ]]; then
   exit 0
 fi
 
-export CARGO_TARGET_DIR="$BUILD_ROOT"
+start_build_container
 cargo fmt --all -- --check
 cargo test --locked -p finance-api --lib
 for fingerprint in "$BUILD_ROOT"/debug/.fingerprint/finance-api-*/test-lib-finance_api.json; do
@@ -193,6 +216,7 @@ for duplicate in "$BUILD_ROOT"/debug/deps/finance_migrate-*; do
   [[ -x "$duplicate" ]] || continue
   cmp -s "$MIGRATOR" "$duplicate" && rm -f -- "$duplicate"
 done
+cleanup_build_container
 check_migration_space
 
 root_path="$(https_root)"
