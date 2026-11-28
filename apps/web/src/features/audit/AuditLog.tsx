@@ -34,7 +34,7 @@ export function AuditLog() {
       <button className="primary" disabled={busy||connected||!token.trim()} onClick={()=>{credential.current=token.trim();setToken('');void load();}}>Kết nối</button>
       <button disabled={busy} onClick={clear}>Ngắt kết nối</button></div>
     <p role="status">{status}</p>
-    <div className="table-wrap"><table><thead><tr><th>Sequence</th><th>Hành động</th><th>Resource</th><th>Actor</th><th>Thời điểm</th><th>Digest</th></tr></thead>
+    <div className="table-wrap"><table><thead><tr><th>Vị trí trong trang</th><th>Hành động</th><th>Resource</th><th>Actor</th><th>Thời điểm</th><th>Digest</th></tr></thead>
       <tbody>{items.map((row,index)=><tr key={row.id}><td>{index+1}</td><td>{row.action}</td><td>{row.resource_id}</td><td>{row.actor_id}</td><td>{row.occurred_at}</td><td><code>{row.digest.slice(0,16)}…</code></td></tr>)}</tbody></table></div>
     <div className="actions"><button disabled={!connected||busy} onClick={()=>void load()}>Trang đầu</button><button disabled={!cursor||busy} onClick={()=>void load(cursor)}>Trang tiếp</button></div>
   </section>;

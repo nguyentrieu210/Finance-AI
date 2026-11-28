@@ -4311,6 +4311,7 @@ paths:
       tags: [E02, E03]
       summary: Submit verified email claim for an issued invitation
       x-release-gate: pilot
+      x-idempotent: true
       security:
       - oidc: []
       responses:
@@ -4347,6 +4348,7 @@ paths:
       tags: [E02, E03]
       summary: Issue or revoke a seven-day employee invitation
       x-release-gate: pilot
+      x-idempotent: true
       security:
       - oidc: []
       requestBody:
@@ -4432,6 +4434,7 @@ paths:
       tags: [E02, E03]
       summary: Approve or reject a verified employee request
       x-release-gate: pilot
+      x-idempotent: true
       security:
       - oidc: []
       requestBody:
@@ -4525,6 +4528,7 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]+$
       requestBody:
         required: true
         content:

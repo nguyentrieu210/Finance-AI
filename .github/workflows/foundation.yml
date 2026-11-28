@@ -24,6 +24,7 @@ jobs:
         run: |
           python3 -m venv .venv
           .venv/bin/pip install -r scripts/spec-requirements.txt
+          .venv/bin/python -m unittest discover -s scripts -p 'test_openapi_parameters.py'
           .venv/bin/python scripts/validate_spec.py
           .venv/bin/openapi-spec-validator contracts/openapi.yaml
           .venv/bin/python scripts/validate_http_contract.py
