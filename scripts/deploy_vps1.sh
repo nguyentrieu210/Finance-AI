@@ -6,7 +6,7 @@ export LC_ALL=C
 
 readonly REPO=/opt/finance-ai
 readonly BUILD_ROOT=/opt/namviet-finance-build
-readonly RUST_IMAGE=rust:1.85.1-slim-bookworm
+readonly RUST_IMAGE=rust:1.85.1-slim-bookworm@sha256:9f841bbe9e7d8e37ceb96ed907265a3a0df7f44e3737d0b100e7907a679acb36
 readonly CARGO_CACHE=/root/.cargo
 readonly API_BINARY=/usr/local/lib/namviet-finance/finance-api
 readonly API_UNIT=namviet-finance-api.service
