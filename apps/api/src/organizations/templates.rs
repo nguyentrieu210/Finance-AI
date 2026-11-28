@@ -38,6 +38,12 @@ pub struct Revise {
     reason: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreviewBody {
+    fixture_id: Uuid,
+}
+
 #[derive(Serialize)]
 struct Page {
     items: Vec<Template>,
@@ -201,6 +207,67 @@ pub(super) async fn list(
                 None
             };
             let mut response = Json(Page { items, next_cursor }).into_response();
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Err(error_value) => error(dossiers::status(error_value), correlation),
+    }
+}
+
+pub(super) async fn preview(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(template): Path<Uuid>,
+    body: Result<Json<PreviewBody>, JsonRejection>,
+) -> Response {
+    let correlation = random_id();
+    let Some(token) = headers
+        .get("if-finance-version")
+        .and_then(|header| header.to_str().ok())
+        .and_then(|value| VersionToken::parse(value).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    if token.target != VersionTarget::Template || Uuid::from(token.resource_id) != template {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let proof =
+        match dossiers::authenticate_version(&state, &headers, correlation, Some(token.version))
+            .await
+        {
+            Ok(proof) => proof,
+            Err(status) => return error(status, correlation),
+        };
+    let Some(key) = key(&headers) else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    match repository::preview(
+        &state.runtime,
+        &proof,
+        &key,
+        template,
+        body.fixture_id,
+        random_id(),
+    )
+    .await
+    {
+        Ok(job) => {
+            let version = Version::try_from(job.dossier_version).expect("stored template version");
+            let token = VersionToken {
+                target: VersionTarget::Template,
+                resource_id: ResourceId::try_from(template).expect("stored template id"),
+                version,
+            };
+            let mut response = (StatusCode::ACCEPTED, Json(job)).into_response();
+            response.headers_mut().insert(
+                "finance-version",
+                HeaderValue::from_str(&token.to_string()).expect("canonical header"),
+            );
             response
                 .headers_mut()
                 .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));

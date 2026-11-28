@@ -2861,3 +2861,439 @@ async fn revoke_membership(
     let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     (status, serde_json::from_slice(&bytes).unwrap(), next)
 }
+
+async fn post_contract(
+    app: &Router,
+    token: &str,
+    uri: &str,
+    key: &str,
+    version: Option<&str>,
+    body: Option<Value>,
+) -> (StatusCode, Value, Option<String>) {
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header("idempotency-key", key);
+    if let Some(version) = version {
+        builder = builder.header("if-finance-version", version);
+    }
+    let req = if let Some(payload) = body {
+        builder
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(payload.to_string()))
+            .unwrap()
+    } else {
+        builder.body(Body::empty()).unwrap()
+    };
+    let response = app.clone().oneshot(req).await.unwrap();
+    let status = response.status();
+    let next = response
+        .headers()
+        .get("finance-version")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let parsed = if bytes.is_empty() {
+        json!({})
+    } else {
+        serde_json::from_slice(&bytes).unwrap()
+    };
+    (status, parsed, next)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires disposable PostgreSQL and synthetic test credentials"]
+async fn complete_api_contracts_real_database() {
+    let runtime = PgPoolOptions::new()
+        .max_connections(3)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE finance_runtime")
+                    .execute(conn)
+                    .await?;
+                Ok(())
+            })
+        })
+        .connect(&std::env::var("FINANCE_PROTOTYPE_TEST_DATABASE_URL").unwrap())
+        .await
+        .unwrap();
+    let lookup = PgPoolOptions::new()
+        .max_connections(2)
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET ROLE finance_identity_lookup")
+                    .execute(conn)
+                    .await?;
+                Ok(())
+            })
+        })
+        .connect(&std::env::var("FINANCE_IDENTITY_TEST_DATABASE_URL").unwrap())
+        .await
+        .unwrap();
+    let key = RsaPrivateKey::new(&mut rand::rngs::OsRng, 2048).unwrap();
+    let jwks = json!({"keys":[{"kty":"RSA","kid":"http-test","alg":"RS256","n":URL_SAFE_NO_PAD.encode(key.n().to_bytes_be()),"e":URL_SAFE_NO_PAD.encode(key.e().to_bytes_be())}]}).to_string();
+    let verifier = VerifierStore::new(
+        Verifier::from_trusted_snapshot(
+            "https://synthetic.invalid",
+            "finance-api",
+            &jwks,
+            now(),
+            600,
+        )
+        .unwrap(),
+    );
+    let signer = EncodingKey::from_rsa_der(key.to_pkcs1_der().unwrap().as_bytes());
+    let mint = |sub: &str| {
+        let mut hdr = Header::new(Algorithm::RS256);
+        hdr.typ = Some("at+jwt".into());
+        hdr.kid = Some("http-test".into());
+        let time = now();
+        encode(
+            &hdr,
+            &json!({"iss":"https://synthetic.invalid","sub":sub,"aud":"finance-api","iat":time,"exp":time+300,"role":"ORG_ADMIN"}),
+            &signer,
+        )
+        .unwrap()
+    };
+    let requester = mint("requester");
+    let policy_admin = mint("policy-admin");
+    let approver = mint("form-checker");
+    let auditor = mint("auditor");
+    let scope = CompanyScope {
+        tenant: TenantId::try_from(id(1)).unwrap(),
+        company: CompanyId::try_from(id(10)).unwrap(),
+    };
+    let app = router(OrganizationState::synthetic(
+        runtime, lookup, verifier, scope, [73; 32],
+    ));
+
+    // 1. Dossier + 2 documents for upload-grant, finalize, OCR, classify, extract, supersede
+    let (ds_status, ds) = create_dossier(&app, &requester, "wave1-dossier-1", "PAYMENT").await;
+    assert_eq!(ds_status, StatusCode::CREATED);
+    let dossier_id = ds["id"].as_str().unwrap().to_string();
+
+    let (other_status, other_ds) =
+        create_dossier(&app, &requester, "wave1-dossier-2", "ADVANCE").await;
+    assert_eq!(other_status, StatusCode::CREATED);
+    let other_dossier_id = other_ds["id"].as_str().unwrap().to_string();
+
+    let docs_uri = format!("/v1/dossiers/{dossier_id}/documents");
+    let (d1_status, d1, d1_ver) =
+        create_document(&app, &requester, &docs_uri, &dossier_id, "w1-doc-1", 0, 512).await;
+    assert_eq!(d1_status, StatusCode::CREATED);
+    let doc1_id = d1["document_id"].as_str().unwrap().to_string();
+    let v1 = d1_ver.unwrap();
+
+    let (d2_status, d2, d2_ver) =
+        create_document(&app, &requester, &docs_uri, &dossier_id, "w1-doc-2", 1, 512).await;
+    assert_eq!(d2_status, StatusCode::CREATED);
+    let doc2_id = d2["document_id"].as_str().unwrap().to_string();
+    let mut ver = d2_ver.unwrap();
+
+    let grant_uri = format!("/v1/dossiers/{dossier_id}/documents/{doc1_id}/upload-grants");
+    let (g1_st, g1, g1_ver) =
+        post_contract(&app, &requester, &grant_uri, "w1-grant-1", Some(&ver), None).await;
+    assert_eq!(g1_st, StatusCode::CREATED);
+    assert_eq!(g1["document_id"], doc1_id);
+    assert_eq!(g1["generation"], 1);
+    assert_eq!(g1["checksum_sha256_base64"].as_str().unwrap().len(), 44);
+    assert_ne!(g1_ver.as_deref(), Some(ver.as_str()));
+
+    let (g1_replay_st, g1_replay, _) =
+        post_contract(&app, &requester, &grant_uri, "w1-grant-1", Some(&ver), None).await;
+    assert_eq!(g1_replay_st, StatusCode::CREATED);
+    assert_eq!(g1_replay["upload_url"], g1["upload_url"]);
+
+    let v_after_g1 = g1_ver.unwrap();
+    let (g2_st, g2, g2_ver) = post_contract(
+        &app,
+        &requester,
+        &grant_uri,
+        "w1-grant-2",
+        Some(&v_after_g1),
+        None,
+    )
+    .await;
+    assert_eq!(g2_st, StatusCode::CREATED);
+    assert_eq!(g2["generation"], 2);
+    ver = g2_ver.unwrap();
+
+    // Superseded grant replay must fail with 409 UPLOAD_GRANT_INACTIVE
+    let (sup_replay_st, sup_replay, _) = post_contract(
+        &app,
+        &requester,
+        &grant_uri,
+        "w1-grant-1",
+        Some(&v1),
+        None,
+    )
+    .await;
+    assert_eq!(sup_replay_st, StatusCode::CONFLICT);
+    assert_eq!(sup_replay["code"], "UPLOAD_GRANT_INACTIVE");
+
+    let finalize_uri = format!("/v1/dossiers/{dossier_id}/documents/{doc1_id}/finalize");
+    let (fin_st, fin_job, fin_ver) = post_contract(
+        &app,
+        &requester,
+        &finalize_uri,
+        "w1-finalize-1",
+        Some(&ver),
+        Some(json!({"sha256":"a".repeat(64),"generation":2})),
+    )
+    .await;
+    assert_eq!(fin_st, StatusCode::ACCEPTED);
+    assert_eq!(fin_job["state"], "QUEUED");
+    let fin_job_id = fin_job["id"].as_str().unwrap();
+    let (job_st, job_row) =
+        request(&app, &format!("/v1/jobs/{fin_job_id}"), Some(&requester)).await;
+    assert_eq!(job_st, StatusCode::OK);
+    assert_eq!(job_row["id"], fin_job_id);
+    ver = fin_ver.unwrap();
+
+    let (ocr_st, ocr_job, ocr_ver) = post_contract(
+        &app,
+        &requester,
+        &format!("/v1/dossiers/{dossier_id}/documents/{doc1_id}/ocr"),
+        "w1-ocr-1",
+        Some(&ver),
+        Some(json!({"reason":"Re-run synthetic OCR"})),
+    )
+    .await;
+    assert_eq!(ocr_st, StatusCode::ACCEPTED);
+    assert_eq!(ocr_job["state"], "QUEUED");
+    ver = ocr_ver.unwrap();
+
+    let (cls_st, cls_job, cls_ver) = post_contract(
+        &app,
+        &requester,
+        &format!("/v1/dossiers/{dossier_id}/documents/{doc1_id}/classify"),
+        "w1-cls-1",
+        Some(&ver),
+        Some(json!({"kind":"CONTRACT"})),
+    )
+    .await;
+    assert_eq!(cls_st, StatusCode::ACCEPTED);
+    assert_eq!(cls_job["state"], "QUEUED");
+    ver = cls_ver.unwrap();
+
+    let (ext_st, ext_job, ext_ver) = post_contract(
+        &app,
+        &requester,
+        &format!("/v1/dossiers/{dossier_id}/documents/{doc1_id}/extract"),
+        "w1-ext-1",
+        Some(&ver),
+        Some(json!({"reason":"Re-run structured extraction"})),
+    )
+    .await;
+    assert_eq!(ext_st, StatusCode::ACCEPTED);
+    assert_eq!(ext_job["state"], "QUEUED");
+    ver = ext_ver.unwrap();
+
+    let (sup_st, sup_dossier, sup_ver) = post_contract(
+        &app,
+        &requester,
+        &format!("/v1/dossiers/{dossier_id}/documents/{doc1_id}/supersede"),
+        "w1-sup-1",
+        Some(&ver),
+        Some(json!({"replacement_id":doc2_id,"reason":"Replaced by corrected invoice"})),
+    )
+    .await;
+    assert_eq!(sup_st, StatusCode::OK);
+    assert_eq!(sup_dossier["id"], dossier_id);
+    ver = sup_ver.unwrap();
+
+    // 2. Ready export download + signed content retrieval
+    let ready_dossier = "00000000-0000-0000-0000-000000001800";
+    let (exp_list_st, exp_list) = request(
+        &app,
+        &format!("/v1/dossiers/{ready_dossier}/exports?limit=10"),
+        Some(&requester),
+    )
+    .await;
+    assert_eq!(exp_list_st, StatusCode::OK);
+    let pkg_id = exp_list["items"][0]["id"].as_str().unwrap();
+    let (dl_st, dl) = request(
+        &app,
+        &format!("/v1/dossiers/{ready_dossier}/exports/{pkg_id}/download"),
+        Some(&requester),
+    )
+    .await;
+    assert_eq!(dl_st, StatusCode::OK);
+    let dl_url = dl["url"].as_str().unwrap();
+    let dl_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(dl_url)
+                .header(header::AUTHORIZATION, format!("Bearer {requester}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(dl_resp.status(), StatusCode::OK);
+    assert_eq!(
+        dl_resp
+            .headers()
+            .get("x-content-sha256")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        dl["sha256"].as_str().unwrap()
+    );
+    assert_eq!(
+        request(
+            &app,
+            &format!("/v1/dossiers/{ready_dossier}/exports/{pkg_id}/content?grant=tampered"),
+            Some(&requester),
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+
+    // 3. Template preview
+    let template_id = "00000000-0000-0000-0000-000000001804";
+    let (_, tpl_cur) = request(
+        &app,
+        &format!("/v1/templates/{template_id}"),
+        Some(&policy_admin),
+    )
+    .await;
+    let tpl_v = format!(
+        "\"v1:template:{template_id}:{}\"",
+        tpl_cur["version"].as_i64().unwrap()
+    );
+    let (prev_st, prev_job, prev_hdr) = post_contract(
+        &app,
+        &policy_admin,
+        &format!("/v1/templates/{template_id}/preview"),
+        "w1-tpl-preview-1",
+        Some(&tpl_v),
+        Some(json!({"fixture_id":"00000000-0000-0000-0000-000000001a02"})),
+    )
+    .await;
+    assert_eq!(prev_st, StatusCode::ACCEPTED);
+    assert_eq!(prev_job["state"], "QUEUED");
+    assert_eq!(prev_hdr.as_deref(), Some(tpl_v.as_str()));
+
+    // 4. Reference creation + incomplete guard + SoD verification
+    let evidence_id = "00000000-0000-0000-0000-000000002333";
+    let (partial_st, partial_job, _) = post_contract(
+        &app,
+        &requester,
+        "/v1/references",
+        "w1-ref-partial",
+        None,
+        Some(json!({
+            "document_id":"00000000-0000-0000-0000-000000001a02",
+            "kind":"CONTRACT",
+            "as_of":"2026-01-15T00:00:00Z",
+            "coverage":"PARTIAL"
+        })),
+    )
+    .await;
+    assert_eq!(partial_st, StatusCode::ACCEPTED);
+    let partial_ref = partial_job["id"].as_str().unwrap();
+    let (partial_v_st, _, _) = post_contract(
+        &app,
+        &approver,
+        &format!("/v1/references/{partial_ref}/verify"),
+        "w1-ref-verify-partial",
+        Some(&format!("\"v1:reference:{partial_ref}:0\"")),
+        Some(json!({"reason":"Attempt verify partial","evidence_ids":[evidence_id]})),
+    )
+    .await;
+    assert_eq!(partial_v_st, StatusCode::CONFLICT);
+
+    let (pay_ref_st, pay_ref_job, _) = post_contract(
+        &app,
+        &requester,
+        "/v1/references",
+        "w1-ref-pay-1",
+        None,
+        Some(json!({
+            "document_id":"00000000-0000-0000-0000-000000001a02",
+            "kind":"PAYMENT",
+            "as_of":"2026-01-15T00:00:00Z",
+            "coverage":"COMPLETE"
+        })),
+    )
+    .await;
+    assert_eq!(pay_ref_st, StatusCode::ACCEPTED);
+    let pay_ref_id = pay_ref_job["id"].as_str().unwrap();
+    let ref_v0 = format!("\"v1:reference:{pay_ref_id}:0\"");
+    assert_eq!(
+        post_contract(
+            &app,
+            &requester,
+            &format!("/v1/references/{pay_ref_id}/verify"),
+            "w1-ref-sod",
+            Some(&ref_v0),
+            Some(json!({"reason":"Self verify rejected","evidence_ids":[evidence_id]})),
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let (verify_st, verified, verify_ver) = post_contract(
+        &app,
+        &approver,
+        &format!("/v1/references/{pay_ref_id}/verify"),
+        "w1-ref-verify-pay",
+        Some(&ref_v0),
+        Some(json!({"reason":"Verified synthetic payment reference","evidence_ids":[evidence_id]})),
+    )
+    .await;
+    assert_eq!(verify_st, StatusCode::OK);
+    assert_eq!(verified["state"], "VERIFIED");
+    assert_eq!(verified["kind"], "PAYMENT");
+    assert_eq!(
+        verify_ver.as_deref(),
+        Some(format!("\"v1:reference:{pay_ref_id}:1\"").as_str())
+    );
+    assert_eq!(
+        request(&app, "/v1/references?limit=100", Some(&auditor)).await.0,
+        StatusCode::FORBIDDEN
+    );
+
+    // 5. Payment observation & fail-closed default on unobserved dossier
+    let (obs_st, obs, obs_ver) = post_contract(
+        &app,
+        &approver,
+        &format!("/v1/dossiers/{dossier_id}/payment-observations"),
+        "w1-pay-obs-1",
+        Some(&ver),
+        Some(json!({
+            "reference_id": pay_ref_id,
+            "evidence_ids": [evidence_id],
+            "reason": "Observed treasury disbursement statement"
+        })),
+    )
+    .await;
+    assert_eq!(obs_st, StatusCode::OK);
+    assert_eq!(obs["state"], "PAID");
+    assert_eq!(obs["confirmed_paid"]["amount"], "1000000");
+    assert_eq!(obs["confirmed_paid"]["currency"], "VND");
+    assert!(obs_ver.is_some());
+
+    let (paid_st, paid) = request(
+        &app,
+        &format!("/v1/dossiers/{dossier_id}/payment-status"),
+        Some(&requester),
+    )
+    .await;
+    assert_eq!(paid_st, StatusCode::OK);
+    assert_eq!(paid["state"], "PAID");
+    assert_eq!(paid["confirmed_paid"]["amount"], "1000000");
+
+    let (unk_st, unk) = request(
+        &app,
+        &format!("/v1/dossiers/{other_dossier_id}/payment-status"),
+        Some(&requester),
+    )
+    .await;
+    assert_eq!(unk_st, StatusCode::OK);
+    assert_eq!(unk["state"], "UNKNOWN");
+}

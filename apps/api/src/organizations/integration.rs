@@ -331,3 +331,73 @@ pub(super) async fn payment_status(
         Err(e) => error(dossiers::status(e), correlation),
     }
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct PaymentObservationBody {
+    reference_id: Uuid,
+    evidence_ids: Vec<Uuid>,
+    reason: String,
+}
+
+pub(super) async fn record_payment_observation(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(dossier): Path<Uuid>,
+    body: Result<Json<PaymentObservationBody>, JsonRejection>,
+) -> Response {
+    let correlation = random_id();
+    let Some(token) = headers
+        .get("if-finance-version")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| VersionToken::parse(s).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    if token.target != VersionTarget::Dossier || Uuid::from(token.resource_id) != dossier {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let proof =
+        match dossiers::authenticate_version(&state, &headers, correlation, Some(token.version))
+            .await
+        {
+            Ok(p) => p,
+            Err(s) => return error(s, correlation),
+        };
+    let Some(key) = key(&headers) else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    match repository::record_payment_observation(
+        &state.runtime,
+        &proof,
+        &key,
+        dossier,
+        body.reference_id,
+        &body.evidence_ids,
+        &body.reason,
+    )
+    .await
+    {
+        Ok(row) => {
+            let version = Version::try_from(row.dossier_version).expect("stored dossier version");
+            let receipt = VersionToken {
+                target: VersionTarget::Dossier,
+                resource_id: ResourceId::try_from(dossier).expect("path dossier"),
+                version,
+            };
+            let mut response = (StatusCode::OK, Json(row)).into_response();
+            response.headers_mut().insert(
+                "finance-version",
+                HeaderValue::from_str(&receipt.to_string()).expect("canonical"),
+            );
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Err(e) => error(dossiers::status(e), correlation),
+    }
+}

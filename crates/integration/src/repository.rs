@@ -436,11 +436,44 @@ pub async fn resolve_reconciliation(
     Ok(row)
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct Money {
+    pub amount: String,
+    pub currency: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct PaymentStatus {
     pub dossier_id: Uuid,
-    pub state: &'static str,
+    pub state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirmed_paid: Option<Money>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub as_of: Option<String>,
     pub evidence_ids: Vec<Uuid>,
+    #[serde(skip)]
+    pub dossier_version: i64,
+}
+
+#[derive(sqlx::FromRow)]
+struct PaymentStatusRow {
+    dossier_id: Uuid,
+    state: String,
+    amount: Option<String>,
+    currency: Option<String>,
+    as_of: Option<String>,
+    evidence_ids: Vec<Uuid>,
+}
+
+#[derive(sqlx::FromRow)]
+struct PaymentObservationRow {
+    dossier_id: Uuid,
+    state: String,
+    amount: String,
+    currency: String,
+    as_of: String,
+    evidence_ids: Vec<Uuid>,
+    dossier_version: i64,
 }
 
 /// Fail closed until an approved payment-to-dossier mapping exists.
@@ -455,24 +488,104 @@ pub async fn payment_status(
     }
     let (t, c, a) = binding(proof)?;
     let mut tx = scoped_transaction(pool, proof.context()).await?;
-    require_role(&mut tx, proof.context(), Role::Requester)
-        .await
-        .map_err(grant)?;
+    let roles = lock_roles(&mut tx, proof.context()).await.map_err(grant)?;
+    if !roles.contains(&Role::Requester) && !roles.contains(&Role::FinanceApprover) {
+        return Err(Error::Forbidden);
+    }
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let owned: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM finance.dossier WHERE tenant_id=$1 AND company_id=$2 AND owner_id=$3 AND id=$4)",
+    let row = sqlx::query_as::<_, PaymentStatusRow>(
+        "SELECT * FROM finance.runtime_payment_status($1,$2,$3,$4)",
     )
     .bind(t)
     .bind(c)
     .bind(a)
     .bind(dossier)
-    .fetch_one(&mut *tx)
+    .fetch_optional(&mut *tx)
     .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
-    Ok(owned.then_some(PaymentStatus {
-        dossier_id: dossier,
-        state: "UNKNOWN",
-        evidence_ids: Vec::new(),
+    Ok(row.map(|r| PaymentStatus {
+        dossier_id: r.dossier_id,
+        state: r.state,
+        confirmed_paid: r
+            .amount
+            .zip(r.currency)
+            .map(|(amount, currency)| Money { amount, currency }),
+        as_of: r.as_of,
+        evidence_ids: r.evidence_ids,
+        dossier_version: 0,
     }))
+}
+
+pub async fn record_payment_observation(
+    pool: &sqlx::PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    dossier: Uuid,
+    reference_id: Uuid,
+    evidence_ids: &[Uuid],
+    reason: &str,
+) -> Result<PaymentStatus, Error> {
+    if dossier.is_nil()
+        || reference_id.is_nil()
+        || evidence_ids.is_empty()
+        || evidence_ids.len() > 50
+        || evidence_ids.iter().any(Uuid::is_nil)
+        || reason.trim().is_empty()
+        || reason.len() > 4096
+    {
+        return Err(Error::InvalidInput);
+    }
+    let expected = i64::from(
+        proof
+            .context()
+            .expected_version
+            .ok_or(Error::InvalidInput)?,
+    );
+    let (t, c, a) = binding(proof)?;
+    let command: Uuid = proof.context().command.into();
+    let correlation: Uuid = proof.context().correlation.into();
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::FinanceApprover)
+        .await
+        .map_err(grant)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let row = sqlx::query_as::<_, PaymentObservationRow>(
+        "SELECT * FROM finance.runtime_record_payment_observation($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(dossier)
+    .bind(expected)
+    .bind(reference_id)
+    .bind(evidence_ids)
+    .bind(reason)
+    .bind(key.as_str())
+    .bind(command)
+    .bind(correlation)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|error| match &error {
+        sqlx::Error::Database(db) => match db.code().as_deref() {
+            Some("22023") => Error::InvalidInput,
+            Some("42501") => Error::Forbidden,
+            Some("23505") => Error::Conflict,
+            _ => Error::Database(error),
+        },
+        _ => Error::Database(error),
+    })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(PaymentStatus {
+        dossier_id: row.dossier_id,
+        state: row.state,
+        confirmed_paid: Some(Money {
+            amount: row.amount,
+            currency: row.currency,
+        }),
+        as_of: Some(row.as_of),
+        evidence_ids: row.evidence_ids,
+        dossier_version: row.dossier_version,
+    })
 }

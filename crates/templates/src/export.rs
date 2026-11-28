@@ -351,3 +351,82 @@ pub async fn complete(
     tx.commit().await?;
     Ok(version)
 }
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, sqlx::FromRow)]
+pub struct ExportPackage {
+    pub package_id: Uuid,
+    pub snapshot_id: Uuid,
+    pub template_id: Uuid,
+    pub sha256: String,
+    pub artifact_count: i32,
+    pub artifact_bytes: i64,
+}
+
+pub async fn export_manifest(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    dossier: Uuid,
+    package: Uuid,
+) -> Result<Option<String>, Error> {
+    if dossier.is_nil() || package.is_nil() {
+        return Err(Error::InvalidInput);
+    }
+    let (t, c, a) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(|error| match error {
+            GrantError::Forbidden => Error::Forbidden,
+            GrantError::Database(error) => Error::Database(error),
+        })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let digest: Option<String> =
+        sqlx::query_scalar("SELECT finance.runtime_export_manifest($1,$2,$3,$4,$5)")
+            .bind(t)
+            .bind(c)
+            .bind(a)
+            .bind(dossier)
+            .bind(package)
+            .fetch_one(&mut *tx)
+            .await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(digest)
+}
+
+pub async fn download_export(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    dossier: Uuid,
+    package: Uuid,
+) -> Result<Option<ExportPackage>, Error> {
+    if dossier.is_nil() || package.is_nil() {
+        return Err(Error::InvalidInput);
+    }
+    let (t, c, a) = binding(proof)?;
+    let command: Uuid = proof.context().command.into();
+    let correlation: Uuid = proof.context().correlation.into();
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(|error| match error {
+            GrantError::Forbidden => Error::Forbidden,
+            GrantError::Database(error) => Error::Database(error),
+        })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let row = sqlx::query_as::<_, ExportPackage>(
+        "SELECT * FROM finance.runtime_download_export($1,$2,$3,$4,$5,$6,$7)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(dossier)
+    .bind(package)
+    .bind(command)
+    .bind(correlation)
+    .fetch_optional(&mut *tx)
+    .await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(row)
+}

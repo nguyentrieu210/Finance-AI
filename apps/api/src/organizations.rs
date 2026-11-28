@@ -140,6 +140,23 @@ struct Failure {
     correlation_id: Uuid,
 }
 
+fn error_with(
+    status: StatusCode,
+    code: &'static str,
+    message: &'static str,
+    correlation_id: Uuid,
+) -> Response {
+    (
+        status,
+        Json(Failure {
+            code,
+            message,
+            correlation_id,
+        }),
+    )
+        .into_response()
+}
+
 fn error(status: StatusCode, correlation_id: Uuid) -> Response {
     let (code, message) = match status {
         StatusCode::UNAUTHORIZED => ("UNAUTHENTICATED", "Authentication required"),
@@ -150,15 +167,7 @@ fn error(status: StatusCode, correlation_id: Uuid) -> Response {
         StatusCode::NOT_FOUND => ("NOT_FOUND", "Resource not found"),
         _ => ("UNAVAILABLE", "Dependency unavailable"),
     };
-    (
-        status,
-        Json(Failure {
-            code,
-            message,
-            correlation_id,
-        }),
-    )
-        .into_response()
+    error_with(status, code, message, correlation_id)
 }
 
 fn random_id() -> Uuid {
@@ -489,6 +498,30 @@ pub fn router(state: OrganizationState) -> Router {
             get(documents::list).post(documents::create),
         )
         .route(
+            "/v1/dossiers/{dossier_id}/documents/{document_id}/upload-grants",
+            axum::routing::post(documents::issue_upload_grant),
+        )
+        .route(
+            "/v1/dossiers/{dossier_id}/documents/{document_id}/finalize",
+            axum::routing::post(documents::finalize),
+        )
+        .route(
+            "/v1/dossiers/{dossier_id}/documents/{document_id}/supersede",
+            axum::routing::post(documents::supersede),
+        )
+        .route(
+            "/v1/dossiers/{dossier_id}/documents/{document_id}/ocr",
+            axum::routing::post(documents::rerun_ocr),
+        )
+        .route(
+            "/v1/dossiers/{dossier_id}/documents/{document_id}/classify",
+            axum::routing::post(documents::classify),
+        )
+        .route(
+            "/v1/dossiers/{dossier_id}/documents/{document_id}/extract",
+            axum::routing::post(documents::extract),
+        )
+        .route(
             "/v1/dossiers/{dossier_id}/documents/{document_id}/download",
             get(documents::download),
         )
@@ -532,6 +565,14 @@ pub fn router(state: OrganizationState) -> Router {
             get(exports::list).post(exports::create),
         )
         .route(
+            "/v1/dossiers/{dossier_id}/exports/{package_id}/download",
+            get(exports::download),
+        )
+        .route(
+            "/v1/dossiers/{dossier_id}/exports/{package_id}/content",
+            get(exports::content),
+        )
+        .route(
             "/v1/dossiers/{dossier_id}/begin-review",
             axum::routing::post(reviews::begin),
         )
@@ -568,6 +609,10 @@ pub fn router(state: OrganizationState) -> Router {
             "/v1/templates/{item_id}/revise",
             axum::routing::post(templates::revise),
         )
+        .route(
+            "/v1/templates/{item_id}/preview",
+            axum::routing::post(templates::preview),
+        )
         .route("/v1/policies", get(policies::list).post(policies::create))
         .route("/v1/policies/{item_id}", get(policies::get))
         .route(
@@ -590,8 +635,12 @@ pub fn router(state: OrganizationState) -> Router {
             "/v1/policies/{item_id}/revise",
             axum::routing::post(policies::revise),
         )
-        .route("/v1/references", get(references::all))
+        .route("/v1/references", get(references::all).post(references::create))
         .route("/v1/references/{item_id}", get(references::get))
+        .route(
+            "/v1/references/{item_id}/verify",
+            axum::routing::post(references::verify),
+        )
         .route("/v1/contracts", get(references::contracts))
         .route("/v1/advances", get(references::advances))
         .route("/v1/budgets", get(references::budgets))
@@ -627,6 +676,10 @@ pub fn router(state: OrganizationState) -> Router {
         .route(
             "/v1/dossiers/{dossier_id}/payment-status",
             get(integration::payment_status),
+        )
+        .route(
+            "/v1/dossiers/{dossier_id}/payment-observations",
+            axum::routing::post(integration::record_payment_observation),
         )
         .route("/v1/reconciliation", get(integration::list_reconciliation))
         .route(

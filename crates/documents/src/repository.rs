@@ -310,3 +310,288 @@ pub async fn download_original(
     tx.commit().await?;
     Ok(original)
 }
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, sqlx::FromRow)]
+pub struct UploadGrant {
+    pub document_id: Uuid,
+    pub generation: i64,
+    pub upload_url: String,
+    pub expires_at: String,
+    pub content_type: String,
+    pub checksum_sha256_base64: String,
+    #[serde(skip)]
+    pub dossier_version: i64,
+}
+
+#[derive(Debug)]
+pub enum UploadGrantError {
+    Inactive,
+    Core(Error),
+}
+
+impl From<Error> for UploadGrantError {
+    fn from(value: Error) -> Self {
+        Self::Core(value)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, sqlx::FromRow)]
+pub struct PipelineJob {
+    pub id: Uuid,
+    pub state: String,
+    pub attempt: i64,
+    pub progress: i64,
+    #[serde(skip)]
+    pub dossier_version: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, sqlx::FromRow)]
+pub struct SupersededDossier {
+    pub id: Uuid,
+    pub company_id: Uuid,
+    pub code: String,
+    pub kind: String,
+    pub status: String,
+    pub revision: i64,
+    pub version: i64,
+    pub owner_id: Uuid,
+    pub updated_at: String,
+}
+
+fn map_pg_error(error: sqlx::Error) -> Error {
+    match &error {
+        sqlx::Error::Database(db) => match db.code().as_deref() {
+            Some("22023") => Error::InvalidInput,
+            Some("42501") => Error::Forbidden,
+            Some("23505") => Error::Conflict,
+            _ => Error::Database(error),
+        },
+        _ => Error::Database(error),
+    }
+}
+
+pub async fn issue_upload_grant(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    dossier: Uuid,
+    document: Uuid,
+) -> Result<UploadGrant, UploadGrantError> {
+    if dossier.is_nil() || document.is_nil() {
+        return Err(UploadGrantError::Core(Error::InvalidInput));
+    }
+    let expected = i64::from(
+        proof
+            .context()
+            .expected_version
+            .ok_or(UploadGrantError::Core(Error::InvalidInput))?,
+    );
+    let (t, c, a) = binding(proof)?;
+    let command: Uuid = proof.context().command.into();
+    let correlation: Uuid = proof.context().correlation.into();
+    let mut tx = scoped_transaction(pool, proof.context())
+        .await
+        .map_err(UploadGrantError::from)?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(|e| UploadGrantError::Core(grant_error(e)))?;
+    recheck_authenticated(&mut tx, Some(proof))
+        .await
+        .map_err(UploadGrantError::from)?;
+    let result = sqlx::query_as::<_, UploadGrant>(
+        "SELECT * FROM finance.runtime_issue_upload_grant($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(dossier)
+    .bind(document)
+    .bind(expected)
+    .bind(key.as_str())
+    .bind(command)
+    .bind(correlation)
+    .fetch_one(&mut *tx)
+    .await;
+    let grant = match result {
+        Ok(row) => row,
+        Err(sqlx::Error::Database(db))
+            if db.code().as_deref() == Some("P0001")
+                && db.message().contains("UPLOAD_GRANT_INACTIVE") =>
+        {
+            return Err(UploadGrantError::Inactive);
+        }
+        Err(err) => return Err(UploadGrantError::Core(map_pg_error(err))),
+    };
+    recheck_authenticated(&mut tx, Some(proof))
+        .await
+        .map_err(UploadGrantError::from)?;
+    tx.commit()
+        .await
+        .map_err(|e| UploadGrantError::Core(Error::Database(e)))?;
+    Ok(grant)
+}
+
+pub async fn finalize(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    dossier: Uuid,
+    document: Uuid,
+    sha256: &str,
+    generation: i64,
+    job_id: Uuid,
+) -> Result<PipelineJob, Error> {
+    if dossier.is_nil()
+        || document.is_nil()
+        || job_id.is_nil()
+        || generation < 1
+        || Sha256Digest::parse(sha256).is_err()
+    {
+        return Err(Error::InvalidInput);
+    }
+    let expected = i64::from(
+        proof
+            .context()
+            .expected_version
+            .ok_or(Error::InvalidInput)?,
+    );
+    let (t, c, a) = binding(proof)?;
+    let command: Uuid = proof.context().command.into();
+    let correlation: Uuid = proof.context().correlation.into();
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(grant_error)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let row = sqlx::query_as::<_, PipelineJob>(
+        "SELECT * FROM finance.runtime_finalize_document($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(dossier)
+    .bind(document)
+    .bind(expected)
+    .bind(sha256)
+    .bind(generation)
+    .bind(key.as_str())
+    .bind(job_id)
+    .bind(command)
+    .bind(correlation)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(map_pg_error)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(row)
+}
+
+pub async fn supersede(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    dossier: Uuid,
+    document: Uuid,
+    replacement_id: Uuid,
+    reason: &str,
+) -> Result<SupersededDossier, Error> {
+    if dossier.is_nil()
+        || document.is_nil()
+        || replacement_id.is_nil()
+        || document == replacement_id
+        || reason.trim().is_empty()
+        || reason.len() > 4096
+    {
+        return Err(Error::InvalidInput);
+    }
+    let expected = i64::from(
+        proof
+            .context()
+            .expected_version
+            .ok_or(Error::InvalidInput)?,
+    );
+    let (t, c, a) = binding(proof)?;
+    let command: Uuid = proof.context().command.into();
+    let correlation: Uuid = proof.context().correlation.into();
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(grant_error)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let row = sqlx::query_as::<_, SupersededDossier>(
+        "SELECT * FROM finance.runtime_supersede_document($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(dossier)
+    .bind(document)
+    .bind(expected)
+    .bind(replacement_id)
+    .bind(reason)
+    .bind(key.as_str())
+    .bind(command)
+    .bind(correlation)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(map_pg_error)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(row)
+}
+
+pub async fn request_pipeline_job(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    dossier: Uuid,
+    document: Uuid,
+    operation: &str,
+    value: &str,
+    job_id: Uuid,
+) -> Result<PipelineJob, Error> {
+    if dossier.is_nil()
+        || document.is_nil()
+        || job_id.is_nil()
+        || value.trim().is_empty()
+        || value.len() > 4096
+        || !matches!(operation, "document.ocr" | "document.classify" | "document.extract")
+    {
+        return Err(Error::InvalidInput);
+    }
+    let expected = i64::from(
+        proof
+            .context()
+            .expected_version
+            .ok_or(Error::InvalidInput)?,
+    );
+    let (t, c, a) = binding(proof)?;
+    let command: Uuid = proof.context().command.into();
+    let correlation: Uuid = proof.context().correlation.into();
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::Requester)
+        .await
+        .map_err(grant_error)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let row = sqlx::query_as::<_, PipelineJob>(
+        "SELECT * FROM finance.runtime_document_pipeline_job($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(dossier)
+    .bind(document)
+    .bind(expected)
+    .bind(operation)
+    .bind(value)
+    .bind(key.as_str())
+    .bind(job_id)
+    .bind(command)
+    .bind(correlation)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(map_pg_error)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(row)
+}

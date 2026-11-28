@@ -351,3 +351,82 @@ pub async fn get(
     tx.commit().await?;
     Ok(row)
 }
+
+#[derive(sqlx::FromRow)]
+struct PreviewRow {
+    id: Uuid,
+    state: String,
+    attempt: i64,
+    progress: i64,
+    template_version: i64,
+}
+
+pub async fn preview(
+    pool: &sqlx::PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    template: Uuid,
+    fixture_id: Uuid,
+    job_id: Uuid,
+) -> Result<super::export::Job, Error> {
+    if template.is_nil() || fixture_id.is_nil() || job_id.is_nil() {
+        return Err(Error::InvalidInput);
+    }
+    let expected = i64::from(
+        proof
+            .context()
+            .expected_version
+            .ok_or(Error::InvalidInput)?,
+    );
+    let (t, c, a) = binding(proof)?;
+    let command: Uuid = proof.context().command.into();
+    let correlation: Uuid = proof.context().correlation.into();
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::PolicyAdmin)
+        .await
+        .map_err(|error| match error {
+            GrantError::Forbidden => Error::Forbidden,
+            GrantError::Database(error) => Error::Database(error),
+        })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let row = sqlx::query_as::<_, PreviewRow>(
+        "SELECT * FROM finance.runtime_preview_template($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(template)
+    .bind(expected)
+    .bind(fixture_id)
+    .bind(key.as_str())
+    .bind(job_id)
+    .bind(command)
+    .bind(correlation)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|error| match &error {
+        sqlx::Error::Database(db) => match db.code().as_deref() {
+            Some("22023") => Error::InvalidInput,
+            Some("42501") => Error::Forbidden,
+            Some("23505") => Error::Conflict,
+            _ => Error::Database(error),
+        },
+        _ => Error::Database(error),
+    })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    let state = match row.state.as_str() {
+        "RUNNING" => "RUNNING",
+        "SUCCEEDED" => "SUCCEEDED",
+        "DEAD_LETTER" => "DEAD_LETTER",
+        _ => "QUEUED",
+    };
+    Ok(super::export::Job {
+        id: row.id,
+        state,
+        attempt: row.attempt,
+        progress: row.progress,
+        error_code: None,
+        dossier_version: row.template_version,
+    })
+}

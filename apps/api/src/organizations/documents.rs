@@ -1,6 +1,8 @@
 //! Metadata-only document routes in the injected synthetic router.
 use super::dossiers::{authenticate_version, status};
-use super::{OrganizationState, decode_cursor, encode_cursor, error, now, random_id};
+use super::{
+    OrganizationState, decode_cursor, encode_cursor, error, error_with, now, random_id,
+};
 use axum::{
     Json,
     extract::{
@@ -10,7 +12,8 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use finance_documents::repository::{self, Document, Metadata};
+use finance_documents::repository::{self, Document, Metadata, UploadGrantError};
+use finance_identity::AuthenticatedCommand;
 use finance_shared::{
     contracts::{Principal, Version},
     http_contract::{IdempotencyKey, VersionTarget, VersionToken},
@@ -29,6 +32,83 @@ pub struct Create {
     bytes: u64,
     sha256: String,
     kind: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FinalizeBody {
+    sha256: String,
+    generation: i64,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SupersedeBody {
+    replacement_id: Uuid,
+    reason: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReasonBody {
+    reason: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClassifyBody {
+    kind: String,
+}
+
+async fn authorize_dossier_command(
+    state: &OrganizationState,
+    headers: &HeaderMap,
+    dossier: Uuid,
+    correlation: Uuid,
+) -> Result<(AuthenticatedCommand, IdempotencyKey), Response> {
+    let Some(token) = headers
+        .get("if-finance-version")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| VersionToken::parse(s).ok())
+    else {
+        return Err(error(StatusCode::BAD_REQUEST, correlation));
+    };
+    if token.target != VersionTarget::Dossier || Uuid::from(token.resource_id) != dossier {
+        return Err(error(StatusCode::BAD_REQUEST, correlation));
+    }
+    let proof = authenticate_version(state, headers, correlation, Some(token.version))
+        .await
+        .map_err(|s| error(s, correlation))?;
+    let Some(key) = headers
+        .get("idempotency-key")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| IdempotencyKey::parse(s).ok())
+    else {
+        return Err(error(StatusCode::BAD_REQUEST, correlation));
+    };
+    Ok((proof, key))
+}
+
+fn dossier_versioned<T: Serialize>(
+    code: StatusCode,
+    dossier: Uuid,
+    version_num: i64,
+    payload: T,
+) -> Response {
+    let token = VersionToken {
+        target: VersionTarget::Dossier,
+        resource_id: ResourceId::try_from(dossier).expect("stored nonnil dossier id"),
+        version: Version::try_from(version_num).expect("stored version"),
+    };
+    let mut response = (code, Json(payload)).into_response();
+    response.headers_mut().insert(
+        "finance-version",
+        HeaderValue::from_str(&token.to_string()).expect("canonical header"),
+    );
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
 }
 
 #[derive(Deserialize)]
@@ -52,29 +132,12 @@ pub async fn create(
     body: Result<Json<Create>, JsonRejection>,
 ) -> Response {
     let correlation = random_id();
-    let Some(token) = headers
-        .get("if-finance-version")
-        .and_then(|h| h.to_str().ok())
-        .and_then(|s| VersionToken::parse(s).ok())
-    else {
-        return error(StatusCode::BAD_REQUEST, correlation);
-    };
-    if token.target != VersionTarget::Dossier || Uuid::from(token.resource_id) != dossier {
-        return error(StatusCode::BAD_REQUEST, correlation);
-    }
-    let proof = match authenticate_version(&state, &headers, correlation, Some(token.version)).await
+    let (proof, key) = match authorize_dossier_command(&state, &headers, dossier, correlation).await
     {
-        Ok(p) => p,
-        Err(s) => return error(s, correlation),
+        Ok(pair) => pair,
+        Err(resp) => return resp,
     };
     let Ok(Json(body)) = body else {
-        return error(StatusCode::BAD_REQUEST, correlation);
-    };
-    let Some(key) = headers
-        .get("idempotency-key")
-        .and_then(|h| h.to_str().ok())
-        .and_then(|s| IdempotencyKey::parse(s).ok())
-    else {
         return error(StatusCode::BAD_REQUEST, correlation);
     };
     let input = Metadata {
@@ -86,23 +149,194 @@ pub async fn create(
     };
     match repository::create(&state.runtime, &proof, &key, dossier, random_id(), &input).await {
         Ok(receipt) => {
-            let token = VersionToken {
-                target: VersionTarget::Dossier,
-                resource_id: ResourceId::try_from(dossier).expect("stored nonnil ID"),
-                version: Version::try_from(receipt.version).expect("stored version"),
-            };
-            let mut response = (StatusCode::CREATED, Json(receipt)).into_response();
-            response.headers_mut().insert(
-                "finance-version",
-                HeaderValue::from_str(&token.to_string()).expect("canonical header"),
-            );
-            response
-                .headers_mut()
-                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-            response
+            let version = receipt.version;
+            dossier_versioned(StatusCode::CREATED, dossier, version, receipt)
         }
         Err(e) => error(status(e), correlation),
     }
+}
+
+pub(super) async fn issue_upload_grant(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path((dossier, document)): Path<(Uuid, Uuid)>,
+) -> Response {
+    let correlation = random_id();
+    let (proof, key) = match authorize_dossier_command(&state, &headers, dossier, correlation).await
+    {
+        Ok(pair) => pair,
+        Err(resp) => return resp,
+    };
+    match repository::issue_upload_grant(&state.runtime, &proof, &key, dossier, document).await {
+        Ok(grant) => {
+            let version = grant.dossier_version;
+            dossier_versioned(StatusCode::CREATED, dossier, version, grant)
+        }
+        Err(UploadGrantError::Inactive) => error_with(
+            StatusCode::CONFLICT,
+            "UPLOAD_GRANT_INACTIVE",
+            "Upload grant expired or superseded",
+            correlation,
+        ),
+        Err(UploadGrantError::Core(e)) => error(status(e), correlation),
+    }
+}
+
+pub(super) async fn finalize(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path((dossier, document)): Path<(Uuid, Uuid)>,
+    body: Result<Json<FinalizeBody>, JsonRejection>,
+) -> Response {
+    let correlation = random_id();
+    let (proof, key) = match authorize_dossier_command(&state, &headers, dossier, correlation).await
+    {
+        Ok(pair) => pair,
+        Err(resp) => return resp,
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    match repository::finalize(
+        &state.runtime,
+        &proof,
+        &key,
+        dossier,
+        document,
+        &body.sha256,
+        body.generation,
+        random_id(),
+    )
+    .await
+    {
+        Ok(job) => {
+            let version = job.dossier_version;
+            dossier_versioned(StatusCode::ACCEPTED, dossier, version, job)
+        }
+        Err(e) => error(status(e), correlation),
+    }
+}
+
+pub(super) async fn supersede(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path((dossier, document)): Path<(Uuid, Uuid)>,
+    body: Result<Json<SupersedeBody>, JsonRejection>,
+) -> Response {
+    let correlation = random_id();
+    let (proof, key) = match authorize_dossier_command(&state, &headers, dossier, correlation).await
+    {
+        Ok(pair) => pair,
+        Err(resp) => return resp,
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    match repository::supersede(
+        &state.runtime,
+        &proof,
+        &key,
+        dossier,
+        document,
+        body.replacement_id,
+        &body.reason,
+    )
+    .await
+    {
+        Ok(updated) => {
+            let version = updated.version;
+            dossier_versioned(StatusCode::OK, dossier, version, updated)
+        }
+        Err(e) => error(status(e), correlation),
+    }
+}
+
+async fn run_pipeline(
+    state: Arc<OrganizationState>,
+    headers: HeaderMap,
+    dossier: Uuid,
+    document: Uuid,
+    operation: &str,
+    value: Option<String>,
+) -> Response {
+    let correlation = random_id();
+    let (proof, key) = match authorize_dossier_command(&state, &headers, dossier, correlation).await
+    {
+        Ok(pair) => pair,
+        Err(resp) => return resp,
+    };
+    let Some(value) = value else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    match repository::request_pipeline_job(
+        &state.runtime,
+        &proof,
+        &key,
+        dossier,
+        document,
+        operation,
+        &value,
+        random_id(),
+    )
+    .await
+    {
+        Ok(job) => {
+            let version = job.dossier_version;
+            dossier_versioned(StatusCode::ACCEPTED, dossier, version, job)
+        }
+        Err(e) => error(status(e), correlation),
+    }
+}
+
+pub(super) async fn rerun_ocr(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path((dossier, document)): Path<(Uuid, Uuid)>,
+    body: Result<Json<ReasonBody>, JsonRejection>,
+) -> Response {
+    run_pipeline(
+        state,
+        headers,
+        dossier,
+        document,
+        "document.ocr",
+        body.ok().map(|Json(b)| b.reason),
+    )
+    .await
+}
+
+pub(super) async fn classify(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path((dossier, document)): Path<(Uuid, Uuid)>,
+    body: Result<Json<ClassifyBody>, JsonRejection>,
+) -> Response {
+    run_pipeline(
+        state,
+        headers,
+        dossier,
+        document,
+        "document.classify",
+        body.ok().map(|Json(b)| b.kind),
+    )
+    .await
+}
+
+pub(super) async fn extract(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path((dossier, document)): Path<(Uuid, Uuid)>,
+    body: Result<Json<ReasonBody>, JsonRejection>,
+) -> Response {
+    run_pipeline(
+        state,
+        headers,
+        dossier,
+        document,
+        "document.extract",
+        body.ok().map(|Json(b)| b.reason),
+    )
+    .await
 }
 
 pub async fn list(

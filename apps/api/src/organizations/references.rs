@@ -1,23 +1,42 @@
-//! Approved reference list endpoints for contracts, advances and budgets.
+//! Approved and manual reference endpoints for contracts, advances, budgets and payment refs.
 use super::{
     OrganizationState, PageQuery, decode_cursor, dossiers, encode_cursor, error, now, random_id,
 };
 use axum::{
     Json,
-    extract::{Path, Query, State, rejection::QueryRejection},
+    extract::{
+        Path, Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use finance_financial::references::Reference;
+use finance_financial::references::{Reference, ReferenceReceipt};
 use finance_shared::{
     contracts::{Principal, Version},
-    http_contract::{VersionTarget, VersionToken},
+    http_contract::{IdempotencyKey, VersionTarget, VersionToken},
     ids::ResourceId,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use uuid::Uuid;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct CreateBody {
+    document_id: Uuid,
+    kind: String,
+    as_of: String,
+    coverage: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct VerifyBody {
+    reason: String,
+    evidence_ids: Vec<Uuid>,
+}
 
 #[derive(Serialize)]
 struct Page {
@@ -145,6 +164,23 @@ pub(super) async fn all(
     list_kind(state, headers, query, Kind::All).await
 }
 
+fn receipt(reference: ReferenceReceipt) -> Response {
+    let token = VersionToken {
+        target: VersionTarget::Reference,
+        resource_id: ResourceId::try_from(reference.id).expect("stored reference"),
+        version: Version::try_from(reference.version).expect("stored reference version"),
+    };
+    let mut response = Json(reference).into_response();
+    response.headers_mut().insert(
+        "finance-version",
+        HeaderValue::from_str(&token.to_string()).expect("canonical"),
+    );
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
 pub(super) async fn get(
     State(state): State<Arc<OrganizationState>>,
     headers: HeaderMap,
@@ -156,23 +192,104 @@ pub(super) async fn get(
         Err(status) => return error(status, correlation),
     };
     match finance_financial::references::get(&state.runtime, &proof, id).await {
-        Ok(Some(reference)) => {
-            let token = VersionToken {
-                target: VersionTarget::Reference,
-                resource_id: ResourceId::try_from(reference.id).expect("stored reference"),
-                version: Version::try_from(0).expect("immutable reference version"),
-            };
-            let mut response = Json(reference).into_response();
-            response.headers_mut().insert(
-                "finance-version",
-                HeaderValue::from_str(&token.to_string()).expect("canonical"),
-            );
+        Ok(Some(reference)) => receipt(reference),
+        Ok(None) => error(StatusCode::NOT_FOUND, correlation),
+        Err(value) => error(dossiers::status(value), correlation),
+    }
+}
+
+pub(super) async fn create(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    body: Result<Json<CreateBody>, JsonRejection>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match dossiers::authenticate_version(&state, &headers, correlation, None).await {
+        Ok(proof) => proof,
+        Err(status) => return error(status, correlation),
+    };
+    let Some(key) = headers
+        .get("idempotency-key")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| IdempotencyKey::parse(value).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let Ok(parsed_as_of) = chrono::DateTime::parse_from_rfc3339(&body.as_of) else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let as_of = parsed_as_of.with_timezone(&chrono::Utc).to_rfc3339();
+    match finance_financial::references::create(
+        &state.runtime,
+        &proof,
+        &key,
+        body.document_id,
+        &body.kind,
+        &as_of,
+        &body.coverage,
+        random_id(),
+    )
+    .await
+    {
+        Ok(job) => {
+            let mut response = (StatusCode::ACCEPTED, Json(job)).into_response();
             response
                 .headers_mut()
                 .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
             response
         }
-        Ok(None) => error(StatusCode::NOT_FOUND, correlation),
+        Err(value) => error(dossiers::status(value), correlation),
+    }
+}
+
+pub(super) async fn verify(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    body: Result<Json<VerifyBody>, JsonRejection>,
+) -> Response {
+    let correlation = random_id();
+    let Some(token) = headers
+        .get("if-finance-version")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| VersionToken::parse(value).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    if token.target != VersionTarget::Reference || Uuid::from(token.resource_id) != id {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let proof =
+        match dossiers::authenticate_version(&state, &headers, correlation, Some(token.version))
+            .await
+        {
+            Ok(proof) => proof,
+            Err(status) => return error(status, correlation),
+        };
+    let Some(key) = headers
+        .get("idempotency-key")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| IdempotencyKey::parse(value).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    match finance_financial::references::verify(
+        &state.runtime,
+        &proof,
+        &key,
+        id,
+        &body.reason,
+        &body.evidence_ids,
+    )
+    .await
+    {
+        Ok(reference) => receipt(reference),
         Err(value) => error(dossiers::status(value), correlation),
     }
 }
