@@ -111,6 +111,16 @@ pub(super) async fn get(
     }
 }
 
+fn deserialize_utc<'de, D>(deserializer: D) -> Result<chrono::DateTime<chrono::Utc>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = String::deserialize(deserializer)?;
+    chrono::DateTime::parse_from_rfc3339(&raw)
+        .map(|value| value.with_timezone(&chrono::Utc))
+        .map_err(serde::de::Error::custom)
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Reason {
@@ -121,6 +131,7 @@ pub(super) struct Reason {
 #[serde(deny_unknown_fields)]
 pub(super) struct Publish {
     reason: String,
+    #[serde(deserialize_with = "deserialize_utc")]
     effective_from: chrono::DateTime<chrono::Utc>,
 }
 
@@ -129,6 +140,7 @@ pub(super) struct Publish {
 pub(super) struct Revise {
     name: String,
     reason: String,
+    #[serde(deserialize_with = "deserialize_utc")]
     effective_from: chrono::DateTime<chrono::Utc>,
 }
 
@@ -306,7 +318,9 @@ pub(super) struct Create {
     company_id: Uuid,
     name: String,
     dossier_kind: String,
+    #[serde(deserialize_with = "deserialize_utc")]
     effective_from: chrono::DateTime<chrono::Utc>,
+    #[serde(deserialize_with = "deserialize_utc")]
     effective_to: chrono::DateTime<chrono::Utc>,
     source_document_id: Uuid,
     clauses: Vec<Clause>,
