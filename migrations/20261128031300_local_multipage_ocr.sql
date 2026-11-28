@@ -2,6 +2,7 @@
 ALTER TABLE finance.ocr_run DROP CONSTRAINT ocr_run_engine_check,
  ADD CONSTRAINT ocr_run_engine_check CHECK(engine IN ('TESSERACT_SYNTHETIC','TESSERACT_LOCAL')),
  ADD COLUMN classification jsonb,
+ ADD COLUMN ai_advisory jsonb CHECK(ai_advisory IS NULL OR (jsonb_typeof(ai_advisory)='object' AND octet_length(ai_advisory::text)<=65536)),
  ADD CONSTRAINT ocr_classification_bound CHECK(classification IS NULL OR (jsonb_typeof(classification)='array' AND jsonb_array_length(classification)=page_count));
 ALTER TABLE finance.extraction_run DROP CONSTRAINT extraction_run_schema_version_check,
  ADD CONSTRAINT extraction_run_schema_version_check CHECK(schema_version IN ('synthetic.rows.v1','local.rows.v2'));
@@ -42,7 +43,7 @@ GRANT EXECUTE ON FUNCTION finance.local_ocr_source(uuid,uuid,uuid,bigint,uuid) T
 
 
 CREATE FUNCTION finance.complete_local_ocr(t uuid,c uuid,j uuid,f bigint,w uuid,
- doc uuid,rev uuid,g bigint,source bytea,model bytea,config bytea,blocks jsonb,fields jsonb,classification jsonb,pages integer,kind text,evt text)
+ doc uuid,rev uuid,g bigint,source bytea,model bytea,config bytea,blocks jsonb,fields jsonb,classification jsonb,pages integer,kind text,evt text,advisory jsonb)
 RETURNS uuid LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE jobrow finance.job%ROWTYPE; b finance.document_blob%ROWTYPE; p jsonb; entry jsonb; idx integer; block_page integer;
  rect integer[]; ref_ids integer[]; page_no integer; field_count integer:=0; run_id uuid:=j;
@@ -91,9 +92,15 @@ BEGIN
  ELSE NULL END;
  IF expected_paths IS NULL OR jsonb_array_length(fields)<>cardinality(expected_paths)
  THEN RAISE EXCEPTION 'unsupported extraction schema' USING ERRCODE='23514'; END IF;
- payload_digest:=sha256(convert_to(jsonb_build_array(blocks,fields,classification,pages)::text,'UTF8'));
- INSERT INTO finance.ocr_run(tenant_id,company_id,id,document_id,revision_id,source_digest,generation,job_id,fence,engine,model_digest,config_digest,page_count,result_digest,classification)
- VALUES(t,c,run_id,doc,rev,source,g,j,f,'TESSERACT_LOCAL',model,config,pages,payload_digest,classification);
+ IF advisory IS NOT NULL AND advisory<>'null'::jsonb THEN
+  IF b.storage_backend<>'SYNTHETIC_DB_ONLY' OR jsonb_typeof(advisory) IS DISTINCT FROM 'object'
+  OR advisory->>'schema' IS DISTINCT FROM 'finance.ai.advisory.v1' OR octet_length(advisory::text)>65536
+  THEN RAISE EXCEPTION 'AI advisory not permitted for this document' USING ERRCODE='23514'; END IF;
+ ELSE advisory:=NULL;
+ END IF;
+ payload_digest:=sha256(convert_to(jsonb_build_array(blocks,fields,classification,pages,advisory)::text,'UTF8'));
+ INSERT INTO finance.ocr_run(tenant_id,company_id,id,document_id,revision_id,source_digest,generation,job_id,fence,engine,model_digest,config_digest,page_count,result_digest,classification,ai_advisory)
+ VALUES(t,c,run_id,doc,rev,source,g,j,f,'TESSERACT_LOCAL',model,config,pages,payload_digest,classification,advisory);
  FOR p IN SELECT value FROM jsonb_array_elements(blocks) LOOP
   IF jsonb_typeof(p) IS DISTINCT FROM 'object' OR jsonb_typeof(p->'rect') IS DISTINCT FROM 'array'
   OR jsonb_array_length(p->'rect')<>4 OR jsonb_typeof(p->'text') IS DISTINCT FROM 'string'
@@ -134,10 +141,10 @@ BEGIN
  INSERT INTO finance.inbox(tenant_id,company_id,event_id,fence) VALUES(t,c,j,f);
  RETURN run_id;
 END $$;
-REVOKE ALL ON FUNCTION finance.complete_local_ocr(uuid,uuid,uuid,bigint,uuid,uuid,uuid,bigint,bytea,bytea,bytea,jsonb,jsonb,jsonb,integer,text,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION finance.complete_local_ocr(uuid,uuid,uuid,bigint,uuid,uuid,uuid,bigint,bytea,bytea,bytea,jsonb,jsonb,jsonb,integer,text,text,jsonb) FROM PUBLIC;
 
-ALTER FUNCTION finance.complete_local_ocr(uuid,uuid,uuid,bigint,uuid,uuid,uuid,bigint,bytea,bytea,bytea,jsonb,jsonb,jsonb,integer,text,text) OWNER TO finance_workflow_writer;
-GRANT EXECUTE ON FUNCTION finance.complete_local_ocr(uuid,uuid,uuid,bigint,uuid,uuid,uuid,bigint,bytea,bytea,bytea,jsonb,jsonb,jsonb,integer,text,text) TO finance_job_worker;
+ALTER FUNCTION finance.complete_local_ocr(uuid,uuid,uuid,bigint,uuid,uuid,uuid,bigint,bytea,bytea,bytea,jsonb,jsonb,jsonb,integer,text,text,jsonb) OWNER TO finance_workflow_writer;
+GRANT EXECUTE ON FUNCTION finance.complete_local_ocr(uuid,uuid,uuid,bigint,uuid,uuid,uuid,bigint,bytea,bytea,bytea,jsonb,jsonb,jsonb,integer,text,text,jsonb) TO finance_job_worker;
 
 
 CREATE OR REPLACE FUNCTION finance.runtime_fields(t uuid,c uuid,d uuid,a uuid,after_id uuid,only_id uuid,n integer)

@@ -13,6 +13,7 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::{env, fs, path::PathBuf, process::Stdio, time::Duration};
 mod pdf;
+mod ai;
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, process::Command, time};
 use uuid::Uuid;
 
@@ -27,6 +28,7 @@ pub(super) struct Config {
     binary_digest: [u8; 32],
     storage: Option<S3>,
     pdf: Option<pdf::Config>,
+    ai: Option<ai::Config>,
 }
 
 impl Config {
@@ -55,7 +57,7 @@ impl Config {
         }
         let binary_digest = Sha256::digest(fs::read(&binary).map_err(|_| "OCR executable unreadable")?).into();
         let pdf = pdf::Config::from_env()?;
-        Ok(Some(Self { binary, tessdata, model_digest, binary_digest, storage, pdf }))
+        Ok(Some(Self { binary, tessdata, model_digest, binary_digest, storage, pdf, ai:ai::Config::from_env()? }))
     }
 }
 
@@ -318,16 +320,19 @@ pub(super) async fn process(pool: &PgPool, config: &Config, lease: Lease, lease_
     };
     let page_count=i32::try_from(pages.len()).map_err(|_|RunFailure::Permanent)?;
     let (blocks,fields,classification)=candidates_for(kind,&pages,&rotations)?;
+    let advisory=if source.object_version.is_none() && source.content.is_some() {
+        if let Some(ai)=&config.ai { ai::suggest(ai,lease.scope(),&blocks,&fields).await }else{serde_json::Value::Null}
+    }else{serde_json::Value::Null};
     let scope = lease.scope();
     let (t,c): (Uuid,Uuid) = (scope.tenant.into(),scope.company.into());
     let mut tx = pool.begin().await.map_err(db_failure)?;
     sqlx::query("SELECT set_config('finance.tenant_id',$1,true),set_config('finance.company_id',$2,true)")
         .bind(t.to_string()).bind(c.to_string()).execute(&mut *tx).await.map_err(db_failure)?;
-    sqlx::query_scalar::<_,Uuid>("SELECT finance.complete_local_ocr($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)")
+    sqlx::query_scalar::<_,Uuid>("SELECT finance.complete_local_ocr($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)")
         .bind(t).bind(c).bind(lease.job_id).bind(lease.fence).bind(lease.worker_id())
         .bind(source.document_id).bind(source.revision_id).bind(source.generation)
         .bind(&source.source_digest).bind(config.model_digest.as_slice()).bind(config_digest.as_slice())
-        .bind(blocks).bind(fields).bind(classification).bind(page_count).bind(&source.kind).bind(&source.event_type).fetch_one(&mut *tx).await.map_err(db_failure)?;
+        .bind(blocks).bind(fields).bind(classification).bind(page_count).bind(&source.kind).bind(&source.event_type).bind(advisory).fetch_one(&mut *tx).await.map_err(db_failure)?;
     tx.commit().await.map_err(db_failure)?;
     Ok(())
 }
