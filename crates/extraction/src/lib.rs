@@ -12,6 +12,7 @@ use unicode_normalization::UnicodeNormalization;
 
 pub mod evaluation;
 pub mod gateway;
+pub mod gateway_http;
 pub mod repository;
 pub mod rows;
 

@@ -15,3 +15,6 @@ finance-shared = { path = "../shared" }
 chrono.workspace = true
 uuid.workspace = true
 sha2 = "=0.10.9"
+hmac = "=0.12.1"
+base64 = "=0.22.1"
+reqwest = { version = "=0.12.12", default-features = false, features = ["rustls-tls"] }

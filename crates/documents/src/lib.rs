@@ -4,6 +4,7 @@
 pub mod evidence;
 pub mod repository;
 pub mod scan;
+pub mod s3;
 use chrono::{DateTime, TimeDelta, Utc};
 use finance_shared::{
     contracts::Version,
