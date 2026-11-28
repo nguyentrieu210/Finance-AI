@@ -25,6 +25,18 @@ pub struct Check {
     pub explanation: String,
 }
 
+impl Check {
+    fn canonical_explanation(mut self) -> Self {
+        self.explanation = if self.rule_version > 0 {
+            "Published rule evaluated against current verified evidence; missing facts remain UNKNOWN."
+        } else {
+            "Structural preflight diagnostic; not a financial approval."
+        }
+        .to_owned();
+        self
+    }
+}
+
 /// Latest run for the current revision and aggregate version only; a diagnostic PASS never authorizes a dossier.
 /// Missing or inaccessible dossier is None, no run yet is an empty page.
 pub async fn list(
@@ -77,7 +89,7 @@ pub async fn list(
     .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
-    Ok(Some(rows))
+    Ok(Some(rows.into_iter().map(Check::canonical_explanation).collect()))
 }
 
 pub struct Acknowledge<'a> {
@@ -178,7 +190,7 @@ pub async fn acknowledge(
     .ok_or(Error::Forbidden)?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
-    Ok((receipt, version))
+    Ok((receipt.canonical_explanation(), version))
 }
 
 fn map_ack_error(error: sqlx::Error) -> Error {
