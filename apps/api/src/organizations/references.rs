@@ -31,12 +31,18 @@ pub(super) struct CreateBody {
     coverage: String,
     fresh_until: Option<String>,
     #[serde(default)]
-    records: Vec<NormalizedResource>,
+    records: Vec<ImportRow>,
 }
 
 #[derive(Deserialize,Serialize)]
 #[serde(deny_unknown_fields)]
 struct NormalizedResource {source_key:String,currency:String,cap:String,consumed:String,evidence_ids:Vec<Uuid>}
+#[derive(Deserialize,Serialize)]
+#[serde(deny_unknown_fields)]
+struct PaymentRow {source_key:String,currency:String,amount:String,reservation_id:Uuid,event_kind:String,reverses:Option<String>,occurred_at:String,evidence_ids:Vec<Uuid>}
+#[derive(Deserialize,Serialize)]
+#[serde(untagged)]
+enum ImportRow {Resource(NormalizedResource),Payment(PaymentRow)}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -234,6 +240,7 @@ pub(super) async fn create(
         None if body.records.is_empty()=>(parsed_as_of+chrono::TimeDelta::seconds(1)).to_rfc3339(),
         None=>return error(StatusCode::BAD_REQUEST,correlation),
     };
+    if body.records.iter().any(|row|matches!(row,ImportRow::Payment(_))!=(body.kind=="PAYMENT")){return error(StatusCode::BAD_REQUEST,correlation)}
     if body.records.len()>10000 {return error(StatusCode::BAD_REQUEST,correlation)}
     let Ok(records)=serde_json::to_value(&body.records)else{return error(StatusCode::BAD_REQUEST,correlation)};
     match finance_financial::references::create(

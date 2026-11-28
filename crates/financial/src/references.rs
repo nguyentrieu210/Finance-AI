@@ -251,7 +251,7 @@ pub async fn create(
         || input.reference_id.is_nil()
         || !matches!(
             input.kind,
-            "VENDOR" | "CONTRACT" | "INVOICE" | "ADVANCE" | "BUDGET" | "PAYMENT"
+            "CONTRACT" | "INVOICE" | "ADVANCE" | "BUDGET" | "PAYMENT"
         )
         || !matches!(input.coverage, "COMPLETE" | "PARTIAL" | "UNKNOWN")
         || input.as_of.is_empty()

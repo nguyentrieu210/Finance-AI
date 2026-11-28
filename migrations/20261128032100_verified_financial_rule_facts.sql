@@ -225,7 +225,7 @@ BEGIN
   SELECT coalesce(array_agg(DISTINCT x::uuid ORDER BY x::uuid),ARRAY[]::uuid[]) INTO evidence FROM jsonb_array_elements_text(result->'evidence') x;
   IF cardinality(evidence)<>jsonb_array_length(result->'evidence') OR EXISTS(
    SELECT 1 FROM unnest(evidence) e WHERE NOT EXISTS(
-    SELECT 1 FROM jsonb_array_elements(material->'fields') fld
+    SELECT 1 FROM jsonb_array_elements((material->'fields')||(material->'financial')) fld
     CROSS JOIN LATERAL jsonb_array_elements_text(fld->'evidence') ev
     WHERE fld->>'verified'='true' AND ev=e::text))
   THEN RAISE EXCEPTION 'unbound rule evidence' USING ERRCODE='23514'; END IF;

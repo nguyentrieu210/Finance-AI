@@ -26,7 +26,7 @@ BEGIN
   OR kind IS NULL OR kind NOT IN ('VENDOR','CONTRACT','INVOICE','ADVANCE','BUDGET','PAYMENT')
  OR records IS NULL OR jsonb_typeof(records) IS DISTINCT FROM 'array' OR jsonb_array_length(records)>10000 OR octet_length(records::text)>8388608
  OR as_of_ts>clock_timestamp() OR fresh_ts IS NULL OR fresh_ts<=as_of_ts
- OR kind NOT IN ('CONTRACT','INVOICE','ADVANCE','BUDGET') OR jsonb_array_length(records)=0
+ OR kind NOT IN ('CONTRACT','INVOICE','ADVANCE','BUDGET','PAYMENT') OR jsonb_array_length(records)=0
   OR coverage IS NULL OR coverage NOT IN ('COMPLETE','PARTIAL','UNKNOWN')
   OR idem IS NULL OR idem !~ '^[A-Za-z0-9._~-]{1,128}$'
  THEN RAISE EXCEPTION 'invalid reference creation request' USING ERRCODE='22023'; END IF;
@@ -73,6 +73,19 @@ BEGIN
  -- Generic normalized resource rows are materialized only by the independent
  -- checker. The source identity is explicit and never synthesized from amounts.
  FOR item IN SELECT value FROM jsonb_array_elements(records) LOOP
+  IF kind='PAYMENT' THEN
+   IF (SELECT count(*) FROM jsonb_object_keys(item))<>8
+   OR NOT (item ?& ARRAY['source_key','currency','amount','reservation_id','event_kind','reverses','occurred_at','evidence_ids'])
+   OR item->>'source_key' IS NULL OR octet_length(item->>'source_key') NOT BETWEEN 1 AND 128 OR item->>'source_key' ~ '[[:cntrl:]]'
+   OR item->>'currency' IS NULL OR item->>'currency' !~ '^[A-Z]{3}$'
+   OR item->>'amount' IS NULL OR item->>'amount' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$' OR (item->>'amount')::numeric<=0
+   OR item->>'reservation_id' IS NULL OR (item->>'reservation_id')::uuid='00000000-0000-0000-0000-000000000000'
+   OR item->>'event_kind' IS NULL OR item->>'event_kind' NOT IN ('CONSUME','REVERSE')
+   OR ((item->>'event_kind'='REVERSE') IS DISTINCT FROM (item->>'reverses' IS NOT NULL))
+   OR item->>'occurred_at' IS NULL OR (item->>'occurred_at')::timestamptz>as_of_ts
+   THEN RAISE EXCEPTION 'invalid payment observation row' USING ERRCODE='23514'; END IF;
+   CONTINUE;
+  END IF;
   IF item->>'source_key' IS NULL OR octet_length(item->>'source_key') NOT BETWEEN 1 AND 128 OR item->>'source_key' ~ '[[:cntrl:]]'
   OR item->>'currency' IS NULL OR item->>'currency' !~ '^[A-Z]{3}$'
   OR item->>'cap' IS NULL OR item->>'cap' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$'
@@ -152,7 +165,7 @@ BEGIN
  rkind:=split_part(r.external_version,':',1);
  rcov:=split_part(r.external_version,':',2);
  IF r.source_document_id IS NULL OR r.import_payload IS NULL OR jsonb_array_length(r.import_payload)=0 OR r.fresh_until<=clock_timestamp() OR r.as_of>clock_timestamp()
- OR rkind NOT IN ('CONTRACT','INVOICE','ADVANCE','BUDGET')
+ OR rkind NOT IN ('CONTRACT','INVOICE','ADVANCE','BUDGET','PAYMENT')
  OR NOT EXISTS(SELECT 1 FROM finance.document_blob b WHERE (b.tenant_id,b.company_id,b.id)=(t,c,r.source_document_id) AND b.scan_state='CLEAN' AND b.sha256_digest=r.source_digest)
  OR NOT (ev_ids <@ r.import_evidence) OR EXISTS(SELECT 1 FROM jsonb_array_elements(r.import_payload) item WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(item->'evidence_ids') ev WHERE ev::uuid=ANY(ev_ids))) OR cardinality(ev_ids)<>(SELECT count(DISTINCT x) FROM unnest(ev_ids) x)
  THEN RAISE EXCEPTION 'reference lacks verified normalized source material' USING ERRCODE='23514'; END IF;
@@ -163,9 +176,18 @@ BEGIN
  -- Independent checker reviews the exact frozen normalized rows and source
  -- evidence. A logical resource cannot be silently replaced while holds exist.
  PERFORM pg_advisory_xact_lock(hashtextextended('finance.reference/v1/'||t::text||'/'||c::text,0));
+ IF rkind='PAYMENT' THEN
+  -- Payment events are independently approved observations, not payment orders.
+  INSERT INTO finance.payment_ref(tenant_id,company_id,snapshot_id,id,external_key,currency,amount,state,occurred_at,reservation_id,event_kind,reverses_key)
+  SELECT t,c,ref_id,gen_random_uuid(),item->>'source_key',item->>'currency',(item->>'amount')::numeric,
+   CASE WHEN item->>'event_kind'='REVERSE' THEN 'PARTIALLY_REVERSED' ELSE 'PARTIALLY_PAID' END,
+   (item->>'occurred_at')::timestamptz,(item->>'reservation_id')::uuid,item->>'event_kind',item->>'reverses'
+  FROM jsonb_array_elements(r.import_payload) item;
+ ELSE
  INSERT INTO finance.financial_resource(tenant_id,company_id,id,currency,cap,consumed,coverage_complete,fresh_until,snapshot_id,resource_kind,source_key)
  SELECT t,c,gen_random_uuid(),item->>'currency',(item->>'cap')::numeric,(item->>'consumed')::numeric,true,r.fresh_until,ref_id,rkind,jsonb_build_array('MANUAL_API',item->>'source_key')::text
  FROM jsonb_array_elements(r.import_payload) item;
+ END IF;
  UPDATE finance.reference_snapshot SET state='APPROVED',checker_id=a
   WHERE (tenant_id,company_id,id)=(t,c,ref_id) AND state='DRAFT';
 
