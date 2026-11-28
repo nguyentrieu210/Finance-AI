@@ -335,8 +335,16 @@ pub(super) async fn create(
     };
     let clause_keys: Vec<_> = body.clauses.iter().map(|cl| cl.key.clone()).collect();
     let evidence: Vec<_> = body.clauses.iter().map(|cl| cl.evidence_id).collect();
-    let checklist_keys: Vec<_> = body.checklist.iter().map(|r| r.clause_key.clone()).collect();
-    let document_kinds: Vec<_> = body.checklist.iter().map(|r| r.document_kind.clone()).collect();
+    let checklist_keys: Vec<_> = body
+        .checklist
+        .iter()
+        .map(|r| r.clause_key.clone())
+        .collect();
+    let document_kinds: Vec<_> = body
+        .checklist
+        .iter()
+        .map(|r| r.document_kind.clone())
+        .collect();
     let mandatory: Vec<_> = body.checklist.iter().map(|r| r.mandatory).collect();
     let draft = repository::CreateDraft {
         id: random_id(),

@@ -357,11 +357,13 @@ async fn process_preflight(pool: &PgPool, lease: Lease) -> Result<(), RunFailure
         .bind(lease.worker_id())
         .execute(&mut *tx)
         .await
-        .map_err(|e| match e.as_database_error().and_then(|db| db.code()).as_deref() {
-            Some("40001") => RunFailure::Stale,
-            Some("42501" | "23514" | "23505" | "P0002") => RunFailure::Permanent,
-            _ => RunFailure::Transient,
-        })?;
+        .map_err(
+            |e| match e.as_database_error().and_then(|db| db.code()).as_deref() {
+                Some("40001") => RunFailure::Stale,
+                Some("42501" | "23514" | "23505" | "P0002") => RunFailure::Permanent,
+                _ => RunFailure::Transient,
+            },
+        )?;
     tx.commit().await.map_err(|_| RunFailure::Transient)?;
     Ok(())
 }

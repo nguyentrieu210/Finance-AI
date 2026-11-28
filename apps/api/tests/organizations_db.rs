@@ -534,7 +534,9 @@ async fn scoped_organization_http_real_database() {
                 "if-finance-version",
                 format!("\"v1:policy:{policy_id}:{}\"", policy["version"]),
             )
-            .body(Body::from(json!({"reason":"Synthetic policy test"}).to_string()))
+            .body(Body::from(
+                json!({"reason":"Synthetic policy test"}).to_string(),
+            ))
             .unwrap()
     };
     let denied = app

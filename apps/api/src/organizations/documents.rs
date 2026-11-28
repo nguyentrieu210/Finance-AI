@@ -220,7 +220,8 @@ pub(super) async fn download(
     let Principal::User(actor) = proof.context().actor else {
         return error(StatusCode::FORBIDDEN, correlation);
     };
-    let digest = match repository::original_digest(&state.runtime, &proof, dossier, document).await {
+    let digest = match repository::original_digest(&state.runtime, &proof, dossier, document).await
+    {
         Ok(Some(value)) => value,
         Ok(None) => return error(StatusCode::NOT_FOUND, correlation),
         Err(e) => return error(status(e), correlation),
@@ -267,7 +268,8 @@ pub(super) async fn content(
     let Ok(Query(query)) = query else {
         return error(StatusCode::BAD_REQUEST, correlation);
     };
-    let digest = match repository::original_digest(&state.runtime, &proof, dossier, document).await {
+    let digest = match repository::original_digest(&state.runtime, &proof, dossier, document).await
+    {
         Ok(Some(value)) => value,
         Ok(None) => return error(StatusCode::NOT_FOUND, correlation),
         Err(e) => return error(status(e), correlation),

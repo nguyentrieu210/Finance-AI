@@ -38,8 +38,8 @@ WHERE tenant_id='00000000-0000-0000-0000-000000000001'
   AND id='00000000-0000-0000-0000-000000001200';
 
 -- One non-overlapping PUBLISHED policy for runtime read tests (SETTLEMENT only).
-INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,checker_id,state,effective_from,effective_until,source_digest,published_at) VALUES
-('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001600','SETTLEMENT','00000000-0000-0000-0000-0000000003e8','00000000-0000-0000-0000-0000000003e9','PUBLISHED','2026-01-01','2030-01-01',decode(repeat('16',32),'hex'),now());
+INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,checker_id,state,effective_from,effective_until,source_digest,published_at,criticality_complete) VALUES
+('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000001600','SETTLEMENT','00000000-0000-0000-0000-0000000003e8','00000000-0000-0000-0000-0000000003e9','PUBLISHED','2026-01-01','2030-01-01',decode(repeat('16',32),'hex'),now(),true);
 
 -- E17 operational diagnostic fixture: insert content while DRAFT, then freeze as PUBLISHED.
 INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,effective_from,effective_until,source_digest)
@@ -59,6 +59,7 @@ VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000
 '00000000-0000-0000-0000-000000001700','00000000-0000-0000-0000-000000001701',
 '00000000-0000-0000-0000-000000001702',0,0,37,'Synthetic settlement retrieval clause',
 decode(repeat('33',32),'hex'),'[1,0,0]'::finance.vector);
+UPDATE finance.policy_version SET state='IN_REVIEW' WHERE id='00000000-0000-0000-0000-000000001700';
 UPDATE finance.policy_version
 SET state='PUBLISHED',checker_id='00000000-0000-0000-0000-0000000003e9',published_at=clock_timestamp()
 WHERE id='00000000-0000-0000-0000-000000001700';
@@ -88,6 +89,7 @@ INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_i
 VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000002100','PAYMENT','00000000-0000-0000-0000-0000000003f0','2035-01-01','2036-01-01',decode(repeat('21',32),'hex'));
 INSERT INTO finance.policy_clause VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000002100','00000000-0000-0000-0000-000000002101','RISK','Synthetic waivable risk rule',decode(repeat('21',32),'hex'),1);
 INSERT INTO finance.checklist_item VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000002100','00000000-0000-0000-0000-000000002102','00000000-0000-0000-0000-000000002101','INVOICE',true);
+UPDATE finance.policy_version SET state='IN_REVIEW' WHERE id='00000000-0000-0000-0000-000000002100';
 UPDATE finance.policy_version SET state='PUBLISHED',checker_id='00000000-0000-0000-0000-0000000003f1',published_at=clock_timestamp() WHERE id='00000000-0000-0000-0000-000000002100';
 INSERT INTO finance.rule_version(tenant_id,company_id,id,policy_id,clause_id,rule_key,version,severity,waivable,state,definition,author_id,checker_id,published_at)
 VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-000000002103','00000000-0000-0000-0000-000000002100','00000000-0000-0000-0000-000000002101','risk_waivable',1,'WARNING',true,'PUBLISHED','{"rule_id":"risk_waivable","version":1,"condition":{"literal":false,"value_type":"boolean"},"severity":"WARNING","waivable":true,"clause_id":"00000000-0000-0000-0000-000000002101"}','00000000-0000-0000-0000-0000000003f0','00000000-0000-0000-0000-0000000003f1',clock_timestamp());

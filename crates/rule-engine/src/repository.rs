@@ -531,8 +531,8 @@ pub async fn simulate(
     if version != expected {
         return Err(Error::Conflict);
     }
-    let compiled = compiler::compile(definition.as_bytes(), &registry())
-        .map_err(|_| Error::InvalidInput)?;
+    let compiled =
+        compiler::compile(definition.as_bytes(), &registry()).map_err(|_| Error::InvalidInput)?;
     let facts = corpus_facts(&json)?;
     let mut result = Simulation {
         id: input.id,
@@ -567,11 +567,14 @@ pub async fn simulate(
             .map_err(|_| Error::InvalidInput)?;
         let comparison =
             crate::simulator::compare(&old, &compiled, &facts).map_err(|_| Error::InvalidInput)?;
-        Some(serde_json::json!({
-            "baseline_rule_version_id": baseline_id,
-            "transitions": comparison.transitions,
-            "evaluated": comparison.evaluated
-        }).to_string())
+        Some(
+            serde_json::json!({
+                "baseline_rule_version_id": baseline_id,
+                "transitions": comparison.transitions,
+                "evaluated": comparison.evaluated
+            })
+            .to_string(),
+        )
     } else {
         None
     };

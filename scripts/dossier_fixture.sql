@@ -120,11 +120,7 @@ VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000
 
 
 -- E18 accountant review fixture. Criticality is explicitly complete with zero critical
--- fields for this synthetic policy; production policy authors must configure this.
-UPDATE finance.policy_version SET criticality_complete=true
- WHERE tenant_id='00000000-0000-0000-0000-000000000001'
- AND company_id='00000000-0000-0000-0000-00000000000a'
- AND id='00000000-0000-0000-0000-000000001600';
+-- fields for the published settlement policy (set in prototype_fixture.sql before guard freeze).
 INSERT INTO finance.identity_subject(tenant_id,id,issuer,subject)
 VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000005001',
 'https://synthetic.invalid','review-accountant');

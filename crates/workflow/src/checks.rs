@@ -249,12 +249,14 @@ pub async fn request_preflight(
     .bind(key.as_str())
     .fetch_one(&mut *tx)
     .await
-    .map_err(|e| match e.as_database_error().and_then(|db| db.code()).as_deref() {
-        Some("42501") => Error::Forbidden,
-        Some("22023") => Error::InvalidInput,
-        Some("23514" | "23505") => Error::Conflict,
-        _ => Error::Database(e),
-    })?;
+    .map_err(
+        |e| match e.as_database_error().and_then(|db| db.code()).as_deref() {
+            Some("42501") => Error::Forbidden,
+            Some("22023") => Error::InvalidInput,
+            Some("23514" | "23505") => Error::Conflict,
+            _ => Error::Database(e),
+        },
+    )?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(PreflightJob {

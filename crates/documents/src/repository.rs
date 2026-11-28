@@ -259,16 +259,14 @@ pub async fn original_digest(
     let (t, c, a) = binding(proof)?;
     let mut tx = scoped_transaction(pool, proof.context()).await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
-    let digest = sqlx::query_scalar(
-        "SELECT finance.runtime_original_digest($1,$2,$3,$4,$5)",
-    )
-    .bind(t)
-    .bind(c)
-    .bind(a)
-    .bind(dossier)
-    .bind(document)
-    .fetch_one(&mut *tx)
-    .await?;
+    let digest = sqlx::query_scalar("SELECT finance.runtime_original_digest($1,$2,$3,$4,$5)")
+        .bind(t)
+        .bind(c)
+        .bind(a)
+        .bind(dossier)
+        .bind(document)
+        .fetch_one(&mut *tx)
+        .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(digest)

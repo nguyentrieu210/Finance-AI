@@ -233,12 +233,14 @@ pub async fn change(
     .bind(correlation)
     .fetch_one(&mut *tx)
     .await
-    .map_err(|e| match e.as_database_error().and_then(|db| db.code()).as_deref() {
-        Some("42501") => AppError::Forbidden,
-        Some("22023") => AppError::InvalidInput,
-        Some("23514" | "23505") => AppError::Conflict,
-        _ => AppError::Database(e),
-    })?;
+    .map_err(
+        |e| match e.as_database_error().and_then(|db| db.code()).as_deref() {
+            Some("42501") => AppError::Forbidden,
+            Some("22023") => AppError::InvalidInput,
+            Some("23514" | "23505") => AppError::Conflict,
+            _ => AppError::Database(e),
+        },
+    )?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(row)
@@ -316,12 +318,14 @@ pub async fn create(
     .bind(correlation)
     .fetch_one(&mut *tx)
     .await
-    .map_err(|e| match e.as_database_error().and_then(|db| db.code()).as_deref() {
-        Some("42501") => AppError::Forbidden,
-        Some("22023") => AppError::InvalidInput,
-        Some("23514" | "23505") => AppError::Conflict,
-        _ => AppError::Database(e),
-    })?;
+    .map_err(
+        |e| match e.as_database_error().and_then(|db| db.code()).as_deref() {
+            Some("42501") => AppError::Forbidden,
+            Some("22023") => AppError::InvalidInput,
+            Some("23514" | "23505") => AppError::Conflict,
+            _ => AppError::Database(e),
+        },
+    )?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
     Ok(row)
