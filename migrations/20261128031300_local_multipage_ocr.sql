@@ -121,7 +121,7 @@ BEGIN
  END LOOP;
  -- Persist a new evidence epoch by advancing the aggregate version. This
  -- invalidates all previous preflight/confirmation receipts.
- UPDATE finance.dossier SET version=version+1,updated_at=GREATEST(updated_at,clock_timestamp())
+ UPDATE finance.dossier SET status=CASE WHEN status='REVIEWABLE' THEN 'DRAFT' ELSE status END,version=version+1,updated_at=GREATEST(updated_at,clock_timestamp())
  WHERE (tenant_id,company_id,id)=(t,c,dossier) AND status IN ('DRAFT','PROCESSING','NEEDS_INPUT','REVIEWABLE')
  AND version<9007199254740991;
  IF NOT FOUND THEN RAISE EXCEPTION 'OCR dossier no longer editable' USING ERRCODE='23514'; END IF;

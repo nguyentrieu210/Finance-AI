@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 mod artifact_store;
+mod render_material;
 mod ocr;
 mod scan;
 use finance_core::jobs::{self, Failure, FailureResult, JobError, Lease};
@@ -240,7 +241,7 @@ fn validate_receipt(
     Ok(owned)
 }
 
-async fn invoke_adapter(config: &Config, lease: Lease) -> Result<Receipt, RunFailure> {
+async fn invoke_adapter(config: &Config, lease: Lease, material: Option<Vec<u8>>) -> Result<Receipt, RunFailure> {
     let scope = lease.scope();
     let mut command = Command::new(&config.adapter);
     command
@@ -256,7 +257,7 @@ async fn invoke_adapter(config: &Config, lease: Lease) -> Result<Receipt, RunFai
         .arg(Uuid::from(scope.company).to_string())
         .arg("--fence")
         .arg(lease.fence.to_string())
-        .stdin(Stdio::null())
+        .stdin(if material.is_some() {Stdio::piped()} else {Stdio::null()})
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true);
@@ -271,7 +272,13 @@ async fn invoke_adapter(config: &Config, lease: Lease) -> Result<Receipt, RunFai
     }
     let mut child = command.spawn().map_err(|_| RunFailure::Permanent)?;
     let stdout = child.stdout.take().ok_or(RunFailure::Permanent)?;
+    let stdin=child.stdin.take();
     let operation = async move {
+        if let (Some(mut stdin),Some(material))=(stdin,material) {
+            use tokio::io::AsyncWriteExt;
+            stdin.write_all(&material).await.map_err(|_|RunFailure::Transient)?;
+            stdin.shutdown().await.map_err(|_|RunFailure::Transient)?;
+        }
         let mut bytes = Vec::new();
         let mut bounded = stdout.take((MAX_RECEIPT_BYTES + 1) as u64);
         bounded
@@ -301,7 +308,10 @@ async fn render_with_heartbeat(
     config: &Config,
     lease: Lease,
 ) -> Result<Receipt, RunFailure> {
-    let mut adapter = Box::pin(invoke_adapter(config, lease));
+    let mut adapter = Box::pin(async {
+        let material=if config.artifact_root.is_some(){Some(render_material::load(pool,lease).await?)}else{None};
+        invoke_adapter(config,lease,material).await
+    });
     let interval_seconds =
         u64::try_from((config.lease_seconds / 3).max(1)).map_err(|_| RunFailure::Permanent)?;
     let mut heartbeat = time::interval(Duration::from_secs(interval_seconds));
@@ -343,8 +353,7 @@ async fn process_export(pool: &PgPool, config: &Config, lease: Lease) -> Result<
             bytes: item.bytes,
         })
         .collect();
-    export::complete(pool, lease, &artifacts)
-        .await
+    if config.artifact_root.is_some() {export::complete_verified(pool,lease,&artifacts).await} else {export::complete(pool,lease,&artifacts).await}
         .map(|_| ())
         .map_err(|error| match error {
             export::WorkerError::StaleLease => RunFailure::Stale,

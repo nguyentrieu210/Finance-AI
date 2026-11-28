@@ -143,7 +143,7 @@ BEGIN
  WHERE (b.tenant_id,b.company_id,b.id,b.generation,b.object_version)=(t,c,doc,g,v)
  AND b.sha256_digest=decode(h,'hex') AND b.storage_backend='S3_VERSIONED' AND b.scan_state='QUARANTINED';
  IF NOT FOUND THEN RAISE EXCEPTION 'source no longer quarantined' USING ERRCODE='23514'; END IF;
- UPDATE finance.dossier SET version=version+1,updated_at=GREATEST(updated_at,clock_timestamp())
+ UPDATE finance.dossier SET status=CASE WHEN status='REVIEWABLE' THEN 'DRAFT' ELSE status END,version=version+1,updated_at=GREATEST(updated_at,clock_timestamp())
  WHERE (tenant_id,company_id,id)=(t,c,dossier) AND version<9007199254740991;
  IF NOT FOUND THEN RAISE EXCEPTION 'dossier version exhausted' USING ERRCODE='23514'; END IF;
  UPDATE finance.job_attempt SET state='SUCCEEDED',finished_at=clock_timestamp()
