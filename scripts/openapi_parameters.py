@@ -29,7 +29,7 @@ def validate_operation_parameters(path, method, path_item, operation):
     x-idempotent: true and do not need an Idempotency-Key header.
     """
     parameters = effective_parameters(path_item, operation)
-    placeholders = set(re.findall(r"\\{(\\w+)\\}", path))
+    placeholders = set(re.findall(r"\{(\w+)\}", path))
     declared_path_parameters = {
         parameter["name"] for parameter in parameters if parameter["in"] == "path"
     }
