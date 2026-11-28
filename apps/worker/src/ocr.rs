@@ -593,7 +593,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bounds_png_before_ocr_and_persists_only_six_candidates() {
+    fn bounds_png_before_ocr_and_emits_exact_invoice_registry() {
         let mut png = vec![0_u8; 33];
         png[..16].copy_from_slice(b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR");
         png[16..20].copy_from_slice(&100_u32.to_be_bytes());
@@ -603,7 +603,23 @@ mod tests {
         assert_eq!(png_dimensions(&png), Err(RunFailure::Permanent));
         let tsv = "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n1\t1\t0\t0\t0\t0\t0\t0\t100\t100\t-1\t\n";
         let (_, fields) = candidates(tsv, 100, 100).unwrap();
-        assert_eq!(fields.as_array().unwrap().len(), 7);
+        let fields_array = fields.as_array().unwrap();
+        let actual: std::collections::BTreeSet<_> = fields_array
+            .iter()
+            .map(|field| field["path"].as_str().unwrap())
+            .collect();
+        let expected = std::collections::BTreeSet::from([
+            "invoice.number",
+            "invoice.date",
+            "invoice.supplier",
+            "invoice.net",
+            "invoice.tax",
+            "invoice.total",
+            "invoice.currency",
+            "invoice.source_key",
+        ]);
+        assert_eq!(actual, expected);
+        assert_eq!(fields_array.len(), expected.len());
         assert!(
             fields
                 .as_array()
