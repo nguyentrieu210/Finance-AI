@@ -1,6 +1,6 @@
 import unittest
 
-from openapi_parameters import validate_operation_parameters
+from openapi_parameters import validate_operation_parameters, validate_path_item_parameters
 
 
 class OpenApiParameterValidationTests(unittest.TestCase):
@@ -13,7 +13,8 @@ class OpenApiParameterValidationTests(unittest.TestCase):
                 {"name": "item_id", "in": "path", "required": True, "schema": {"type": "string"}}
             ]
         }
-        validate_operation_parameters("/items/{item_id}", "get", path_item, {})
+        path_item["get"] = {}
+        validate_path_item_parameters("/items/{item_id}", path_item)
 
     def test_mutations_still_require_idempotency_key(self):
         with self.assertRaisesRegex(AssertionError, "Idempotency-Key"):
