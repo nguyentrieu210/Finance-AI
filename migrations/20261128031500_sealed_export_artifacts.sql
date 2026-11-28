@@ -173,61 +173,7 @@ BEGIN
  THEN RAISE EXCEPTION 'invalid export manifest' USING ERRCODE='23514'; END IF;
  FOR item IN SELECT value FROM jsonb_array_elements(artifacts) ORDER BY (value->>'name') COLLATE "C" LOOP
   n:=item->>'name'; h:=item->>'sha256'; size:=(item->>'bytes')::bigint;
-  IF n IS NULL OR n !~ '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127} tenant_id=t AND company_id=c AND id=j
-  AND state='LEASED' AND fence=f AND leased_by=w AND lease_until>clock_timestamp() FOR UPDATE)
- THEN RAISE EXCEPTION 'stale export lease' USING ERRCODE='23514'; END IF;
- SELECT * INTO p FROM finance.package WHERE tenant_id=t AND company_id=c AND job_id=j AND state='QUEUED' FOR UPDATE;
- IF NOT FOUND THEN RAISE EXCEPTION 'not an export job' USING ERRCODE='P0002'; END IF;
- SELECT * INTO STRICT s FROM finance.dossier_snapshot WHERE tenant_id=t AND company_id=c AND id=p.snapshot_id;
- SELECT * INTO STRICT d FROM finance.dossier WHERE tenant_id=t AND company_id=c AND id=s.dossier_id;
- IF p.requested_by IS NULL OR p.dossier_version IS NULL OR d.owner_id<>p.requested_by
- OR d.status<>'READY' OR d.version<>p.dossier_version
- THEN RAISE EXCEPTION 'stale export package' USING ERRCODE='23514'; END IF;
- UPDATE finance.package SET state='READY',manifest_hash=manifest,artifact_count=count,artifact_bytes=total_bytes,artifact_fence=f,artifact_manifest=artifacts
- WHERE tenant_id=t AND company_id=c AND id=p.id;
- PERFORM set_config('finance.actor_id',p.requested_by::text,true);
- new_version:=finance.workflow_exported(t,c,d.id,p.dossier_version,p.requested_by,p.id,j,j);
- UPDATE finance.job SET state='SUCCEEDED',lease_until=NULL,leased_by=NULL
- WHERE tenant_id=t AND company_id=c AND id=j AND fence=f AND leased_by=w AND state='LEASED';
- UPDATE finance.job_attempt SET state='SUCCEEDED',finished_at=clock_timestamp()
- WHERE tenant_id=t AND company_id=c AND job_id=j AND fence=f AND state='ACTIVE';
- INSERT INTO finance.inbox(tenant_id,company_id,event_id,fence) VALUES(t,c,j,f);
- RETURN new_version;
-END $$;
-ALTER FUNCTION finance.complete_export_job_verified(uuid,uuid,uuid,bigint,uuid,bytea,integer,bigint,jsonb)
- OWNER TO finance_export_writer;
-REVOKE ALL ON FUNCTION finance.complete_export_job_verified(uuid,uuid,uuid,bigint,uuid,bytea,integer,bigint,jsonb) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION finance.complete_export_job_verified(uuid,uuid,uuid,bigint,uuid,bytea,integer,bigint,jsonb)
- TO finance_job_worker;
-
- OR n=ANY(names) OR h IS NULL OR h !~ '^[a-f0-9]{64} tenant_id=t AND company_id=c AND id=j
-  AND state='LEASED' AND fence=f AND leased_by=w AND lease_until>clock_timestamp() FOR UPDATE)
- THEN RAISE EXCEPTION 'stale export lease' USING ERRCODE='23514'; END IF;
- SELECT * INTO p FROM finance.package WHERE tenant_id=t AND company_id=c AND job_id=j AND state='QUEUED' FOR UPDATE;
- IF NOT FOUND THEN RAISE EXCEPTION 'not an export job' USING ERRCODE='P0002'; END IF;
- SELECT * INTO STRICT s FROM finance.dossier_snapshot WHERE tenant_id=t AND company_id=c AND id=p.snapshot_id;
- SELECT * INTO STRICT d FROM finance.dossier WHERE tenant_id=t AND company_id=c AND id=s.dossier_id;
- IF p.requested_by IS NULL OR p.dossier_version IS NULL OR d.owner_id<>p.requested_by
- OR d.status<>'READY' OR d.version<>p.dossier_version
- THEN RAISE EXCEPTION 'stale export package' USING ERRCODE='23514'; END IF;
- UPDATE finance.package SET state='READY',manifest_hash=manifest,artifact_count=count,artifact_bytes=total_bytes
- WHERE tenant_id=t AND company_id=c AND id=p.id;
- PERFORM set_config('finance.actor_id',p.requested_by::text,true);
- new_version:=finance.workflow_exported(t,c,d.id,p.dossier_version,p.requested_by,p.id,j,j);
- UPDATE finance.job SET state='SUCCEEDED',lease_until=NULL,leased_by=NULL
- WHERE tenant_id=t AND company_id=c AND id=j AND fence=f AND leased_by=w AND state='LEASED';
- UPDATE finance.job_attempt SET state='SUCCEEDED',finished_at=clock_timestamp()
- WHERE tenant_id=t AND company_id=c AND job_id=j AND fence=f AND state='ACTIVE';
- INSERT INTO finance.inbox(tenant_id,company_id,event_id,fence) VALUES(t,c,j,f);
- RETURN new_version;
-END $$;
-ALTER FUNCTION finance.complete_export_job_verified(uuid,uuid,uuid,bigint,uuid,bytea,integer,bigint,jsonb)
- OWNER TO finance_export_writer;
-REVOKE ALL ON FUNCTION finance.complete_export_job_verified(uuid,uuid,uuid,bigint,uuid,bytea,integer,bigint,jsonb) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION finance.complete_export_job_verified(uuid,uuid,uuid,bigint,uuid,bytea,integer,bigint,jsonb)
- TO finance_job_worker;
-
- OR size IS NULL OR size NOT BETWEEN 1 AND 104857600
+  IF n IS NULL OR n !~ '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$' OR n=ANY(names) OR h IS NULL OR h !~ '^[a-f0-9]{64}$' OR size IS NULL OR size NOT BETWEEN 1 AND 104857600
   THEN RAISE EXCEPTION 'invalid artifact' USING ERRCODE='23514'; END IF;
   names:=array_append(names,n); summed:=summed+size;
   computed:=computed||int8send(octet_length(n)::bigint)||convert_to(n,'UTF8')||decode(h,'hex')||int8send(size);

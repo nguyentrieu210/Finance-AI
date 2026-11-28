@@ -28,69 +28,7 @@ BEGIN
  OR clause_keys IS NULL OR ev_ids IS NULL OR check_keys IS NULL OR doc_kinds IS NULL OR required_flags IS NULL
  OR critical_keys IS NULL OR critical_paths IS NULL OR cardinality(critical_keys)<>cardinality(critical_paths) OR cardinality(critical_paths)>200
  OR EXISTS(SELECT 1 FROM unnest(critical_keys) k WHERE k IS NULL OR NOT(k=ANY(clause_keys)))
- OR EXISTS(SELECT 1 FROM unnest(critical_paths) k WHERE k IS NULL OR k !~ '^[a-z][a-z0-9_]{0,63}[.][a-z][a-z0-9_]{0,63} 1 AND 200 OR cardinality(clause_keys)<>cardinality(ev_ids)
- OR cardinality(check_keys) NOT BETWEEN 1 AND 200 OR cardinality(check_keys)<>cardinality(doc_kinds) OR cardinality(check_keys)<>cardinality(required_flags)
- OR array_position(required_flags,NULL::boolean) IS NOT NULL OR NOT (true=ANY(required_flags))
- OR EXISTS(SELECT 1 FROM unnest(clause_keys) k WHERE k IS NULL OR k !~ '^[A-Za-z0-9._-]{1,64}$')
- OR EXISTS(SELECT 1 FROM unnest(doc_kinds) k WHERE k IS NULL OR k !~ '^[A-Z_]{1,64}$')
- OR EXISTS(SELECT 1 FROM unnest(check_keys) k WHERE k IS NULL OR NOT (k=ANY(clause_keys)))
- OR cardinality(clause_keys)<>(SELECT count(DISTINCT k) FROM unnest(clause_keys) k)
- OR cardinality(ev_ids)<>(SELECT count(DISTINCT e) FROM unnest(ev_ids) e)
- OR cardinality(doc_kinds)<>(SELECT count(DISTINCT k) FROM unnest(doc_kinds) k)
- THEN RAISE EXCEPTION 'invalid policy draft' USING ERRCODE='22023'; END IF;
- IF NOT EXISTS(SELECT 1 FROM finance.membership m WHERE (m.tenant_id,m.company_id,m.actor_id)=(t,c,a)
-  AND m.role='POLICY_ADMIN' AND m.active AND m.valid_from<=clock_timestamp() AND (m.valid_until IS NULL OR m.valid_until>clock_timestamp()))
- THEN RAISE EXCEPTION 'policy maker required' USING ERRCODE='42501'; END IF;
- PERFORM pg_advisory_xact_lock(hashtextextended('finance.policy.command/v1/'||t::text||'/'||c::text||'/'||a::text||'/policy.create/'||idem,0));
- SELECT b.sha256_digest INTO source_hash FROM finance.document_blob b
- JOIN finance.upload_intent u ON (u.tenant_id,u.company_id,u.id)=(b.tenant_id,b.company_id,b.id)
- JOIN finance.document_ref r ON (r.tenant_id,r.company_id,r.id)=(b.tenant_id,b.company_id,b.id)
- WHERE (b.tenant_id,b.company_id,b.id)=(t,c,source) AND b.scan_state='CLEAN' AND u.state='FINALIZED' AND u.actor_id=a;
- IF NOT FOUND THEN RAISE EXCEPTION 'clean authorized policy source required' USING ERRCODE='42501'; END IF;
- digest:=sha256(convert_to(jsonb_build_array(pname,kind,starts,ends,source,encode(source_hash,'hex'),clause_keys,ev_ids,check_keys,doc_kinds,required_flags,critical_keys,critical_paths)::text,'UTF8'));
- SELECT ir.request_hash,ir.result_payload INTO previous,payload FROM finance.idempotency_record ir
- WHERE (ir.tenant_id,ir.company_id,ir.actor_id,ir.operation_id,ir.key)=(t,c,a,'policy.create',idem);
- IF FOUND THEN
-  IF previous<>digest THEN RAISE EXCEPTION 'policy replay conflict' USING ERRCODE='23514'; END IF;
- ELSE
-  PERFORM finance.prototype_policy_lock(t,c,kind);
-  INSERT INTO finance.policy_version(tenant_id,company_id,id,dossier_kind,author_id,effective_from,effective_until,source_digest,display_name)
-   VALUES(t,c,pid,kind,a,starts,ends,source_hash,pname);
-  INSERT INTO finance.policy_clause(tenant_id,company_id,policy_id,id,clause_key,excerpt,source_digest,source_page)
-   SELECT t,c,pid,e.id,z.clause_key,e.excerpt,source_hash,e.page
-   FROM unnest(clause_keys,ev_ids) z(clause_key,evidence_id)
-   JOIN finance.evidence e ON (e.tenant_id,e.company_id,e.id)=(t,c,z.evidence_id)
-   JOIN finance.ocr_run o ON (o.tenant_id,o.company_id,o.id)=(e.tenant_id,e.company_id,e.ocr_run_id)
-   WHERE o.document_id=source AND o.source_digest=source_hash;
-  GET DIAGNOSTICS affected=ROW_COUNT;
-  IF affected<>cardinality(clause_keys) THEN RAISE EXCEPTION 'policy evidence mismatch' USING ERRCODE='23514'; END IF;
-  INSERT INTO finance.checklist_item(tenant_id,company_id,policy_id,id,clause_id,document_kind,mandatory)
-   SELECT t,c,pid,gen_random_uuid(),cl.id,z.document_kind,z.mandatory
-   FROM unnest(check_keys,doc_kinds,required_flags) z(clause_key,document_kind,mandatory)
-   JOIN finance.policy_clause cl ON (cl.tenant_id,cl.company_id,cl.policy_id,cl.clause_key)=(t,c,pid,z.clause_key);
-  GET DIAGNOSTICS affected=ROW_COUNT;
-  IF affected<>cardinality(check_keys) THEN RAISE EXCEPTION 'checklist mapping mismatch' USING ERRCODE='23514'; END IF;
-  INSERT INTO finance.policy_critical_field(tenant_id,company_id,policy_id,clause_id,field_path)
-  SELECT t,c,pid,cl.id,z.field_path
-  FROM unnest(critical_keys,critical_paths) z(clause_key,field_path)
-  JOIN finance.policy_clause cl ON (cl.tenant_id,cl.company_id,cl.policy_id,cl.clause_key)=(t,c,pid,z.clause_key);
-  GET DIAGNOSTICS affected=ROW_COUNT;
-  IF affected<>cardinality(critical_paths) THEN RAISE EXCEPTION 'critical field mapping mismatch' USING ERRCODE='23514'; END IF;
-  payload:=jsonb_build_object('id',pid,'company_id',c,'version',1,'name',pname,'state','DRAFT',
-   'effective_from',to_char(starts,'YYYY-MM-DD')||'T00:00:00Z','effective_to',to_char(ends,'YYYY-MM-DD')||'T00:00:00Z','hash',encode(source_hash,'hex'));
-  INSERT INTO finance.audit_event(tenant_id,company_id,id,actor_id,command_id,correlation_id,resource_id,action)
-   VALUES(t,c,cmd,a,cmd,corr,pid,'POLICY_CREATED');
-  INSERT INTO finance.outbox(tenant_id,company_id,id,command_id,resource_id,event_type) VALUES(t,c,cmd,cmd,pid,'POLICY_CREATED');
-  INSERT INTO finance.idempotency_record(tenant_id,company_id,actor_id,operation_id,key,request_hash,result_id,result_version,result_payload)
-   VALUES(t,c,a,'policy.create',idem,digest,pid,1,payload);
- END IF;
- RETURN QUERY SELECT x.id,x.company_id,x.version,x.name,x.state,x.effective_from,x.effective_to,x.hash
- FROM jsonb_to_record(payload) AS x(id uuid,company_id uuid,version bigint,name text,state text,effective_from text,effective_to text,hash text);
-END $$;
-ALTER FUNCTION finance.runtime_policy_create_configured(uuid,uuid,uuid,uuid,text,text,text,date,date,uuid,text[],uuid[],text[],text[],boolean[],uuid,uuid,text[],text[]) OWNER TO finance_policy_governance;
-REVOKE ALL ON FUNCTION finance.runtime_policy_create_configured(uuid,uuid,uuid,uuid,text,text,text,date,date,uuid,text[],uuid[],text[],text[],boolean[],uuid,uuid,text[],text[]) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION finance.runtime_policy_create_configured(uuid,uuid,uuid,uuid,text,text,text,date,date,uuid,text[],uuid[],text[],text[],boolean[],uuid,uuid,text[],text[]) TO finance_runtime;
-)
+ OR EXISTS(SELECT 1 FROM unnest(critical_paths) k WHERE k IS NULL OR k !~ '^[a-z][a-z0-9_]{0,63}[.][a-z][a-z0-9_]{0,63}$')
  OR cardinality(critical_paths)<>(SELECT count(DISTINCT k) FROM unnest(critical_paths) k)
  OR cardinality(clause_keys) NOT BETWEEN 1 AND 200 OR cardinality(clause_keys)<>cardinality(ev_ids)
  OR cardinality(check_keys) NOT BETWEEN 1 AND 200 OR cardinality(check_keys)<>cardinality(doc_kinds) OR cardinality(check_keys)<>cardinality(required_flags)

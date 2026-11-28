@@ -154,7 +154,7 @@ BEGIN
  IF r.source_document_id IS NULL OR r.import_payload IS NULL OR jsonb_array_length(r.import_payload)=0 OR r.fresh_until<=clock_timestamp() OR r.as_of>clock_timestamp()
  OR rkind NOT IN ('CONTRACT','INVOICE','ADVANCE','BUDGET')
  OR NOT EXISTS(SELECT 1 FROM finance.document_blob b WHERE (b.tenant_id,b.company_id,b.id)=(t,c,r.source_document_id) AND b.scan_state='CLEAN' AND b.sha256_digest=r.source_digest)
- OR NOT (ev_ids <@ r.import_evidence) OR cardinality(ev_ids)<>(SELECT count(DISTINCT x) FROM unnest(ev_ids) x)
+ OR NOT (ev_ids <@ r.import_evidence) OR EXISTS(SELECT 1 FROM jsonb_array_elements(r.import_payload) item WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(item->'evidence_ids') ev WHERE ev::uuid=ANY(ev_ids))) OR cardinality(ev_ids)<>(SELECT count(DISTINCT x) FROM unnest(ev_ids) x)
  THEN RAISE EXCEPTION 'reference lacks verified normalized source material' USING ERRCODE='23514'; END IF;
  IF rcov<>'COMPLETE' THEN
   RAISE EXCEPTION 'incomplete coverage cannot be verified' USING ERRCODE='23505';
