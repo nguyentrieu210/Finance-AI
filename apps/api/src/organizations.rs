@@ -43,6 +43,7 @@ mod knowledge;
 mod lifecycle;
 mod matches;
 mod memberships;
+mod onboarding;
 mod policies;
 mod references;
 mod reservations;
@@ -50,7 +51,6 @@ mod reviews;
 mod risks;
 mod rules;
 mod staff;
-mod onboarding;
 mod templates;
 mod workflows;
 
@@ -475,11 +475,26 @@ pub fn router(state: OrganizationState) -> Router {
             "/v1/organizations/staff/{kind}",
             get(staff::list).post(staff::save),
         )
-        .route("/v1/organizations/onboarding/claim", axum::routing::post(onboarding::claim))
-        .route("/v1/organizations/onboarding/requests", get(onboarding::list))
-        .route("/v1/organizations/onboarding/invitations/{id}/issue", axum::routing::post(onboarding::issue))
-        .route("/v1/organizations/onboarding/requests/{id}/decide", axum::routing::post(onboarding::decide))
-        .route("/v1/organizations/onboarding/effective-grants", get(onboarding::grants))
+        .route(
+            "/v1/organizations/onboarding/claim",
+            axum::routing::post(onboarding::claim),
+        )
+        .route(
+            "/v1/organizations/onboarding/requests",
+            get(onboarding::list),
+        )
+        .route(
+            "/v1/organizations/onboarding/invitations/{id}/issue",
+            axum::routing::post(onboarding::issue),
+        )
+        .route(
+            "/v1/organizations/onboarding/requests/{id}/decide",
+            axum::routing::post(onboarding::decide),
+        )
+        .route(
+            "/v1/organizations/onboarding/effective-grants",
+            get(onboarding::grants),
+        )
         .route("/v1/organizations/{item_id}", get(get_organization))
         .route(
             "/v1/memberships",

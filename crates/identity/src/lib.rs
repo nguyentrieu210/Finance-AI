@@ -326,19 +326,37 @@ impl VerifierStore {
         let profile = verified.profile.as_ref().ok_or(IdentityError::Forbidden)?;
         let deadline = i64::try_from(verified.expires.min(verified.keys_until))
             .map_err(|_| IdentityError::InvalidToken)?;
-        let (t,c):(Uuid,Uuid)=(scope.tenant.into(),scope.company.into());
-        let mut tx=pool.begin().await.map_err(|_|IdentityError::DatabaseUnavailable)?;
+        let (t, c): (Uuid, Uuid) = (scope.tenant.into(), scope.company.into());
+        let mut tx = pool
+            .begin()
+            .await
+            .map_err(|_| IdentityError::DatabaseUnavailable)?;
         let role:bool=sqlx::query_scalar("SELECT current_user='finance_identity_lookup' AND NOT rolsuper AND NOT rolbypassrls AND NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=session_user AND (rolsuper OR rolbypassrls OR rolcreaterole)) FROM pg_roles WHERE rolname=current_user").fetch_one(&mut *tx).await.map_err(|_|IdentityError::DatabaseUnavailable)?;
-        if !role { return Err(IdentityError::Forbidden); }
+        if !role {
+            return Err(IdentityError::Forbidden);
+        }
         sqlx::query("SELECT set_config('finance.tenant_id',$1,true),set_config('finance.company_id',$2,true),set_config('finance.identity_issuer',$3,true),set_config('finance.identity_subject',$4,true)")
             .bind(t.to_string()).bind(c.to_string()).bind(&verified.issuer).bind(&verified.subject)
             .execute(&mut *tx).await.map_err(|_|IdentityError::DatabaseUnavailable)?;
-        let result:Option<Uuid>=sqlx::query_scalar("SELECT finance.staff_onboarding_claim($1,$2,$3,$4,$5,$6,$7,$8)")
-            .bind(t).bind(c).bind(&verified.issuer).bind(&verified.subject)
-            .bind(&profile.email).bind(&profile.display_name).bind(profile.issued_at).bind(deadline)
-            .fetch_one(&mut *tx).await.map_err(|_|IdentityError::DatabaseUnavailable)?;
-        if now()? >= verified.expires.min(verified.keys_until) { return Err(IdentityError::InvalidToken); }
-        tx.commit().await.map_err(|_|IdentityError::DatabaseUnavailable)?;
+        let result: Option<Uuid> =
+            sqlx::query_scalar("SELECT finance.staff_onboarding_claim($1,$2,$3,$4,$5,$6,$7,$8)")
+                .bind(t)
+                .bind(c)
+                .bind(&verified.issuer)
+                .bind(&verified.subject)
+                .bind(&profile.email)
+                .bind(&profile.display_name)
+                .bind(profile.issued_at)
+                .bind(deadline)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|_| IdentityError::DatabaseUnavailable)?;
+        if now()? >= verified.expires.min(verified.keys_until) {
+            return Err(IdentityError::InvalidToken);
+        }
+        tx.commit()
+            .await
+            .map_err(|_| IdentityError::DatabaseUnavailable)?;
         Ok(result)
     }
     pub async fn authenticate(
