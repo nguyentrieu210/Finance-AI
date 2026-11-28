@@ -216,7 +216,7 @@ pub async fn change(
     let command: Uuid = proof.context().command.into();
     let correlation: Uuid = proof.context().correlation.into();
     let row = sqlx::query_as::<_, PublishedPolicy>(
-        "SELECT * FROM finance.runtime_policy_change($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+        "SELECT * FROM finance.runtime_policy_change($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::text::date,$11,$12,$13)",
     )
     .bind(t)
     .bind(c)
@@ -227,7 +227,7 @@ pub async fn change(
     .bind(key.as_str())
     .bind(input.reason)
     .bind(input.name)
-    .bind(input.effective.map(|value| value.date_naive()))
+    .bind(input.effective.map(|value| value.date_naive().to_string()))
     .bind(input.new_id)
     .bind(command)
     .bind(correlation)
@@ -297,7 +297,7 @@ pub async fn create(
     let command: Uuid = proof.context().command.into();
     let correlation: Uuid = proof.context().correlation.into();
     let row = sqlx::query_as::<_, PublishedPolicy>(
-        "SELECT * FROM finance.runtime_policy_create($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)",
+        "SELECT * FROM finance.runtime_policy_create($1,$2,$3,$4,$5,$6,$7,$8::text::date,$9::text::date,$10,$11,$12,$13,$14,$15,$16,$17)",
     )
     .bind(t)
     .bind(c)
@@ -306,8 +306,8 @@ pub async fn create(
     .bind(key.as_str())
     .bind(input.name)
     .bind(input.kind)
-    .bind(input.from.date_naive())
-    .bind(input.to.date_naive())
+    .bind(input.from.date_naive().to_string())
+    .bind(input.to.date_naive().to_string())
     .bind(input.source)
     .bind(input.clause_keys)
     .bind(input.evidence)

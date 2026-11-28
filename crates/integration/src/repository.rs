@@ -241,7 +241,7 @@ pub async fn create_manual_handoff(
     .bind(handoff)
     .execute(&mut *tx)
     .await?;
-    let row = sqlx::query_as::<_, Handoff>(&format!(
+    let mut row = sqlx::query_as::<_, Handoff>(&format!(
         "{SELECT_HANDOFF} WHERE h.tenant_id=$1 AND h.company_id=$2 AND h.id=$3"
     ))
     .bind(tenant)
