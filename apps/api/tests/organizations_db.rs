@@ -1819,7 +1819,13 @@ async fn scoped_organization_http_real_database() {
     assert_eq!(serde_json::from_slice::<Value>(&bytes).unwrap(), revised);
     let (dashboard_status, dashboard) = request(&app, "/v1/dashboard", Some(&requester)).await;
     assert_eq!(dashboard_status, StatusCode::OK);
-    assert!(dashboard["items"].as_array().unwrap().iter().any(|m| m["name"] == "reviews.accepted_history_unknown"));
+    assert!(
+        dashboard["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["name"] == "reviews.accepted_history_unknown")
+    );
     let total = dashboard["items"]
         .as_array()
         .unwrap()

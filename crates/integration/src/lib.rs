@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 //! Synthetic-only domain prototype. No authorization, durable mutation or production claim.
-pub mod ports;
 pub mod bridge;
+pub mod ports;
 pub mod reconcile;
 pub mod repository;
 

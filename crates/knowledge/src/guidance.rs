@@ -41,10 +41,7 @@ pub struct Guidance {
     pub citations: Vec<Citation>,
 }
 
-fn evidence_index(
-    policy: Uuid,
-    hits: &[Hit],
-) -> Result<BTreeMap<Uuid, &Hit>, Error> {
+fn evidence_index(policy: Uuid, hits: &[Hit]) -> Result<BTreeMap<Uuid, &Hit>, Error> {
     if policy.is_nil() {
         return Err(Error::WrongPolicy);
     }

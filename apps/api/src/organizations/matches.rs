@@ -169,18 +169,94 @@ pub(super) async fn confirm(
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Lines {policy_id:Uuid,material:serde_json::Value}
-pub(super) async fn reconcile_lines(State(state):State<Arc<OrganizationState>>,headers:HeaderMap,Path(dossier):Path<Uuid>,body:Result<Json<Lines>,JsonRejection>)->Response{
- let correlation=random_id();let Some(token)=headers.get("if-finance-version").and_then(|v|v.to_str().ok()).and_then(|v|VersionToken::parse(v).ok())else{return error(StatusCode::BAD_REQUEST,correlation)};
- if token.target!=VersionTarget::Dossier||Uuid::from(token.resource_id)!=dossier{return error(StatusCode::BAD_REQUEST,correlation)}
- let proof=match dossiers::authenticate_version(&state,&headers,correlation,Some(token.version)).await{Ok(p)=>p,Err(s)=>return error(s,correlation)};
- let Some(key)=key(&headers)else{return error(StatusCode::BAD_REQUEST,correlation)};let Ok(Json(body))=body else{return error(StatusCode::BAD_REQUEST,correlation)};
- match repository::reconcile_lines(&state.runtime,&proof,&key,dossier,body.policy_id,&body.material,random_id()).await{
- Ok(data)=>{let Some(version)=data["dossier_version"].as_i64().and_then(|v|Version::try_from(v).ok())else{return error(StatusCode::SERVICE_UNAVAILABLE,correlation)};
- let token=VersionToken{target:VersionTarget::Dossier,resource_id:ResourceId::try_from(dossier).expect("dossier validated"),version};let mut response=Json(data).into_response();response.headers_mut().insert("finance-version",HeaderValue::from_str(&token.to_string()).expect("version"));response.headers_mut().insert(header::CACHE_CONTROL,HeaderValue::from_static("no-store"));response},
- Err(e)=>error(dossiers::status(e),correlation)}
+pub(super) struct Lines {
+    policy_id: Uuid,
+    material: serde_json::Value,
 }
-pub(super) async fn line_history(State(state):State<Arc<OrganizationState>>,headers:HeaderMap,Path(dossier):Path<Uuid>)->Response{
- let correlation=random_id();let proof=match dossiers::authenticate_version(&state,&headers,correlation,None).await{Ok(p)=>p,Err(s)=>return error(s,correlation)};
- match repository::line_history(&state.runtime,&proof,dossier).await{Ok(data)=>{let mut response=Json(data).into_response();response.headers_mut().insert(header::CACHE_CONTROL,HeaderValue::from_static("no-store"));response},Err(e)=>error(dossiers::status(e),correlation)}
+pub(super) async fn reconcile_lines(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(dossier): Path<Uuid>,
+    body: Result<Json<Lines>, JsonRejection>,
+) -> Response {
+    let correlation = random_id();
+    let Some(token) = headers
+        .get("if-finance-version")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| VersionToken::parse(v).ok())
+    else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    if token.target != VersionTarget::Dossier || Uuid::from(token.resource_id) != dossier {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    }
+    let proof =
+        match dossiers::authenticate_version(&state, &headers, correlation, Some(token.version))
+            .await
+        {
+            Ok(p) => p,
+            Err(s) => return error(s, correlation),
+        };
+    let Some(key) = key(&headers) else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, correlation);
+    };
+    match repository::reconcile_lines(
+        &state.runtime,
+        &proof,
+        &key,
+        dossier,
+        body.policy_id,
+        &body.material,
+        random_id(),
+    )
+    .await
+    {
+        Ok(data) => {
+            let Some(version) = data["dossier_version"]
+                .as_i64()
+                .and_then(|v| Version::try_from(v).ok())
+            else {
+                return error(StatusCode::SERVICE_UNAVAILABLE, correlation);
+            };
+            let token = VersionToken {
+                target: VersionTarget::Dossier,
+                resource_id: ResourceId::try_from(dossier).expect("dossier validated"),
+                version,
+            };
+            let mut response = Json(data).into_response();
+            response.headers_mut().insert(
+                "finance-version",
+                HeaderValue::from_str(&token.to_string()).expect("version"),
+            );
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Err(e) => error(dossiers::status(e), correlation),
+    }
+}
+pub(super) async fn line_history(
+    State(state): State<Arc<OrganizationState>>,
+    headers: HeaderMap,
+    Path(dossier): Path<Uuid>,
+) -> Response {
+    let correlation = random_id();
+    let proof = match dossiers::authenticate_version(&state, &headers, correlation, None).await {
+        Ok(p) => p,
+        Err(s) => return error(s, correlation),
+    };
+    match repository::line_history(&state.runtime, &proof, dossier).await {
+        Ok(data) => {
+            let mut response = Json(data).into_response();
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Err(e) => error(dossiers::status(e), correlation),
+    }
 }

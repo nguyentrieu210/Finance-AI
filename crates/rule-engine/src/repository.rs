@@ -697,7 +697,9 @@ mod corpus_tests {
         );
         assert_eq!(
             rows[0]["invoice.supplier"].value,
-            Some(compiler::Value::Text(std::sync::Arc::from("Synthetic supplier")))
+            Some(compiler::Value::Text(std::sync::Arc::from(
+                "Synthetic supplier"
+            )))
         );
         let mut invalid = data;
         invalid[0]["invoice.number"]["fresh"] = serde_json::json!(false);

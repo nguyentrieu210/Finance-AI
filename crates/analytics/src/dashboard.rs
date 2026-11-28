@@ -110,12 +110,22 @@ mod history_tests {
             unknown_accepted: 1,
         };
         let partial = from_review_history(counts, "2026-11-28T00:00:00Z");
-        assert!(!partial.iter().any(|metric| metric.name == "reviews.first_pass_accepted"));
+        assert!(
+            !partial
+                .iter()
+                .any(|metric| metric.name == "reviews.first_pass_accepted")
+        );
         let complete = from_review_history(
-            ReviewHistoryCounts { unknown_accepted: 0, ..counts },
+            ReviewHistoryCounts {
+                unknown_accepted: 0,
+                ..counts
+            },
             "2026-11-28T00:00:00Z",
         );
-        let metric = complete.iter().find(|m| m.name == "reviews.first_pass_accepted").unwrap();
+        let metric = complete
+            .iter()
+            .find(|m| m.name == "reviews.first_pass_accepted")
+            .unwrap();
         assert_eq!(metric.value, "2");
         assert_eq!(metric.denominator, Some(3));
     }

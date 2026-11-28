@@ -33,7 +33,10 @@ fn citations_are_resolved_from_pinned_evidence() {
     assert_eq!(result.citations[0].source_page, 4);
     assert_eq!(result.citations[0].source_digest, "a".repeat(64));
     assert_eq!(result.citations[0].quote, "hóa đơn");
-    assert_eq!(extractive(id(2), &hits).unwrap().citations[0].quote, hits[0].excerpt);
+    assert_eq!(
+        extractive(id(2), &hits).unwrap().citations[0].quote,
+        hits[0].excerpt
+    );
 }
 
 #[test]

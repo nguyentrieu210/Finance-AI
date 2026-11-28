@@ -364,23 +364,67 @@ pub struct ReservableResource {
     pub available: String,
     pub fresh_until: String,
 }
-pub async fn reservable(pool:&PgPool,proof:&AuthenticatedCommand,after:Uuid,limit:i64)->Result<Vec<ReservableResource>,Error>{
-    if !(1..=100).contains(&limit){return Err(Error::InvalidInput)}
-    let (t,c,a)=binding(proof)?;
-    let mut tx=scoped_transaction(pool,proof.context()).await?;
-    require_role(&mut tx,proof.context(),Role::FinanceApprover).await.map_err(|e|match e{GrantError::Forbidden=>Error::Forbidden,GrantError::Database(e)=>Error::Database(e)})?;
-    recheck_authenticated(&mut tx,Some(proof)).await?;
-    let rows=sqlx::query_as::<_,ReservableResource>("SELECT * FROM finance.runtime_reservable_resources($1,$2,$3,$4,$5::integer)")
-        .bind(t).bind(c).bind(a).bind(after).bind(limit).fetch_all(&mut *tx).await.map_err(map_pg_error)?;
-    recheck_authenticated(&mut tx,Some(proof)).await?;tx.commit().await?;Ok(rows)
+pub async fn reservable(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    after: Uuid,
+    limit: i64,
+) -> Result<Vec<ReservableResource>, Error> {
+    if !(1..=100).contains(&limit) {
+        return Err(Error::InvalidInput);
+    }
+    let (t, c, a) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    require_role(&mut tx, proof.context(), Role::FinanceApprover)
+        .await
+        .map_err(|e| match e {
+            GrantError::Forbidden => Error::Forbidden,
+            GrantError::Database(e) => Error::Database(e),
+        })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let rows = sqlx::query_as::<_, ReservableResource>(
+        "SELECT * FROM finance.runtime_reservable_resources($1,$2,$3,$4,$5::integer)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(after)
+    .bind(limit)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(map_pg_error)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(rows)
 }
-pub async fn import_material(pool:&PgPool,proof:&AuthenticatedCommand,id:Uuid)->Result<Option<serde_json::Value>,Error>{
-    if id.is_nil(){return Err(Error::InvalidInput)}
-    let (t,c,a)=binding(proof)?;
-    let mut tx=scoped_transaction(pool,proof.context()).await?;
-    lock_roles(&mut tx,proof.context()).await.map_err(|e|match e{GrantError::Forbidden=>Error::Forbidden,GrantError::Database(e)=>Error::Database(e)})?;
-    recheck_authenticated(&mut tx,Some(proof)).await?;
-    let material=sqlx::query_scalar::<_,Option<serde_json::Value>>("SELECT finance.runtime_reference_import_material($1,$2,$3,$4)")
-        .bind(t).bind(c).bind(a).bind(id).fetch_one(&mut *tx).await.map_err(map_pg_error)?;
-    recheck_authenticated(&mut tx,Some(proof)).await?;tx.commit().await?;Ok(material)
+pub async fn import_material(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    id: Uuid,
+) -> Result<Option<serde_json::Value>, Error> {
+    if id.is_nil() {
+        return Err(Error::InvalidInput);
+    }
+    let (t, c, a) = binding(proof)?;
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    lock_roles(&mut tx, proof.context())
+        .await
+        .map_err(|e| match e {
+            GrantError::Forbidden => Error::Forbidden,
+            GrantError::Database(e) => Error::Database(e),
+        })?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let material = sqlx::query_scalar::<_, Option<serde_json::Value>>(
+        "SELECT finance.runtime_reference_import_material($1,$2,$3,$4)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(map_pg_error)?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(material)
 }

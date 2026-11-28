@@ -179,7 +179,10 @@ fn exists_distinguishes_verified_absence_from_unknown() {
     let compiled = compiler::compile(&rule(exists.clone()), &registry).unwrap();
     let negated = compiler::compile(&rule(call("not", vec![exists])), &registry).unwrap();
     let mut facts = BTreeMap::new();
-    assert_eq!(compiler::evaluate(&compiled, &facts).outcome, Outcome::Unknown);
+    assert_eq!(
+        compiler::evaluate(&compiled, &facts).outcome,
+        Outcome::Unknown
+    );
     let evidence = EvidenceId::try_from(Uuid::from_u128(2)).unwrap();
     facts.insert(
         "invoice.date".to_owned(),
@@ -190,23 +193,37 @@ fn exists_distinguishes_verified_absence_from_unknown() {
             evidence: vec![evidence],
         },
     );
-    assert_eq!(compiler::evaluate(&compiled, &facts).outcome, Outcome::Unknown);
+    assert_eq!(
+        compiler::evaluate(&compiled, &facts).outcome,
+        Outcome::Unknown
+    );
     facts.get_mut("invoice.date").unwrap().value = Some(Value::Absent(Type::Date));
     let result = compiler::evaluate(&compiled, &facts);
     assert_eq!(result.outcome, Outcome::Fail);
     assert_eq!(result.evidence, vec![evidence]);
     assert_eq!(compiler::evaluate(&negated, &facts).outcome, Outcome::Pass);
     let comparison = compiler::compile(
-        &rule(call("eq", vec![json!({"ref": "invoice.date"}), date("2024-01-01")])),
+        &rule(call(
+            "eq",
+            vec![json!({"ref": "invoice.date"}), date("2024-01-01")],
+        )),
         &registry,
     )
     .unwrap();
-    assert_eq!(compiler::evaluate(&comparison, &facts).outcome, Outcome::Unknown);
+    assert_eq!(
+        compiler::evaluate(&comparison, &facts).outcome,
+        Outcome::Unknown
+    );
     facts.get_mut("invoice.date").unwrap().fresh = false;
-    assert_eq!(compiler::evaluate(&negated, &facts).outcome, Outcome::Unknown);
+    assert_eq!(
+        compiler::evaluate(&negated, &facts).outcome,
+        Outcome::Unknown
+    );
     let fact = facts.get_mut("invoice.date").unwrap();
     fact.fresh = true;
-    fact.value = Some(Value::Date(chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()));
+    fact.value = Some(Value::Date(
+        chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+    ));
     assert_eq!(compiler::evaluate(&compiled, &facts).outcome, Outcome::Pass);
 }
 
@@ -217,7 +234,10 @@ fn set_membership_and_count_require_known_coverage() {
 
     let set = json!({"literal": ["A", "B"], "value_type": "set"});
     let a = json!({"literal": "A", "value_type": "string"});
-    assert_eq!(outcome(call("in", vec![a.clone(), set.clone()])), Outcome::Pass);
+    assert_eq!(
+        outcome(call("in", vec![a.clone(), set.clone()])),
+        Outcome::Pass
+    );
     assert_eq!(
         outcome(call("eq", vec![call("count", vec![set]), decimal("2")])),
         Outcome::Pass
@@ -239,7 +259,10 @@ fn set_membership_and_count_require_known_coverage() {
     )
     .unwrap();
     let mut facts = BTreeMap::new();
-    assert_eq!(compiler::evaluate(&compiled, &facts).outcome, Outcome::Unknown);
+    assert_eq!(
+        compiler::evaluate(&compiled, &facts).outcome,
+        Outcome::Unknown
+    );
     facts.insert(
         "docs.kinds".to_owned(),
         Fact {
@@ -251,7 +274,10 @@ fn set_membership_and_count_require_known_coverage() {
     );
     assert_eq!(compiler::evaluate(&compiled, &facts).outcome, Outcome::Fail);
     facts.get_mut("docs.kinds").unwrap().fresh = false;
-    assert_eq!(compiler::evaluate(&compiled, &facts).outcome, Outcome::Unknown);
+    assert_eq!(
+        compiler::evaluate(&compiled, &facts).outcome,
+        Outcome::Unknown
+    );
 }
 
 #[test]
@@ -264,7 +290,10 @@ fn duplicate_set_items_and_cross_type_membership_rejected() {
     );
     assert_eq!(
         compiler::compile(
-            &rule(call("in", vec![decimal("1"), json!({"literal": ["1"], "value_type": "set"})])),
+            &rule(call(
+                "in",
+                vec![decimal("1"), json!({"literal": ["1"], "value_type": "set"})]
+            )),
             &BTreeMap::new()
         )
         .err(),
@@ -274,9 +303,8 @@ fn duplicate_set_items_and_cross_type_membership_rejected() {
 
 #[test]
 fn quantities_cannot_mix_units_or_currencies() {
-    let quantity = |value: &str, unit: &str| {
-        json!({"literal": value, "value_type": "quantity", "unit": unit})
-    };
+    let quantity =
+        |value: &str, unit: &str| json!({"literal": value, "value_type": "quantity", "unit": unit});
     assert_eq!(
         outcome(call(
             "eq",
@@ -316,7 +344,10 @@ fn collection_aggregates_distinguish_empty_unknown_and_incomplete() {
     let sum = compiler::compile(
         &rule(call(
             "eq",
-            vec![call("sum", vec![json!({"ref": "rows.amounts"})]), decimal("5")],
+            vec![
+                call("sum", vec![json!({"ref": "rows.amounts"})]),
+                decimal("5"),
+            ],
         )),
         &registry,
     )
@@ -354,8 +385,7 @@ fn collection_aggregates_distinguish_empty_unknown_and_incomplete() {
     assert_eq!(compiler::evaluate(&sum, &facts).outcome, Outcome::Pass);
     assert_eq!(compiler::evaluate(&all, &facts).outcome, Outcome::Fail);
     assert_eq!(compiler::evaluate(&any, &facts).outcome, Outcome::Unknown);
-    facts.get_mut("rows.amounts").unwrap().value =
-        Some(Value::DecimalList(Arc::from([None])));
+    facts.get_mut("rows.amounts").unwrap().value = Some(Value::DecimalList(Arc::from([None])));
     assert_eq!(compiler::evaluate(&sum, &facts).outcome, Outcome::Unknown);
     facts.get_mut("rows.flags").unwrap().value = Some(Value::BooleanList(Arc::from([])));
     assert_eq!(compiler::evaluate(&all, &facts).outcome, Outcome::Pass);

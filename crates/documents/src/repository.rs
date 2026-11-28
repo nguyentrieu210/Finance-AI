@@ -278,11 +278,14 @@ pub async fn download_original(
     dossier: Uuid,
     document: Uuid,
 ) -> Result<Option<Original>, Error> {
-    download_original_with_storage(pool,proof,dossier,document,None).await
+    download_original_with_storage(pool, proof, dossier, document, None).await
 }
 
 pub async fn download_original_with_storage(
-    pool: &PgPool, proof: &AuthenticatedCommand, dossier: Uuid, document: Uuid,
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    dossier: Uuid,
+    document: Uuid,
     storage: Option<&super::s3::S3>,
 ) -> Result<Option<Original>, Error> {
     if dossier.is_nil() || document.is_nil() {
@@ -307,7 +310,18 @@ pub async fn download_original_with_storage(
     .await?;
     if original.is_none() {
         if let Some(storage) = storage {
-            original = super::storage_runtime::download(&mut tx,storage,t,c,a,dossier,document,command,correlation).await?;
+            original = super::storage_runtime::download(
+                &mut tx,
+                storage,
+                t,
+                c,
+                a,
+                dossier,
+                document,
+                command,
+                correlation,
+            )
+            .await?;
         }
     }
     if let Some(row) = &original {
@@ -393,8 +407,12 @@ pub async fn issue_upload_grant(
 }
 
 pub async fn issue_upload_grant_with_storage(
-    pool: &PgPool, proof: &AuthenticatedCommand, key: &IdempotencyKey,
-    dossier: Uuid, document: Uuid, storage: Option<&super::s3::S3>,
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    dossier: Uuid,
+    document: Uuid,
+    storage: Option<&super::s3::S3>,
 ) -> Result<UploadGrant, UploadGrantError> {
     if dossier.is_nil() || document.is_nil() {
         return Err(UploadGrantError::Core(Error::InvalidInput));
@@ -442,13 +460,26 @@ pub async fn issue_upload_grant_with_storage(
         Err(err) => return Err(UploadGrantError::Core(map_pg_error(err))),
     };
     if let Some(storage) = storage {
-        let metadata = super::storage_runtime::grant_metadata(&mut tx, t,c,a,dossier,document,grant.generation)
-            .await.map_err(UploadGrantError::from)?;
-        let object = metadata.object(t,c,document).map_err(UploadGrantError::from)?;
+        let metadata = super::storage_runtime::grant_metadata(
+            &mut tx,
+            t,
+            c,
+            a,
+            dossier,
+            document,
+            grant.generation,
+        )
+        .await
+        .map_err(UploadGrantError::from)?;
+        let object = metadata
+            .object(t, c, document)
+            .map_err(UploadGrantError::from)?;
         let expires = chrono::DateTime::parse_from_rfc3339(&grant.expires_at)
-            .map_err(|_| UploadGrantError::Core(Error::Conflict))?.with_timezone(&chrono::Utc);
+            .map_err(|_| UploadGrantError::Core(Error::Conflict))?
+            .with_timezone(&chrono::Utc);
         let issued = expires - chrono::TimeDelta::seconds(300);
-        let signed = storage.upload_grant(&object,issued,300)
+        let signed = storage
+            .upload_grant(&object, issued, 300)
             .map_err(|_| UploadGrantError::Core(Error::Conflict))?;
         grant.upload_url = signed.url.to_string();
     }
@@ -476,12 +507,15 @@ pub async fn finalize(
     key: &IdempotencyKey,
     input: FinalizeInput<'_>,
 ) -> Result<PipelineJob, Error> {
-    finalize_with_storage(pool,proof,key,input,None).await
+    finalize_with_storage(pool, proof, key, input, None).await
 }
 
 pub async fn finalize_with_storage(
-    pool: &PgPool, proof: &AuthenticatedCommand, key: &IdempotencyKey,
-    input: FinalizeInput<'_>, storage: Option<&super::s3::S3>,
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    key: &IdempotencyKey,
+    input: FinalizeInput<'_>,
+    storage: Option<&super::s3::S3>,
 ) -> Result<PipelineJob, Error> {
     if input.dossier.is_nil()
         || input.document.is_nil()
@@ -524,7 +558,18 @@ pub async fn finalize_with_storage(
     .await
     .map_err(map_pg_error)?;
     if let Some(storage) = storage {
-        super::storage_runtime::attach_finalized(&mut tx,storage,t,c,a,input.dossier,input.document,input.generation,row.id).await?;
+        super::storage_runtime::attach_finalized(
+            &mut tx,
+            storage,
+            t,
+            c,
+            a,
+            input.dossier,
+            input.document,
+            input.generation,
+            row.id,
+        )
+        .await?;
     }
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
@@ -649,15 +694,39 @@ pub async fn request_pipeline_job(
     Ok(row)
 }
 
-pub async fn rendered_evidence(pool:&PgPool,proof:&AuthenticatedCommand,id:Uuid)->Result<Option<Original>,Error>{
- if id.is_nil(){return Err(Error::InvalidInput)}
- let (t,c,a)=binding(proof)?;
- let command:Uuid=proof.context().command.into();
- let correlation:Uuid=proof.context().correlation.into();
- let mut tx=scoped_transaction(pool,proof.context()).await?;
- recheck_authenticated(&mut tx,Some(proof)).await?;
- let row=sqlx::query_as::<_,Original>("SELECT * FROM finance.runtime_evidence_rendered($1,$2,$3,$4,$5,$6)")
-  .bind(t).bind(c).bind(a).bind(id).bind(command).bind(correlation).fetch_optional(&mut *tx).await?;
- if let Some(row)=&row { if row.bytes.len()>DEFAULT_MAX_FILE_BYTES as usize||!row.bytes.starts_with(b"%PDF-")||format!("{:x}",Sha256::digest(&row.bytes))!=row.sha256{return Err(Error::Conflict)} }
- recheck_authenticated(&mut tx,Some(proof)).await?;tx.commit().await?;Ok(row)
+pub async fn rendered_evidence(
+    pool: &PgPool,
+    proof: &AuthenticatedCommand,
+    id: Uuid,
+) -> Result<Option<Original>, Error> {
+    if id.is_nil() {
+        return Err(Error::InvalidInput);
+    }
+    let (t, c, a) = binding(proof)?;
+    let command: Uuid = proof.context().command.into();
+    let correlation: Uuid = proof.context().correlation.into();
+    let mut tx = scoped_transaction(pool, proof.context()).await?;
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    let row = sqlx::query_as::<_, Original>(
+        "SELECT * FROM finance.runtime_evidence_rendered($1,$2,$3,$4,$5,$6)",
+    )
+    .bind(t)
+    .bind(c)
+    .bind(a)
+    .bind(id)
+    .bind(command)
+    .bind(correlation)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(row) = &row {
+        if row.bytes.len() > DEFAULT_MAX_FILE_BYTES as usize
+            || !row.bytes.starts_with(b"%PDF-")
+            || format!("{:x}", Sha256::digest(&row.bytes)) != row.sha256
+        {
+            return Err(Error::Conflict);
+        }
+    }
+    recheck_authenticated(&mut tx, Some(proof)).await?;
+    tx.commit().await?;
+    Ok(row)
 }

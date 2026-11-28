@@ -433,8 +433,5 @@ fn resolved_department_assignments_enforce_membership_and_effective_time() {
         Err(ScopedDenial::MissingGrant)
     );
     // A grant is ineffective if the actor's department membership is no longer active.
-    assert_eq!(
-        decide(21, 20, &[unit(20)]),
-        Err(ScopedDenial::MissingGrant)
-    );
+    assert_eq!(decide(21, 20, &[unit(20)]), Err(ScopedDenial::MissingGrant));
 }

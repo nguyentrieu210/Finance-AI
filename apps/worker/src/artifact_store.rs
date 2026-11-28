@@ -86,7 +86,9 @@ fn verified_file(directory: &Path, item: &OwnedArtifact) -> Result<(), RunFailur
     let mut hash = Sha256::new();
     let mut buffer = [0_u8; 65536];
     loop {
-        let n = reader.read(&mut buffer).map_err(|_| RunFailure::Transient)?;
+        let n = reader
+            .read(&mut buffer)
+            .map_err(|_| RunFailure::Transient)?;
         if n == 0 {
             break;
         }
@@ -94,14 +96,23 @@ fn verified_file(directory: &Path, item: &OwnedArtifact) -> Result<(), RunFailur
         hash.update(&buffer[..n]);
     }
     let observed: [u8; 32] = hash.finalize().into();
-    if total != item.bytes || observed != item.expected.as_bytes() || observed != item.observed.as_bytes() {
+    if total != item.bytes
+        || observed != item.expected.as_bytes()
+        || observed != item.observed.as_bytes()
+    {
         return Err(RunFailure::Permanent);
     }
     Ok(())
 }
 
-pub(super) fn verify(root: &Path, lease: Lease, artifacts: &[OwnedArtifact]) -> Result<(), RunFailure> {
-    let total = artifacts.iter().try_fold(0_u64, |total, item| total.checked_add(item.bytes));
+pub(super) fn verify(
+    root: &Path,
+    lease: Lease,
+    artifacts: &[OwnedArtifact],
+) -> Result<(), RunFailure> {
+    let total = artifacts
+        .iter()
+        .try_fold(0_u64, |total, item| total.checked_add(item.bytes));
     if artifacts.is_empty() || artifacts.len() > 256 || total.is_none_or(|n| n > MAX_TOTAL) {
         return Err(RunFailure::Permanent);
     }
@@ -120,11 +131,15 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn rehashes_real_bytes_and_rejects_paths_and_tampering() {
-        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt, symlink};
         use std::io::Write;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt, symlink};
 
-        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let root = std::env::temp_dir().join(format!("finance-artifact-{}-{nonce}", std::process::id()));
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("finance-artifact-{}-{nonce}", std::process::id()));
         fs::create_dir(&root).unwrap();
         fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
         let payload = b"%PDF-1.7 synthetic";

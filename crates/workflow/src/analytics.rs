@@ -139,10 +139,13 @@ pub async fn dashboard_counts(
     .await?;
     recheck_authenticated(&mut tx, Some(proof)).await?;
     tx.commit().await?;
-    Ok((counts.state, ReviewHistoryCounts {
-        accepted: counts.review_accepted,
-        first_pass: counts.first_pass,
-        returned_cases: counts.returned_cases,
-        unknown_accepted: counts.unknown_accepted,
-    }))
+    Ok((
+        counts.state,
+        ReviewHistoryCounts {
+            accepted: counts.review_accepted,
+            first_pass: counts.first_pass,
+            returned_cases: counts.returned_cases,
+            unknown_accepted: counts.unknown_accepted,
+        },
+    ))
 }

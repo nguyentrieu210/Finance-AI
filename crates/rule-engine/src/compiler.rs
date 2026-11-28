@@ -392,12 +392,18 @@ fn compile_node(
             let ty = match op {
                 Op::And | Op::Or | Op::Not if first == Type::Boolean => Type::Boolean,
                 Op::Eq | Op::Ne
-                    if !matches!(first, Type::DecimalList | Type::MoneyList(_) | Type::BooleanList) =>
+                    if !matches!(
+                        first,
+                        Type::DecimalList | Type::MoneyList(_) | Type::BooleanList
+                    ) =>
                 {
                     Type::Boolean
                 }
                 Op::Lt | Op::Lte | Op::Gt | Op::Gte
-                    if matches!(first, Type::Money(_) | Type::Decimal | Type::Date | Type::Quantity(_)) =>
+                    if matches!(
+                        first,
+                        Type::Money(_) | Type::Decimal | Type::Date | Type::Quantity(_)
+                    ) =>
                 {
                     Type::Boolean
                 }
@@ -411,7 +417,10 @@ fn compile_node(
                 Op::DateDiff if first == Type::Date => Type::Decimal,
                 Op::In => Type::Boolean,
                 Op::Count
-                    if matches!(first, Type::Set | Type::DecimalList | Type::MoneyList(_) | Type::BooleanList) =>
+                    if matches!(
+                        first,
+                        Type::Set | Type::DecimalList | Type::MoneyList(_) | Type::BooleanList
+                    ) =>
                 {
                     Type::Decimal
                 }
@@ -630,21 +639,21 @@ fn binary(op: Op, a: &Value, b: &Value) -> Eval {
             Op::Lte => Known(Value::Boolean(x <= y)),
             Op::Gt => Known(Value::Boolean(x > y)),
             Op::Gte => Known(Value::Boolean(x >= y)),
-            Op::DateDiff => match Amount::parse(&x.signed_duration_since(*y).num_days().to_string()) {
-                Ok(amount) => Known(Value::Decimal(amount)),
-                Err(_) => Error,
-            },
+            Op::DateDiff => {
+                match Amount::parse(&x.signed_duration_since(*y).num_days().to_string()) {
+                    Ok(amount) => Known(Value::Decimal(amount)),
+                    Err(_) => Error,
+                }
+            }
             _ => Error,
         };
     }
     if matches!(op, Op::Mul | Op::Div) {
         return match (a, b) {
-            (Value::Decimal(x), Value::Decimal(y)) => {
-                match exact_decimal(op, *x, *y) {
-                    Some(amount) => Known(Value::Decimal(amount)),
-                    None => Error,
-                }
-            }
+            (Value::Decimal(x), Value::Decimal(y)) => match exact_decimal(op, *x, *y) {
+                Some(amount) => Known(Value::Decimal(amount)),
+                None => Error,
+            },
             _ => Error,
         };
     }

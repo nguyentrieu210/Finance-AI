@@ -80,9 +80,13 @@ impl FieldResult<'_> {
 fn fields(kind: Kind) -> &'static [Field] {
     use Field::*;
     match kind {
-        Kind::Contract | Kind::ContractAppendix => {
-            &[ContractNumber, DocumentDate, Supplier, TotalAmount, Currency]
-        }
+        Kind::Contract | Kind::ContractAppendix => &[
+            ContractNumber,
+            DocumentDate,
+            Supplier,
+            TotalAmount,
+            Currency,
+        ],
         Kind::Invoice => &[
             InvoiceNumber,
             DocumentDate,
@@ -119,7 +123,9 @@ fn label(raw: &str) -> Option<Field> {
         "tiền trước thuế" | "cộng tiền hàng" => Some(Field::AmountBeforeTax),
         "tiền thuế" | "tiền thuế gtgt" => Some(Field::TaxAmount),
         "tổng tiền" | "tổng thanh toán" => Some(Field::TotalAmount),
-        "tiền tệ" | "mã tiền tệ" | "loại tiền" | "đơn vị tiền tệ" | "currency" => Some(Field::Currency),
+        "tiền tệ" | "mã tiền tệ" | "loại tiền" | "đơn vị tiền tệ" | "currency" => {
+            Some(Field::Currency)
+        }
         "số tiền đề nghị" | "số tiền đề nghị thanh toán" | "số tiền đề nghị tạm ứng" => {
             Some(Field::RequestedAmount)
         }
@@ -161,7 +167,11 @@ fn parse(field: Field, raw: &str, format: Format) -> Outcome<Value<'_>> {
             }
         }
         Field::Currency => {
-            if finance_shared::money::Currency::parse(trimmed).is_ok() { Outcome::Candidate(Value::Identifier(trimmed)) } else { Outcome::Invalid }
+            if finance_shared::money::Currency::parse(trimmed).is_ok() {
+                Outcome::Candidate(Value::Identifier(trimmed))
+            } else {
+                Outcome::Invalid
+            }
         }
         Field::DocumentDate => map_outcome(normalize::date(raw, format).outcome, Value::Date),
         _ => map_outcome(normalize::amount(raw, format).outcome, Value::Amount),

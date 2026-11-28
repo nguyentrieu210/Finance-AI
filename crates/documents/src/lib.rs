@@ -3,8 +3,8 @@
 //! object-store provider, parser, clean transition or download.
 pub mod evidence;
 pub mod repository;
-pub mod scan;
 pub mod s3;
+pub mod scan;
 pub mod storage_runtime;
 use chrono::{DateTime, TimeDelta, Utc};
 use finance_shared::{
