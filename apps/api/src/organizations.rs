@@ -578,6 +578,7 @@ pub fn router(state: OrganizationState) -> Router {
             "/v1/dossiers/{dossier_id}/matches",
             get(matches::list).post(matches::confirm),
         )
+        .route("/v1/dossiers/{dossier_id}/line-reconciliations",get(matches::line_history).post(matches::reconcile_lines))
         .route(
             "/v1/dossiers/{dossier_id}/reservations",
             get(reservations::list).post(reservations::bind),

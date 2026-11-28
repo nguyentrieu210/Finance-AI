@@ -104,7 +104,8 @@
       "default_scope": "company",
       "tables": [
         "match_result",
-        "match_decision"
+        "match_decision",
+        "line_reconciliation"
       ],
       "invariants": "Revision-pinned operands and evidence; fuzzy not authoritative."
     },

@@ -253,3 +253,22 @@ pub async fn confirm(
     tx.commit().await?;
     Ok(from_receipt(row))
 }
+
+pub async fn reconcile_lines(pool:&PgPool,proof:&AuthenticatedCommand,key:&IdempotencyKey,dossier:Uuid,policy:Uuid,material:&serde_json::Value,id:Uuid)->Result<serde_json::Value,Error>{
+ let version=i64::from(proof.context().expected_version.ok_or(Error::InvalidInput)?);
+ let(t,c,a)=binding(proof)?;
+ let mut tx=scoped_transaction(pool,proof.context()).await?;
+ require_role(&mut tx,proof.context(),Role::Accountant).await.map_err(grant)?;
+ recheck_authenticated(&mut tx,Some(proof)).await?;
+ let cmd:Uuid=proof.context().command.into();let corr:Uuid=proof.context().correlation.into();
+ let result=sqlx::query_scalar::<_,serde_json::Value>("SELECT finance.runtime_line_reconcile($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
+ .bind(t).bind(c).bind(a).bind(dossier).bind(version).bind(policy).bind(material).bind(key.as_str()).bind(id).bind(cmd).bind(corr).fetch_one(&mut *tx).await.map_err(map_database)?;
+ recheck_authenticated(&mut tx,Some(proof)).await?;tx.commit().await?;Ok(result)
+}
+pub async fn line_history(pool:&PgPool,proof:&AuthenticatedCommand,dossier:Uuid)->Result<serde_json::Value,Error>{
+ let(t,c,a)=binding(proof)?;let mut tx=scoped_transaction(pool,proof.context()).await?;
+ finance_permissions::lock_roles(&mut tx,proof.context()).await.map_err(grant)?;
+ recheck_authenticated(&mut tx,Some(proof)).await?;
+ let result=sqlx::query_scalar::<_,serde_json::Value>("SELECT finance.runtime_line_reconciliations($1,$2,$3,$4)").bind(t).bind(c).bind(a).bind(dossier).fetch_one(&mut *tx).await.map_err(map_database)?;
+ recheck_authenticated(&mut tx,Some(proof)).await?;tx.commit().await?;Ok(result)
+}

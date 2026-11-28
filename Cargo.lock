@@ -677,6 +677,7 @@ dependencies = [
  "finance-permissions",
  "finance-shared",
  "serde",
+ "serde_json",
  "sha2",
  "sqlx",
  "uuid",

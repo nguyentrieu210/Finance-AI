@@ -44,7 +44,8 @@ BEGIN
  IF gate IS NOT NULL THEN
   IF jsonb_typeof(gate) IS DISTINCT FROM 'object' OR octet_length(gate::text)>4096
   OR NOT (gate ?& ARRAY['clause_key','amount_path','currency_path','resource_kinds','resource_keys'])
-  OR (SELECT count(*) FROM jsonb_object_keys(gate))<>5
+  OR (SELECT count(*) FROM jsonb_object_keys(gate)) NOT BETWEEN 5 AND 6
+  OR (gate - ARRAY['clause_key','amount_path','currency_path','resource_kinds','resource_keys','line_match'])<>'{}'::jsonb
   OR NOT COALESCE(gate->>'clause_key'=ANY(clause_keys),false)
   OR NOT COALESCE(gate->>'amount_path'=ANY(critical_paths),false)
   OR NOT COALESCE(gate->>'currency_path'=ANY(critical_paths),false)
@@ -65,6 +66,23 @@ BEGIN
     WHERE x.ck=gate->>'clause_key' AND x.fp=gate->'resource_keys'->>k
     AND x.fp NOT IN (gate->>'amount_path',gate->>'currency_path')))
   THEN RAISE EXCEPTION 'finance gate must bind approved clause and critical fields' USING ERRCODE='22023'; END IF;
+  IF gate ? 'line_match' THEN
+   IF jsonb_typeof(gate->'line_match') IS DISTINCT FROM 'object' OR NOT (gate->'line_match' ?& ARRAY['currency','price_tolerance','conversions'])
+   OR (SELECT count(*) FROM jsonb_object_keys(gate->'line_match'))<>3
+   OR gate->'line_match'->>'currency' IS NULL OR gate->'line_match'->>'currency' !~ '^[A-Z]{3}$'
+   OR gate->'line_match'->>'price_tolerance' IS NULL OR gate->'line_match'->>'price_tolerance' !~ '^[0-9]{1,20}([.][0-9]{1,8})?$'
+   OR jsonb_typeof(gate->'line_match'->'conversions') IS DISTINCT FROM 'array'
+   OR jsonb_array_length(gate->'line_match'->'conversions')>50
+   THEN RAISE EXCEPTION 'invalid line matching policy' USING ERRCODE='22023'; END IF;
+   IF EXISTS(SELECT 1 FROM jsonb_array_elements(gate->'line_match'->'conversions') cv
+    WHERE jsonb_typeof(cv) IS DISTINCT FROM 'object' OR (SELECT count(*) FROM jsonb_object_keys(cv))<>4
+    OR cv->>'from' IS NULL OR cv->>'to' IS NULL OR cv->>'from'=cv->>'to'
+    OR octet_length(cv->>'from') NOT BETWEEN 1 AND 32 OR octet_length(cv->>'to') NOT BETWEEN 1 AND 32
+    OR cv->>'numerator' IS NULL OR cv->>'numerator' !~ '^[1-9][0-9]{0,8}$'
+    OR cv->>'denominator' IS NULL OR cv->>'denominator' !~ '^[1-9][0-9]{0,8}$')
+    OR jsonb_array_length(gate->'line_match'->'conversions')<>(SELECT count(DISTINCT jsonb_build_array(cv->>'from',cv->>'to')) FROM jsonb_array_elements(gate->'line_match'->'conversions') cv)
+   THEN RAISE EXCEPTION 'invalid or duplicate conversion' USING ERRCODE='22023'; END IF;
+  END IF;
  END IF;
  IF NOT EXISTS(SELECT 1 FROM finance.membership m WHERE (m.tenant_id,m.company_id,m.actor_id)=(t,c,a)
   AND m.role='POLICY_ADMIN' AND m.active AND m.valid_from<=clock_timestamp() AND (m.valid_until IS NULL OR m.valid_until>clock_timestamp()))
