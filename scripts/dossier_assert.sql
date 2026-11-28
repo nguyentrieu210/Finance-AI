@@ -16,7 +16,7 @@ BEGIN
     LEFT JOIN finance.dossier d
       ON d.tenant_id=i.tenant_id AND d.company_id=i.company_id AND d.id=i.result_id
     WHERE i.operation_id='prototype.createDossier'
-      AND (d.id IS NULL OR d.status<>'DRAFT')
+      AND (d.id IS NULL OR (d.status<>'DRAFT' AND NOT (d.status='CANCELLED' AND EXISTS(SELECT 1 FROM finance.idempotency_record c WHERE c.tenant_id=d.tenant_id AND c.company_id=d.company_id AND c.operation_id='dossier.cancel' AND c.result_id=d.id))))
  )
  OR EXISTS(
     SELECT 1
