@@ -2,6 +2,7 @@
 ALTER TABLE finance.ocr_run DROP CONSTRAINT ocr_run_engine_check,
  ADD CONSTRAINT ocr_run_engine_check CHECK(engine IN ('TESSERACT_SYNTHETIC','TESSERACT_LOCAL')),
  ADD COLUMN classification jsonb,
+ ADD COLUMN derived_pdf bytea CHECK(derived_pdf IS NULL OR (octet_length(derived_pdf) BETWEEN 5 AND 26214400 AND substring(derived_pdf FROM 1 FOR 5)=decode('255044462d','hex'))),
  ADD COLUMN ai_advisory jsonb CHECK(ai_advisory IS NULL OR (jsonb_typeof(ai_advisory)='object' AND octet_length(ai_advisory::text)<=65536)),
  ADD CONSTRAINT ocr_classification_bound CHECK(classification IS NULL OR (jsonb_typeof(classification)='array' AND jsonb_array_length(classification)=page_count));
 ALTER TABLE finance.extraction_run DROP CONSTRAINT extraction_run_schema_version_check,
@@ -33,7 +34,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
  WHERE t=finance.scope_tenant() AND c=finance.scope_company() AND finance.worker_scope_allowed(t,c)
  AND (q.tenant_id,q.company_id,q.id,q.fence,q.leased_by)=(t,c,j,f,w)
  AND q.state='LEASED' AND q.lease_until>statement_timestamp() AND o.event_type IN ('OCR_REQUESTED','CLASSIFY_REQUESTED','EXTRACT_REQUESTED')
- AND b.scan_state='CLEAN' AND b.storage_backend IN ('SYNTHETIC_DB_ONLY','S3_VERSIONED') AND b.mime IN ('image/png','application/pdf')
+ AND b.scan_state='CLEAN' AND b.storage_backend IN ('SYNTHETIC_DB_ONLY','S3_VERSIONED') AND b.mime IN ('image/png','application/pdf','image/jpeg','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
  AND u.state='FINALIZED' AND u.generation=b.generation AND u.document_kind IN ('INVOICE','CONTRACT','CONTRACT_APPENDIX','PAYMENT_REQUEST','ADVANCE_REQUEST','ADVANCE_SETTLEMENT','ACCEPTANCE_RECORD','PAYMENT_VOUCHER')
  AND d.status IN ('DRAFT','PROCESSING','NEEDS_INPUT','REVIEWABLE')
 $$;
@@ -44,7 +45,7 @@ GRANT EXECUTE ON FUNCTION finance.local_ocr_source(uuid,uuid,uuid,bigint,uuid) T
 
 
 CREATE FUNCTION finance.complete_local_ocr(t uuid,c uuid,j uuid,f bigint,w uuid,
- doc uuid,rev uuid,g bigint,source bytea,model bytea,config bytea,blocks jsonb,fields jsonb,classification jsonb,pages integer,kind text,evt text,advisory jsonb)
+ doc uuid,rev uuid,g bigint,source bytea,model bytea,config bytea,blocks jsonb,fields jsonb,classification jsonb,pages integer,kind text,evt text,advisory jsonb,rendered bytea)
 RETURNS uuid LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE jobrow finance.job%ROWTYPE; b finance.document_blob%ROWTYPE; p jsonb; entry jsonb; idx integer; block_page integer;
  rect integer[]; ref_ids integer[]; page_no integer; field_count integer:=0; run_id uuid:=j;
@@ -77,7 +78,7 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'wrong OCR dossier' USING ERRCODE='23514'; END IF;
  SELECT * INTO b FROM finance.document_blob WHERE tenant_id=t AND company_id=c AND id=doc;
  IF NOT FOUND OR b.generation<>g OR b.sha256_digest<>source OR b.storage_backend NOT IN ('SYNTHETIC_DB_ONLY','S3_VERSIONED')
- OR b.scan_state<>'CLEAN' OR b.mime NOT IN ('image/png','application/pdf')
+ OR b.scan_state<>'CLEAN' OR b.mime NOT IN ('image/png','application/pdf','image/jpeg','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
  OR NOT EXISTS(SELECT 1 FROM finance.local_ocr_source(t,c,j,f,w) s
    WHERE s.document_id=doc AND s.revision_id=rev AND s.generation=g AND s.source_digest=source AND s.kind=kind AND s.event_type=evt)
  THEN RAISE EXCEPTION 'wrong OCR source' USING ERRCODE='23514'; END IF;
@@ -99,9 +100,12 @@ BEGIN
   THEN RAISE EXCEPTION 'AI advisory not permitted for this document' USING ERRCODE='23514'; END IF;
  ELSE advisory:=NULL;
  END IF;
- payload_digest:=sha256(convert_to(jsonb_build_array(blocks,fields,classification,pages,advisory)::text,'UTF8'));
- INSERT INTO finance.ocr_run(tenant_id,company_id,id,document_id,revision_id,source_digest,generation,job_id,fence,engine,model_digest,config_digest,page_count,result_digest,classification,ai_advisory)
- VALUES(t,c,run_id,doc,rev,source,g,j,f,'TESSERACT_LOCAL',model,config,pages,payload_digest,classification,advisory);
+ IF (b.mime IN ('application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) IS DISTINCT FROM (rendered IS NOT NULL)
+ OR (rendered IS NOT NULL AND (octet_length(rendered) NOT BETWEEN 5 AND 26214400 OR substring(rendered FROM 1 FOR 5)<>decode('255044462d','hex')))
+ THEN RAISE EXCEPTION 'invalid Office evidence derivative' USING ERRCODE='23514'; END IF;
+ payload_digest:=sha256(convert_to(jsonb_build_array(blocks,fields,classification,pages,advisory,CASE WHEN rendered IS NOT NULL THEN encode(sha256(rendered),'hex') END)::text,'UTF8'));
+ INSERT INTO finance.ocr_run(tenant_id,company_id,id,document_id,revision_id,source_digest,generation,job_id,fence,engine,model_digest,config_digest,page_count,result_digest,classification,ai_advisory,derived_pdf)
+ VALUES(t,c,run_id,doc,rev,source,g,j,f,'TESSERACT_LOCAL',model,config,pages,payload_digest,classification,advisory,rendered);
  FOR p IN SELECT value FROM jsonb_array_elements(blocks) LOOP
   IF jsonb_typeof(p) IS DISTINCT FROM 'object' OR jsonb_typeof(p->'rect') IS DISTINCT FROM 'array'
   OR jsonb_array_length(p->'rect')<>4 OR jsonb_typeof(p->'text') IS DISTINCT FROM 'string'
@@ -142,10 +146,10 @@ BEGIN
  INSERT INTO finance.inbox(tenant_id,company_id,event_id,fence) VALUES(t,c,j,f);
  RETURN run_id;
 END $$;
-REVOKE ALL ON FUNCTION finance.complete_local_ocr(uuid,uuid,uuid,bigint,uuid,uuid,uuid,bigint,bytea,bytea,bytea,jsonb,jsonb,jsonb,integer,text,text,jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION finance.complete_local_ocr(uuid,uuid,uuid,bigint,uuid,uuid,uuid,bigint,bytea,bytea,bytea,jsonb,jsonb,jsonb,integer,text,text,jsonb,bytea) FROM PUBLIC;
 
-ALTER FUNCTION finance.complete_local_ocr(uuid,uuid,uuid,bigint,uuid,uuid,uuid,bigint,bytea,bytea,bytea,jsonb,jsonb,jsonb,integer,text,text,jsonb) OWNER TO finance_workflow_writer;
-GRANT EXECUTE ON FUNCTION finance.complete_local_ocr(uuid,uuid,uuid,bigint,uuid,uuid,uuid,bigint,bytea,bytea,bytea,jsonb,jsonb,jsonb,integer,text,text,jsonb) TO finance_job_worker;
+ALTER FUNCTION finance.complete_local_ocr(uuid,uuid,uuid,bigint,uuid,uuid,uuid,bigint,bytea,bytea,bytea,jsonb,jsonb,jsonb,integer,text,text,jsonb,bytea) OWNER TO finance_workflow_writer;
+GRANT EXECUTE ON FUNCTION finance.complete_local_ocr(uuid,uuid,uuid,bigint,uuid,uuid,uuid,bigint,bytea,bytea,bytea,jsonb,jsonb,jsonb,integer,text,text,jsonb,bytea) TO finance_job_worker;
 
 
 CREATE OR REPLACE FUNCTION finance.runtime_fields(t uuid,c uuid,d uuid,a uuid,after_id uuid,only_id uuid,n integer)
@@ -281,3 +285,41 @@ BEGIN
  WHERE q.tenant_id=t AND q.company_id=c AND q.dossier_id=d AND q.actor_id=a AND q.id=decision_id
  LIMIT 1;
 END $$;
+
+-- E05: scoped current-revision OCR evidence projection; never expose raw bytes.
+CREATE OR REPLACE FUNCTION finance.runtime_evidence(t uuid,c uuid,a uuid,e uuid)
+RETURNS TABLE(id uuid,document_id uuid,sha256 text,page integer,locator text,excerpt text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+ SELECT ev.id,o.document_id,encode(o.source_digest,'hex'),ev.page,
+  CASE WHEN o.derived_pdf IS NOT NULL THEN format('derived-pdf:%s:rect:%s,%s,%s,%s',encode(sha256(o.derived_pdf),'hex'),ev.x0,ev.y0,ev.x1,ev.y1) ELSE format('rect:%s,%s,%s,%s',ev.x0,ev.y0,ev.x1,ev.y1) END,ev.excerpt
+ FROM finance.evidence ev
+ JOIN finance.ocr_run o ON (o.tenant_id,o.company_id,o.id)=(ev.tenant_id,ev.company_id,ev.ocr_run_id)
+ JOIN finance.document_ref r ON (r.tenant_id,r.company_id,r.id,r.revision_id)=
+  (o.tenant_id,o.company_id,o.document_id,o.revision_id)
+ JOIN finance.dossier ds ON (ds.tenant_id,ds.company_id,ds.id)=(r.tenant_id,r.company_id,r.dossier_id)
+ JOIN finance.dossier_revision dr ON (dr.tenant_id,dr.company_id,dr.dossier_id,dr.number,dr.id)=
+  (ds.tenant_id,ds.company_id,ds.id,ds.revision,r.revision_id)
+ WHERE (ev.tenant_id,ev.company_id,ev.id)=(t,c,e)
+  AND finance.field_access_allowed(t,c,ds.id,a)
+$$;
+ALTER FUNCTION finance.runtime_evidence(uuid,uuid,uuid,uuid) OWNER TO finance_field_review_writer;
+REVOKE ALL ON FUNCTION finance.runtime_evidence(uuid,uuid,uuid,uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION finance.runtime_evidence(uuid,uuid,uuid,uuid) TO finance_runtime;
+
+CREATE FUNCTION finance.runtime_evidence_rendered(t uuid,c uuid,a uuid,e uuid,cmd uuid,corr uuid)
+RETURNS TABLE(sha256 text,mime text,bytes bytea)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+ IF cmd IS NULL OR corr IS NULL THEN RETURN; END IF;
+ RETURN QUERY SELECT encode(sha256(o.derived_pdf),'hex'),'application/pdf'::text,o.derived_pdf
+ FROM finance.runtime_evidence(t,c,a,e) visible JOIN finance.evidence ev ON (ev.tenant_id,ev.company_id,ev.id)=(t,c,visible.id)
+ JOIN finance.ocr_run o ON (o.tenant_id,o.company_id,o.id)=(ev.tenant_id,ev.company_id,ev.ocr_run_id)
+ WHERE o.derived_pdf IS NOT NULL;
+ IF FOUND THEN
+  INSERT INTO finance.audit_event(tenant_id,company_id,id,actor_id,command_id,correlation_id,resource_id,action)
+  VALUES(t,c,cmd,a,cmd,corr,e,'DOCUMENT_DOWNLOADED');
+ END IF;
+END $$;
+ALTER FUNCTION finance.runtime_evidence_rendered(uuid,uuid,uuid,uuid,uuid,uuid) OWNER TO finance_field_review_writer;
+REVOKE ALL ON FUNCTION finance.runtime_evidence_rendered(uuid,uuid,uuid,uuid,uuid,uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION finance.runtime_evidence_rendered(uuid,uuid,uuid,uuid,uuid,uuid) TO finance_runtime;

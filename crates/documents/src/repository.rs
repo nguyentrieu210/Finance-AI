@@ -648,3 +648,16 @@ pub async fn request_pipeline_job(
     tx.commit().await?;
     Ok(row)
 }
+
+pub async fn rendered_evidence(pool:&PgPool,proof:&AuthenticatedCommand,id:Uuid)->Result<Option<Original>,Error>{
+ if id.is_nil(){return Err(Error::InvalidInput)}
+ let (t,c,a)=binding(proof)?;
+ let command:Uuid=proof.context().command.into();
+ let correlation:Uuid=proof.context().correlation.into();
+ let mut tx=scoped_transaction(pool,proof.context()).await?;
+ recheck_authenticated(&mut tx,Some(proof)).await?;
+ let row=sqlx::query_as::<_,Original>("SELECT * FROM finance.runtime_evidence_rendered($1,$2,$3,$4,$5,$6)")
+  .bind(t).bind(c).bind(a).bind(id).bind(command).bind(correlation).fetch_optional(&mut *tx).await?;
+ if let Some(row)=&row { if row.bytes.len()>DEFAULT_MAX_FILE_BYTES as usize||!row.bytes.starts_with(b"%PDF-")||format!("{:x}",Sha256::digest(&row.bytes))!=row.sha256{return Err(Error::Conflict)} }
+ recheck_authenticated(&mut tx,Some(proof)).await?;tx.commit().await?;Ok(row)
+}

@@ -563,6 +563,7 @@ pub fn router(state: OrganizationState) -> Router {
             get(documents::content),
         )
         .route("/v1/evidence/{evidence_id}", get(documents::evidence))
+        .route("/v1/evidence/{evidence_id}/rendered", get(documents::rendered_evidence))
         .route(
             "/v1/dossiers/{dossier_id}/checks",
             get(checks::list).post(checks::run),

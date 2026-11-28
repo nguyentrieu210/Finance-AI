@@ -13,6 +13,7 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::{env, fs, path::PathBuf, process::Stdio, time::Duration};
 mod pdf;
+mod office;
 mod ai;
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, process::Command, time};
 use uuid::Uuid;
@@ -28,6 +29,7 @@ pub(super) struct Config {
     binary_digest: [u8; 32],
     storage: Option<S3>,
     pdf: Option<pdf::Config>,
+    office: Option<office::Config>,
     ai: Option<ai::Config>,
 }
 
@@ -57,7 +59,7 @@ impl Config {
         }
         let binary_digest = Sha256::digest(fs::read(&binary).map_err(|_| "OCR executable unreadable")?).into();
         let pdf = pdf::Config::from_env()?;
-        Ok(Some(Self { binary, tessdata, model_digest, binary_digest, storage, pdf, ai:ai::Config::from_env()? }))
+        Ok(Some(Self { binary, tessdata, model_digest, binary_digest, storage, pdf, office:office::Config::from_env()?, ai:ai::Config::from_env()? }))
     }
 }
 
@@ -259,23 +261,30 @@ async fn input_bytes(config:&Config,lease:Lease,source:&Source)->Result<Vec<u8>,
         })
 }
 
-async fn recognize_document(config:&Config,lease:Lease,source:&Source)->Result<(Vec<PageResult>,Vec<Rotation>,[u8;32]),RunFailure>{
+async fn recognize_document(config:&Config,lease:Lease,source:&Source)->Result<(Vec<PageResult>,Vec<Rotation>,[u8;32],Option<Vec<u8>>),RunFailure>{
     let content=input_bytes(config,lease,source).await?;
+    let mut derived=None;
+    let office_mime=matches!(source.mime.as_str(),office::DOCX|office::XLSX);
+    if office_mime {
+        let converter=config.office.as_ref().ok_or(RunFailure::Permanent)?;
+        derived=Some(converter.render(&content,&source.mime).await?);
+    }
     let mut hash=Sha256::new();
     hash.update(b"finance.local.ocr/v2/tesseract/vie/psm6");
     hash.update(config.binary_digest);
+    if let Some(bytes)=&derived { hash.update(config.office.as_ref().ok_or(RunFailure::Permanent)?.fingerprint()); hash.update(Sha256::digest(bytes)); }
     let (pages,rotations)=match source.mime.as_str(){
-        "image/png"=>{
-            let (width,height)=png_dimensions(&content)?;
+        "image/png"|"image/jpeg"=>{
+            let (width,height)=if source.mime=="image/png" {png_dimensions(&content)?}else{office::jpeg_dimensions(&content)?};
             let tsv=recognize(config,&content).await?;
             let page=parse_page(&tsv,1,1,width,height).map_err(|_|RunFailure::Permanent)?;
             hash.update(width.to_be_bytes());hash.update(height.to_be_bytes());
             (vec![page],vec![Rotation::R0])
         },
-        "application/pdf"=>{
+        "application/pdf"|office::DOCX|office::XLSX=>{
             let pdf=config.pdf.as_ref().ok_or(RunFailure::Permanent)?;
             hash.update(pdf.fingerprint());
-            let document=pdf.open(&content).await?;
+            let document=pdf.open(derived.as_deref().unwrap_or(&content)).await?;
             let count=document.count();
             let mut pages=Vec::with_capacity(count as usize);
             let mut rotations=Vec::with_capacity(count as usize);
@@ -296,7 +305,7 @@ async fn recognize_document(config:&Config,lease:Lease,source:&Source)->Result<(
         },
         _=>return Err(RunFailure::Permanent),
     };
-    Ok((pages,rotations,hash.finalize().into()))
+    Ok((pages,rotations,hash.finalize().into(),derived))
 }
 
 #[cfg(test)]
@@ -313,7 +322,7 @@ pub(super) async fn process(pool: &PgPool, config: &Config, lease: Lease, lease_
     let mut heartbeat=time::interval(Duration::from_secs((lease_seconds/3).max(1) as u64));
     heartbeat.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
     heartbeat.tick().await;
-    let (pages,rotations,config_digest)=loop {
+    let (pages,rotations,config_digest,derived)=loop {
         tokio::select! {
             result=&mut work=>break result.map_err(|_|RunFailure::Transient)??,
             _=heartbeat.tick()=>jobs::heartbeat(pool,lease,lease_seconds).await.map_err(job_failure)?,
@@ -329,11 +338,11 @@ pub(super) async fn process(pool: &PgPool, config: &Config, lease: Lease, lease_
     let mut tx = pool.begin().await.map_err(db_failure)?;
     sqlx::query("SELECT set_config('finance.tenant_id',$1,true),set_config('finance.company_id',$2,true)")
         .bind(t.to_string()).bind(c.to_string()).execute(&mut *tx).await.map_err(db_failure)?;
-    sqlx::query_scalar::<_,Uuid>("SELECT finance.complete_local_ocr($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)")
+    sqlx::query_scalar::<_,Uuid>("SELECT finance.complete_local_ocr($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)")
         .bind(t).bind(c).bind(lease.job_id).bind(lease.fence).bind(lease.worker_id())
         .bind(source.document_id).bind(source.revision_id).bind(source.generation)
         .bind(&source.source_digest).bind(config.model_digest.as_slice()).bind(config_digest.as_slice())
-        .bind(blocks).bind(fields).bind(classification).bind(page_count).bind(&source.kind).bind(&source.event_type).bind(advisory).fetch_one(&mut *tx).await.map_err(db_failure)?;
+        .bind(blocks).bind(fields).bind(classification).bind(page_count).bind(&source.kind).bind(&source.event_type).bind(advisory).bind(derived).fetch_one(&mut *tx).await.map_err(db_failure)?;
     tx.commit().await.map_err(db_failure)?;
     Ok(())
 }

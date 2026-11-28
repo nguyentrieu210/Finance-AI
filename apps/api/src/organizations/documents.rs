@@ -543,3 +543,22 @@ pub(super) async fn content(
         Err(e) => error(status(e), correlation),
     }
 }
+
+pub(super) async fn rendered_evidence(State(state):State<Arc<OrganizationState>>,headers:HeaderMap,Path(id):Path<Uuid>)->Response{
+ let correlation=random_id();
+ let proof=match authenticate_version(&state,&headers,correlation,None).await{Ok(p)=>p,Err(s)=>return error(s,correlation)};
+ match repository::rendered_evidence(&state.runtime,&proof,id).await{
+  Ok(Some(row))=>{
+   let Ok(digest)=HeaderValue::from_str(&row.sha256)else{return error(StatusCode::SERVICE_UNAVAILABLE,correlation)};
+   let mut response=row.bytes.into_response();
+   response.headers_mut().insert(header::CONTENT_TYPE,HeaderValue::from_static("application/pdf"));
+   response.headers_mut().insert(header::CONTENT_DISPOSITION,HeaderValue::from_static("attachment; filename=rendered-evidence.pdf"));
+   response.headers_mut().insert(header::CACHE_CONTROL,HeaderValue::from_static("no-store"));
+   response.headers_mut().insert(header::X_CONTENT_TYPE_OPTIONS,HeaderValue::from_static("nosniff"));
+   response.headers_mut().insert("x-content-sha256",digest);
+   response
+  },
+  Ok(None)=>error(StatusCode::NOT_FOUND,correlation),
+  Err(e)=>error(status(e),correlation),
+ }
+}
