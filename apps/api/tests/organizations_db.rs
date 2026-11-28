@@ -3020,15 +3020,8 @@ async fn complete_api_contracts_real_database() {
     ver = g2_ver.unwrap();
 
     // Superseded grant replay must fail with 409 UPLOAD_GRANT_INACTIVE
-    let (sup_replay_st, sup_replay, _) = post_contract(
-        &app,
-        &requester,
-        &grant_uri,
-        "w1-grant-1",
-        Some(&v1),
-        None,
-    )
-    .await;
+    let (sup_replay_st, sup_replay, _) =
+        post_contract(&app, &requester, &grant_uri, "w1-grant-1", Some(&v1), None).await;
     assert_eq!(sup_replay_st, StatusCode::CONFLICT);
     assert_eq!(sup_replay["code"], "UPLOAD_GRANT_INACTIVE");
 
@@ -3254,7 +3247,9 @@ async fn complete_api_contracts_real_database() {
         Some(format!("\"v1:reference:{pay_ref_id}:1\"").as_str())
     );
     assert_eq!(
-        request(&app, "/v1/references?limit=100", Some(&auditor)).await.0,
+        request(&app, "/v1/references?limit=100", Some(&auditor))
+            .await
+            .0,
         StatusCode::FORBIDDEN
     );
 

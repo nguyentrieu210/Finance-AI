@@ -555,7 +555,10 @@ pub async fn request_pipeline_job(
         || job_id.is_nil()
         || value.trim().is_empty()
         || value.len() > 4096
-        || !matches!(operation, "document.ocr" | "document.classify" | "document.extract")
+        || !matches!(
+            operation,
+            "document.ocr" | "document.classify" | "document.extract"
+        )
     {
         return Err(Error::InvalidInput);
     }

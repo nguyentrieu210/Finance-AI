@@ -635,7 +635,10 @@ pub fn router(state: OrganizationState) -> Router {
             "/v1/policies/{item_id}/revise",
             axum::routing::post(policies::revise),
         )
-        .route("/v1/references", get(references::all).post(references::create))
+        .route(
+            "/v1/references",
+            get(references::all).post(references::create),
+        )
         .route("/v1/references/{item_id}", get(references::get))
         .route(
             "/v1/references/{item_id}/verify",

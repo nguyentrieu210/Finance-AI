@@ -1,8 +1,6 @@
 //! Metadata-only document routes in the injected synthetic router.
 use super::dossiers::{authenticate_version, status};
-use super::{
-    OrganizationState, decode_cursor, encode_cursor, error, error_with, now, random_id,
-};
+use super::{OrganizationState, decode_cursor, encode_cursor, error, error_with, now, random_id};
 use axum::{
     Json,
     extract::{
