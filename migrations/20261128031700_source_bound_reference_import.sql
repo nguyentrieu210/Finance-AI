@@ -120,7 +120,7 @@ LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
 #variable_conflict use_column
 DECLARE
  digest bytea; existing finance.idempotency_record%ROWTYPE; r finance.reference_snapshot%ROWTYPE;
- rkind text; rcov text; asof_txt text; payload jsonb; ev_count bigint;
+ rkind text; rcov text; asof_txt text; payload jsonb; ev_count bigint; entry jsonb; contract_key text;
 BEGIN
  IF t IS NULL OR c IS NULL OR a IS NULL OR ref_id IS NULL OR cmd IS NULL OR corr IS NULL OR v IS NULL OR v<0
   OR t IS DISTINCT FROM finance.scope_tenant() OR c IS DISTINCT FROM finance.scope_company() OR a IS DISTINCT FROM finance.scope_actor()
@@ -188,9 +188,21 @@ BEGIN
   FROM jsonb_array_elements(r.import_payload) item;
  ELSE
  IF EXISTS(SELECT 1 FROM jsonb_array_elements(r.import_payload) item WHERE NOT COALESCE(finance.validate_reference_details(rkind,item,(r.as_of AT TIME ZONE 'UTC')::date),false)) THEN RAISE EXCEPTION 'invalid typed reference' USING ERRCODE='23514'; END IF;
- INSERT INTO finance.financial_resource(tenant_id,company_id,id,currency,cap,consumed,coverage_complete,fresh_until,snapshot_id,resource_kind,source_key,reference_details)
- SELECT t,c,gen_random_uuid(),item->>'currency',(item->>'cap')::numeric,(item->>'consumed')::numeric,true,r.fresh_until,ref_id,rkind,jsonb_build_array('MANUAL_API',item->>'source_key')::text,(item->'details')||jsonb_build_object('frozen_on',(r.as_of AT TIME ZONE 'UTC')::date)
- FROM jsonb_array_elements(r.import_payload) item;
+ -- Lock existing resource rows in ID order before any changes (same order as ledger).
+ PERFORM 1 FROM finance.financial_resource x WHERE (x.tenant_id,x.company_id,x.resource_kind)=(t,c,rkind)
+ AND x.source_key IN (SELECT jsonb_build_array('MANUAL_API',z->>'source_key')::text FROM jsonb_array_elements(r.import_payload) z) ORDER BY x.id FOR UPDATE;
+ FOR entry IN SELECT z FROM jsonb_array_elements(r.import_payload) z ORDER BY z->>'source_key' LOOP
+  PERFORM finance.materialize_verified_resource(t,c,ref_id,rkind,entry,(r.as_of AT TIME ZONE 'UTC')::date,r.fresh_until);
+ END LOOP;
+ IF rkind='CONTRACT' THEN
+  FOR contract_key IN SELECT DISTINCT z->'details'->>'contract_key' FROM jsonb_array_elements(r.import_payload) z LOOP
+   -- All installments in a schedule must be independently refreshed together.
+   IF EXISTS(SELECT 1 FROM finance.financial_resource x WHERE (x.tenant_id,x.company_id,x.resource_kind)=(t,c,'CONTRACT')
+    AND x.reference_details->>'contract_key'=contract_key AND x.snapshot_id<>ref_id)
+   THEN RAISE EXCEPTION 'refresh must include complete contract installment schedule' USING ERRCODE='23514'; END IF;
+   PERFORM finance.assert_contract_schedule(t,c,contract_key);
+  END LOOP;
+ END IF;
  END IF;
  UPDATE finance.reference_snapshot SET state='APPROVED',checker_id=a
   WHERE (tenant_id,company_id,id)=(t,c,ref_id) AND state='DRAFT';
