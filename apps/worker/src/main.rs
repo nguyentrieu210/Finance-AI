@@ -435,7 +435,8 @@ async fn cycle(pool: &PgPool, config: &Config) -> Result<bool, RunFailure> {
         };
     }
     if let Some(ocr_config) = &config.ocr {
-        jobs::dispatch_event(pool, config.scope, ocr::EVENT, 100)
+        for event in ocr::EVENTS {
+        jobs::dispatch_event(pool, config.scope, event, 100)
             .await
             .map_err(job_failure)?;
         if let Some(lease) = jobs::claim_event(
@@ -443,7 +444,7 @@ async fn cycle(pool: &PgPool, config: &Config) -> Result<bool, RunFailure> {
             config.scope,
             config.worker,
             config.lease_seconds,
-            ocr::EVENT,
+            event,
         )
         .await
         .map_err(job_failure)?
@@ -455,6 +456,7 @@ async fn cycle(pool: &PgPool, config: &Config) -> Result<bool, RunFailure> {
                     Err(failure)
                 }
             };
+        }
         }
     }
     jobs::dispatch_event(pool, config.scope, EXPORT_EVENT, 100)
