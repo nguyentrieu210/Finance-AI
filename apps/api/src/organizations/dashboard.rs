@@ -33,11 +33,7 @@ pub(super) async fn get(
     if !(1..=100).contains(&limit) {
         return error(StatusCode::BAD_REQUEST, correlation);
     }
-    let counts = match finance_workflow::analytics::state_counts(&state.runtime, &proof).await {
-        Ok(counts) => counts,
-        Err(e) => return error(dossiers::status(e), correlation),
-    };
-    let review = match finance_workflow::analytics::review_history_counts(&state.runtime, &proof).await {
+    let (counts, review) = match finance_workflow::analytics::dashboard_counts(&state.runtime, &proof).await {
         Ok(counts) => counts,
         Err(e) => return error(dossiers::status(e), correlation),
     };

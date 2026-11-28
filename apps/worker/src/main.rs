@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+mod artifact_store;
 use finance_core::jobs::{self, Failure, FailureResult, JobError, Lease};
 use finance_shared::{
     ids::{CompanyId, CompanyScope, TenantId},
@@ -37,6 +38,7 @@ struct Config {
     adapter: PathBuf,
     adapter_config: Option<PathBuf>,
     adapter_endpoint: Option<String>,
+    artifact_root: Option<PathBuf>,
 }
 
 impl Config {
@@ -82,6 +84,17 @@ impl Config {
         {
             return Err("export adapter endpoint invalid");
         }
+        let artifact_root = env::var_os("FINANCE_EXPORT_ARTIFACT_ROOT").map(PathBuf::from);
+        let synthetic_receipt_only = env::var("FINANCE_EXPORT_SYNTHETIC_RECEIPTS_ONLY").as_deref() == Ok("1");
+        if artifact_root.is_none() && !synthetic_receipt_only {
+            return Err("independent export artifact readback configuration missing");
+        }
+        if artifact_root.as_ref().is_some_and(|path| !artifact_store::valid_root(path)) {
+            return Err("export artifact root must be an existing private absolute directory");
+        }
+        if artifact_root.is_some() && synthetic_receipt_only {
+            return Err("export artifact verification mode is ambiguous");
+        }
         Ok((
             Self {
                 database_url,
@@ -93,6 +106,7 @@ impl Config {
                 adapter,
                 adapter_config,
                 adapter_endpoint,
+                artifact_root,
             },
             once,
         ))
@@ -246,6 +260,9 @@ async fn invoke_adapter(config: &Config, lease: Lease) -> Result<Receipt, RunFai
     if let Some(endpoint) = &config.adapter_endpoint {
         command.env("FINANCE_EXPORT_STORAGE_ENDPOINT", endpoint);
     }
+    if let Some(root) = &config.artifact_root {
+        command.env("FINANCE_EXPORT_ARTIFACT_ROOT", root);
+    }
     let mut child = command.spawn().map_err(|_| RunFailure::Permanent)?;
     let stdout = child.stdout.take().ok_or(RunFailure::Permanent)?;
     let operation = async move {
@@ -298,7 +315,19 @@ async fn render_with_heartbeat(
 
 async fn process_export(pool: &PgPool, config: &Config, lease: Lease) -> Result<(), RunFailure> {
     let receipt = render_with_heartbeat(pool, config, lease).await?;
-    let owned = validate_receipt(receipt, lease.job_id, lease.fence)?;
+    let mut owned = validate_receipt(receipt, lease.job_id, lease.fence)?;
+    if let Some(root) = &config.artifact_root {
+        let root = root.clone();
+        owned = tokio::task::spawn_blocking(move || {
+            artifact_store::verify(&root, lease, &owned)?;
+            Ok::<_, RunFailure>(owned)
+        })
+        .await
+        .map_err(|_| RunFailure::Transient)??;
+        jobs::heartbeat(pool, lease, config.lease_seconds)
+            .await
+            .map_err(job_failure)?;
+    }
     let artifacts: Vec<_> = owned
         .iter()
         .map(|item| Artifact {

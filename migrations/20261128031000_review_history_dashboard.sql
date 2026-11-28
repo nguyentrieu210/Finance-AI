@@ -22,7 +22,7 @@ BEGIN
  ), histories AS (
    SELECT s.dossier_id,
      count(*) FILTER(WHERE r.decision='ACCEPTED') AS approvals,
-     count(*) FILTER(WHERE r.decision='RETURNED') AS returns,
+     count(*) FILTER(WHERE r.decision='RETURNED') AS return_count,
      count(*) AS decisions,
      count(*) FILTER(WHERE ar.id IS NOT NULL) AS matched
    FROM finance.dossier_snapshot s
@@ -32,17 +32,18 @@ BEGIN
    LEFT JOIN finance.accounting_review ar
      ON (ar.tenant_id,ar.company_id,ar.snapshot_id,ar.reviewer_id,ar.state)
        =(r.tenant_id,r.company_id,r.snapshot_id,r.actor_id,r.decision)
+     AND ar.dossier_id=s.dossier_id
    WHERE (s.tenant_id,s.company_id)=(t,c)
    GROUP BY s.dossier_id
  ), classified AS (
    SELECT d.status,
-     coalesce(h.returns,0) AS returns,
+     coalesce(h.return_count,0) AS return_count,
      coalesce(h.approvals=1 AND h.decisions=h.matched,false) AS verified_accept
    FROM owned d LEFT JOIN histories h ON h.dossier_id=d.id
  )
  SELECT count(*) FILTER(WHERE status='ACCEPTED' AND verified_accept),
-        count(*) FILTER(WHERE status='ACCEPTED' AND verified_accept AND returns=0),
-        count(*) FILTER(WHERE returns>0),
+        count(*) FILTER(WHERE status='ACCEPTED' AND verified_accept AND return_count=0),
+        count(*) FILTER(WHERE return_count>0),
         count(*) FILTER(WHERE status='ACCEPTED' AND NOT verified_accept)
  FROM classified;
 END $$;
