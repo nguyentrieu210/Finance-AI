@@ -16,6 +16,7 @@ struct Envelope<'a> {
     input: &'a str,
     max_output_tokens: u32,
     tools_enabled: bool,
+    fields: &'a BTreeSet<String>,
 }
 
 #[derive(Deserialize)]
@@ -58,7 +59,7 @@ impl Gateway {
             || allowed_fields.is_empty() || allowed_fields.len() > 128
         { return Err(Error::Input); }
         let payload = Envelope { schema: "finance.ai.extract.v1", model: request.model,
-            prompt, input: minimized_input, max_output_tokens: request.output_tokens, tools_enabled: false };
+            prompt, input: minimized_input, max_output_tokens: request.output_tokens, tools_enabled: false, fields:allowed_fields };
         let mut response = self.client.post(self.endpoint.clone()).timeout(Duration::from_secs(u64::from(request.timeout_seconds)))
             .json(&payload).send().await.map_err(|_| Error::Transport)?;
         if !response.status().is_success() { return Err(Error::Provider); }

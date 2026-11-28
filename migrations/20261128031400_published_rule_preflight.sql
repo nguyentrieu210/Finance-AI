@@ -3,7 +3,8 @@
 -- have authoritative inputs. No new approval route or automatic READY.
 ALTER TABLE finance.check_result ADD COLUMN rule_version bigint NOT NULL DEFAULT 0 CHECK(rule_version>=0),
  ADD COLUMN evidence_ids uuid[] NOT NULL DEFAULT ARRAY[]::uuid[] CHECK(cardinality(evidence_ids)<=256);
-GRANT SELECT ON finance.rule_version TO finance_workflow_writer;
+GRANT SELECT ON finance.rule_version,finance.policy_clause TO finance_workflow_writer;
+CREATE POLICY workflow_policy_clause_coverage_read ON finance.policy_clause FOR SELECT TO finance_workflow_writer USING(tenant_id=finance.scope_tenant() AND company_id=finance.scope_company());
 CREATE POLICY workflow_published_rules_read ON finance.rule_version FOR SELECT TO finance_workflow_writer
  USING(tenant_id=finance.scope_tenant() AND company_id=finance.scope_company() AND state='PUBLISHED');
 
@@ -65,16 +66,65 @@ GRANT EXECUTE ON FUNCTION finance.runtime_preflight_rule_material(uuid,uuid,uuid
 
 CREATE FUNCTION finance.complete_preflight_with_rules(t uuid,c uuid,j uuid,f bigint,w uuid,material jsonb,results jsonb)
 RETURNS void LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE current_material jsonb; p finance.preflight_request%ROWTYPE; result jsonb; rule jsonb; evidence uuid[]; seen uuid[]:=ARRAY[]::uuid[];
+DECLARE current_material jsonb; p finance.preflight_request%ROWTYPE; result jsonb; rule jsonb; evidence uuid[]; seen uuid[]:=ARRAY[]::uuid[]; structural jsonb:='[]'::jsonb; item record; outcome text; detail text; blocked boolean; revision_version bigint; affected bigint; digest bytea;
 BEGIN
  current_material:=finance.runtime_preflight_rule_material(t,c,j,f,w);
  IF current_material IS DISTINCT FROM material OR jsonb_typeof(results) IS DISTINCT FROM 'array'
  OR jsonb_array_length(results)<>jsonb_array_length(material->'rules') OR octet_length(results::text)>2097152
  THEN RAISE EXCEPTION 'stale rule evaluation' USING ERRCODE='23514'; END IF;
  SELECT * INTO STRICT p FROM finance.preflight_request WHERE (tenant_id,company_id,job_id)=(t,c,j);
- -- Existing completion writes structural checks and settles the same job;
- -- all writes, including the rule results below, remain in this transaction.
- PERFORM finance.complete_preflight_job(t,c,j,f,w);
+ -- Evaluate current structural evidence, not fixed prototype outcomes.
+ -- A clean blob must correspond to the exact finalized generation and digest.
+ structural:=structural||jsonb_build_array(jsonb_build_object('key','policy.effective','outcome','PASS','severity','BLOCK','detail','PUBLISHED_POLICY_FOUND'));
+ FOR item IN SELECT document_kind,mandatory FROM finance.checklist_item
+ WHERE (tenant_id,company_id,policy_id)=(t,c,p.policy_id) ORDER BY document_kind LOOP
+  IF EXISTS(SELECT 1 FROM finance.upload_intent u JOIN finance.document_blob b ON (b.tenant_id,b.company_id,b.id)=(u.tenant_id,u.company_id,u.id)
+   WHERE (u.tenant_id,u.company_id,u.dossier_id,u.revision_id,u.actor_id,u.document_kind)=(t,c,p.dossier_id,p.revision_id,p.actor_id,item.document_kind)
+   AND u.state='FINALIZED' AND b.generation=u.generation AND b.sha256_digest=u.declared_sha256 AND b.scan_state='CLEAN')
+   THEN outcome:='PASS'; detail:='CLEAN_DOCUMENT_FOUND';
+  ELSIF EXISTS(SELECT 1 FROM finance.upload_intent u WHERE (u.tenant_id,u.company_id,u.dossier_id,u.revision_id,u.document_kind)=(t,c,p.dossier_id,p.revision_id,item.document_kind) AND u.state<>'CANCELLED')
+   THEN outcome:='UNKNOWN'; detail:='DOCUMENT_NOT_RELEASED';
+  ELSE outcome:='FAIL'; detail:='MISSING_DOCUMENT'; END IF;
+  structural:=structural||jsonb_build_array(jsonb_build_object('key','checklist.'||item.document_kind,'outcome',outcome,'severity',CASE WHEN item.mandatory THEN 'BLOCK' ELSE 'WARNING' END,'detail',detail));
+ END LOOP;
+ IF EXISTS(SELECT 1 FROM finance.upload_intent u LEFT JOIN finance.document_blob b ON (b.tenant_id,b.company_id,b.id)=(u.tenant_id,u.company_id,u.id)
+ WHERE (u.tenant_id,u.company_id,u.dossier_id,u.revision_id)=(t,c,p.dossier_id,p.revision_id) AND u.state<>'CANCELLED'
+ AND (u.state<>'FINALIZED' OR b.id IS NULL OR b.generation<>u.generation OR b.sha256_digest<>u.declared_sha256 OR b.scan_state<>'CLEAN'))
+ THEN outcome:='UNKNOWN'; detail:='DOCUMENT_NOT_RELEASED'; ELSE outcome:='PASS'; detail:='CLEAN_GENERATIONS_VERIFIED'; END IF;
+ structural:=structural||jsonb_build_array(jsonb_build_object('key','scan.release','outcome',outcome,'severity','BLOCK','detail',detail));
+ IF jsonb_array_length(material->'rules')=0 OR EXISTS(SELECT 1 FROM finance.policy_clause pc
+ WHERE (pc.tenant_id,pc.company_id,pc.policy_id)=(t,c,p.policy_id)
+ AND NOT EXISTS(SELECT 1 FROM finance.checklist_item ci WHERE (ci.tenant_id,ci.company_id,ci.policy_id,ci.clause_id)=(t,c,p.policy_id,pc.id))
+ AND NOT EXISTS(SELECT 1 FROM finance.rule_version rv WHERE (rv.tenant_id,rv.company_id,rv.policy_id,rv.clause_id)=(t,c,p.policy_id,pc.id) AND rv.state='PUBLISHED')
+ AND NOT EXISTS(SELECT 1 FROM finance.policy_critical_field cf WHERE (cf.tenant_id,cf.company_id,cf.policy_id,cf.clause_id)=(t,c,p.policy_id,pc.id)))
+ THEN outcome:='UNKNOWN'; detail:='POLICY_RULE_COVERAGE_INCOMPLETE'; ELSE outcome:='PASS'; detail:='PUBLISHED_RULE_COVERAGE_FOUND'; END IF;
+ structural:=structural||jsonb_build_array(jsonb_build_object('key','rules.complete','outcome',outcome,'severity','BLOCK','detail',detail));
+ IF NOT EXISTS(SELECT 1 FROM finance.policy_version pv WHERE (pv.tenant_id,pv.company_id,pv.id)=(t,c,p.policy_id) AND pv.criticality_complete)
+ THEN outcome:='UNKNOWN'; detail:='NO_APPROVED_CRITICAL_REGISTRY';
+ ELSIF EXISTS(SELECT 1 FROM finance.policy_critical_field cf WHERE (cf.tenant_id,cf.company_id,cf.policy_id)=(t,c,p.policy_id)
+ AND (SELECT count(*) FROM jsonb_array_elements(material->'fields') fld WHERE fld->>'path'=cf.field_path AND fld->>'verified'='true' AND fld->>'value' IS NOT NULL)<>1)
+ THEN outcome:='UNKNOWN'; detail:='CRITICAL_EVIDENCE_INCOMPLETE';
+ ELSE outcome:='PASS'; detail:='CRITICAL_EVIDENCE_VERIFIED'; END IF;
+ structural:=structural||jsonb_build_array(jsonb_build_object('key','critical.fields','outcome',outcome,'severity','BLOCK','detail',detail));
+ -- A positive reservation is not proof of amount/currency/coverage for the
+ -- current request. Preserve fail-closed behavior until the approved finance
+ -- binding is supplied; do not equate any arbitrary hold with verification.
+ IF EXISTS(SELECT 1 FROM finance.reservation r WHERE (r.tenant_id,r.company_id,r.revision_id)=(t,c,p.revision_id) AND r.state='RESERVED' AND r.remaining>0)
+ THEN detail:='RESERVATION_BINDING_UNVERIFIED'; ELSE detail:='NO_BOUND_RESERVATION'; END IF;
+ structural:=structural||jsonb_build_array(jsonb_build_object('key','financial.reservation','outcome','UNKNOWN','severity','BLOCK','detail',detail));
+ -- Validate every worker result before writing any check rows.
+ blocked:=EXISTS(SELECT 1 FROM jsonb_array_elements(structural) x WHERE x->>'severity'='BLOCK' AND x->>'outcome' NOT IN ('PASS','NOT_APPLICABLE'))
+ OR EXISTS(SELECT 1 FROM jsonb_array_elements(results) x JOIN LATERAL(SELECT r FROM jsonb_array_elements(material->'rules') r WHERE r->>'id'=x->>'id') rr ON true
+ WHERE rr.r->>'severity'='BLOCK' AND x->>'outcome' NOT IN ('PASS','NOT_APPLICABLE'));
+ revision_version:=p.dossier_version;
+ IF NOT blocked THEN revision_version:=revision_version+1; END IF;
+ digest:=sha256(convert_to(jsonb_build_array(material,structural,results)::text,'UTF8'));
+ INSERT INTO finance.check_run(tenant_id,company_id,id,dossier_id,revision_id,dossier_version,actor_id,policy_id,business_day,input_hash,blocked)
+ VALUES(t,c,p.run_id,p.dossier_id,p.revision_id,revision_version,p.actor_id,p.policy_id,p.business_day,digest,blocked);
+ FOR item IN SELECT value FROM jsonb_array_elements(structural) LOOP
+ INSERT INTO finance.check_result(tenant_id,company_id,run_id,rule_key,outcome,severity,detail_code)
+ VALUES(t,c,p.run_id,item.value->>'key',item.value->>'outcome',item.value->>'severity',item.value->>'detail');
+ END LOOP;
  FOR result IN SELECT value FROM jsonb_array_elements(results) LOOP
   SELECT value INTO rule FROM jsonb_array_elements(material->'rules') WHERE value->>'id'=result->>'id';
   IF NOT FOUND OR (result->>'version')::bigint IS DISTINCT FROM (rule->>'version')::bigint
@@ -93,7 +143,23 @@ BEGIN
   INSERT INTO finance.check_result(tenant_id,company_id,run_id,rule_key,outcome,severity,detail_code,rule_version,evidence_ids)
   VALUES(t,c,p.run_id,'dsl.'||(rule->>'name'),result->>'outcome',rule->>'severity',result->>'detail',(rule->>'version')::bigint,evidence);
  END LOOP;
-END $$;
+ IF NOT blocked THEN
+  UPDATE finance.dossier SET status='REVIEWABLE',version=revision_version,updated_at=GREATEST(updated_at,clock_timestamp())
+  WHERE (tenant_id,company_id,id,version)=(t,c,p.dossier_id,p.dossier_version) AND status='DRAFT';
+  IF NOT FOUND THEN RAISE EXCEPTION 'stale preflight dossier' USING ERRCODE='23514'; END IF;
+ END IF;
+ INSERT INTO finance.audit_event(tenant_id,company_id,id,actor_id,command_id,correlation_id,resource_id,action)
+ VALUES(t,c,p.run_id,p.actor_id,j,j,p.dossier_id,'SYNTHETIC_PREFLIGHT_CHECKED');
+ INSERT INTO finance.outbox(tenant_id,company_id,id,command_id,resource_id,event_type)
+ VALUES(t,c,p.run_id,j,p.dossier_id,'SYNTHETIC_PREFLIGHT_CHECKED');
+ UPDATE finance.job SET state='SUCCEEDED',lease_until=NULL,leased_by=NULL
+ WHERE (tenant_id,company_id,id,fence,leased_by)=(t,c,j,f,w) AND state='LEASED' AND lease_until>clock_timestamp();
+ IF NOT FOUND THEN RAISE EXCEPTION 'stale preflight lease' USING ERRCODE='40001'; END IF;
+ UPDATE finance.job_attempt SET state='SUCCEEDED',finished_at=clock_timestamp()
+ WHERE (tenant_id,company_id,job_id,fence,worker_id)=(t,c,j,f,w) AND state='ACTIVE';
+ IF NOT FOUND THEN RAISE EXCEPTION 'stale attempt' USING ERRCODE='40001'; END IF;
+ INSERT INTO finance.inbox(tenant_id,company_id,event_id,fence) VALUES(t,c,j,f);
+END $;
 ALTER FUNCTION finance.complete_preflight_with_rules(uuid,uuid,uuid,bigint,uuid,jsonb,jsonb) OWNER TO finance_workflow_writer;
 REVOKE ALL ON FUNCTION finance.complete_preflight_with_rules(uuid,uuid,uuid,bigint,uuid,jsonb,jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION finance.complete_preflight_with_rules(uuid,uuid,uuid,bigint,uuid,jsonb,jsonb) TO finance_job_worker;

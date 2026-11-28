@@ -171,7 +171,7 @@ BEGIN
  THEN RAISE EXCEPTION 'invalid export worker completion' USING ERRCODE='23514'; END IF;
  IF jsonb_typeof(artifacts) IS DISTINCT FROM 'array' OR jsonb_array_length(artifacts)<>count OR octet_length(artifacts::text)>262144
  THEN RAISE EXCEPTION 'invalid export manifest' USING ERRCODE='23514'; END IF;
- FOR item IN SELECT value FROM jsonb_array_elements(artifacts) ORDER BY value->>'name' COLLATE "C" LOOP
+ FOR item IN SELECT value FROM jsonb_array_elements(artifacts) ORDER BY (value->>'name') COLLATE "C" LOOP
   n:=item->>'name'; h:=item->>'sha256'; size:=(item->>'bytes')::bigint;
   IF n IS NULL OR n !~ '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127} tenant_id=t AND company_id=c AND id=j
   AND state='LEASED' AND fence=f AND leased_by=w AND lease_until>clock_timestamp() FOR UPDATE)

@@ -79,7 +79,7 @@ pub fn evaluate(material:&serde_json::Value)->Result<Vec<ResultRow>, &'static st
     for rule in material.rules {
         if !seen.insert(rule.id)||rule.id.is_nil()||rule.version==0{return Err("duplicate or invalid rule")}
         let compiled=serde_json::to_vec(&rule.definition).ok().and_then(|bytes|compiler::compile(&bytes,&types).ok());
-        let Some(compiled)=compiled.filter(|c|c.rule_id()==rule.name&&c.version()==rule.version&&match c.severity(){Severity::Block=>"BLOCK",Severity::Warning=>"WARNING",Severity::Info=>"INFO"}==rule.severity) else {
+        let Some(compiled)=compiled.filter(|c|c.rule_id()==rule.name&&c.version()==rule.version&&(match c.severity(){Severity::Block=>"BLOCK",Severity::Warning=>"WARNING",Severity::Info=>"INFO"})==rule.severity) else {
             result.push(ResultRow{id:rule.id,version:rule.version,outcome:"ERROR",evidence:vec![],detail:"RULE_COMPILE_ERROR"});
             continue;
         };

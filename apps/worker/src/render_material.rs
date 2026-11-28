@@ -17,7 +17,7 @@ pub async fn load(pool:&PgPool,lease:Lease)->Result<Vec<u8>,RunFailure>{
  let bytes=if let Some(version)=row.object_version {
   let storage=S3::from_env().map_err(|_|RunFailure::Permanent)?.ok_or(RunFailure::Permanent)?;
   let object=Object{binding:Binding{scope,document:ResourceId::try_from(row.document_id).map_err(|_|RunFailure::Permanent)?,revision:RevisionId::try_from(row.revision_id).map_err(|_|RunFailure::Permanent)?},generation:Version::try_from(row.generation).map_err(|_|RunFailure::Permanent)?,mime:DeclaredMime::parse(&row.mime).map_err(|_|RunFailure::Permanent)?,size:row.byte_count as u64,digest:Sha256Digest::parse(&row.sha256).map_err(|_|RunFailure::Permanent)?};
-  storage.read_verified(&object,Phase::Quarantine,&version,chrono::Utc::now()).await.map_err(|_|RunFailure::Transient)?
+  storage.read_verified(&object,Phase::Quarantine,&version,chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now())).await.map_err(|_|RunFailure::Transient)?
  }else{row.content.ok_or(RunFailure::Permanent)?};
  if bytes.len()!=row.byte_count as usize||format!("{:x}",Sha256::digest(&bytes))!=row.sha256{return Err(RunFailure::Permanent)}
  let hex=bytes.iter().map(|b|format!("{b:02x}")).collect::<String>();
