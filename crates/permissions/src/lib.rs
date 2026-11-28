@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 //! Internal synthetic policy candidate. Resource attributes must come from a trusted repository,
 //! not HTTP fields. No financial action is enabled by this evaluator.
+pub mod scoped;
+
 use finance_shared::{
     contracts::{Action, CommandContext, Principal},
     ids::{ActorId, CompanyScope, ResourceScope},

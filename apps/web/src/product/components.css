@@ -1,0 +1,110 @@
+/* Shared Compact ERP control tokens. All product modules use this sizing contract. */
+.nv-shell {
+  --nv-control-height:32px;
+  --nv-control-font:12px;
+  --nv-control-radius:4px;
+  --nv-control-padding:8px;
+  --nv-control-gap:4px;
+  --nv-control-border:#dce1e9;
+  --nv-control-bg:#fff;
+  --nv-control-fg:#344054;
+  --nv-control-hover:#f3f5f8;
+  --nv-control-primary:#bd2036;
+  --nv-control-primary-hover:#a2192e;
+  --nv-control-selected:#fcecef;
+  --nv-control-selected-text:#b51e34;
+  --nv-control-selected-border:#e9b6bd;
+}
+.nv-shell[data-theme=dark] {
+  --nv-control-border:var(--nv-border);
+  --nv-control-bg:var(--nv-surface);
+  --nv-control-fg:var(--nv-text);
+  --nv-control-hover:var(--nv-subtle);
+  --nv-control-selected:var(--nv-active);
+  --nv-control-selected-text:var(--nv-accent);
+  --nv-control-selected-border:#93505e;
+}
+/* Same dimensions for primary, secondary, tabs and icon controls. */
+.nv-shell :is(.nv-btn,.nv-btn-secondary,.nv-btn-tab,.nv-btn-icon,.nv-collapse-btn,.nv-search-btn,.nv-theme-btn,.nv-login-link,.nv-profile-action) {
+  box-sizing:border-box;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:var(--nv-control-gap);
+  height:var(--nv-control-height);
+  min-height:var(--nv-control-height);
+  padding:0 var(--nv-control-padding);
+  border:1px solid var(--nv-control-border);
+  border-radius:var(--nv-control-radius);
+  background:var(--nv-control-bg);
+  color:var(--nv-control-fg);
+  font:500 var(--nv-control-font)/1.25 system-ui,sans-serif;
+  white-space:nowrap;
+  cursor:pointer;
+}
+.nv-shell .nv-btn{background:var(--nv-control-primary);border-color:var(--nv-control-primary);color:#fff!important;font-weight:500}
+.nv-shell .nv-btn:not(:disabled):hover{background:var(--nv-control-primary-hover);border-color:var(--nv-control-primary-hover)}
+.nv-shell :is(.nv-btn-secondary,.nv-btn-tab,.nv-btn-icon,.nv-collapse-btn,.nv-search-btn,.nv-theme-btn,.nv-login-link,.nv-profile-action):not(:disabled):hover{background:var(--nv-control-hover)}
+.nv-shell .nv-btn-tab[aria-selected=true]{background:var(--nv-control-selected);color:var(--nv-control-selected-text);border-color:var(--nv-control-selected-border);font-weight:500}
+.nv-shell :is(.nv-btn-icon,.nv-collapse-btn,.nv-theme-btn){width:var(--nv-control-height);padding:0;flex:none}
+.nv-shell .nv-search-btn{justify-content:flex-start;gap:8px}
+.nv-shell .nv-profile-action{justify-content:flex-start;font-weight:600}
+.nv-shell :is(button,a,input,select,textarea):focus-visible{outline:2px solid var(--nv-control-selected-text);outline-offset:2px}
+.nv-shell button:disabled{opacity:.55;cursor:not-allowed}
+.nv-shell :is(input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=hidden]),select,textarea) {
+  box-sizing:border-box;
+  height:var(--nv-control-height);
+  min-height:var(--nv-control-height);
+  min-width:0;
+  padding:0 var(--nv-control-padding);
+  border:1px solid var(--nv-control-border);
+  border-radius:var(--nv-control-radius);
+  background:var(--nv-control-bg);
+  color:var(--nv-control-fg);
+  font:400 var(--nv-control-font)/1.25 system-ui,sans-serif;
+}
+.nv-shell textarea{height:auto;min-height:80px;padding:8px;resize:vertical}
+.nv-shell input:is([type=checkbox],[type=radio]){width:14px;height:14px;min-height:0;min-width:0;padding:0;accent-color:var(--nv-control-primary)}
+.nv-shell .nv-palette-search input{border:0;background:transparent}
+.nv-shell .nv-account-trigger{height:var(--nv-control-height);min-height:var(--nv-control-height);font-size:var(--nv-control-font)}
+.nv-shell .nv-account-popover>:is(button,a){height:var(--nv-control-height);font-size:var(--nv-control-font);padding:0 8px}
+.nv-shell .nv-table :is(th,td){font-size:12px;line-height:1.4;height:32px;padding:4px 8px}
+.nv-shell .nv-profile-head{font-size:13px}
+.nv-shell .nv-org-toolbar,.nv-shell .nv-row{align-items:center}
+.nv-shell .nv-profile-head .nv-btn-icon{font-size:16px}
+.nv-shell .nv-org-modal{align-items:center}
+.nv-shell .nv-org-modal form label{font-size:12px}
+.nv-shell .nv-org-modal .nv-row:last-child{justify-content:flex-end}
+@media(max-width:760px){.nv-shell{--nv-control-height:40px}.nv-shell .nv-mobile{min-height:40px}.nv-shell .nv-account-trigger{padding-inline:2px}}
+.nv-membership-dialog{width:min(440px,calc(100vw - 24px))}
+.nv-membership-form{display:grid;gap:8px}
+.nv-membership-form p{font-size:12px;margin:0}
+.nv-membership-form fieldset{display:grid;gap:4px;border:1px solid var(--nv-control-border);border-radius:4px;padding:8px;margin:0}
+.nv-membership-form legend{font-size:12px;font-weight:650}
+.nv-shell .nv-membership-form .nv-role-option{display:flex;flex-direction:row;align-items:center;gap:8px;font-weight:400;min-height:28px}
+.nv-membership-form .nv-row{justify-content:flex-end}
+
+/* One physical size for every shared action control, regardless of color variant. */
+.nv-shell .nv-control:is(.nv-btn,.nv-btn-secondary,.nv-btn-tab,.nv-btn-icon){
+  box-sizing:border-box;
+  appearance:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
+  height:var(--nv-control-height);
+  min-height:var(--nv-control-height);
+  max-height:var(--nv-control-height);
+  padding:0 var(--nv-control-padding);
+  margin:0;
+  border-width:1px;
+  border-style:solid;
+  border-radius:var(--nv-control-radius);
+  font-family:system-ui,sans-serif;
+  font-size:var(--nv-control-font);
+  font-weight:500;
+  line-height:16px;
+  vertical-align:middle;
+}
+.nv-shell .nv-control.nv-btn-icon{width:var(--nv-control-height);padding:0}
+.nv-shell .nv-org-actions,.nv-shell .nv-org-tabs{display:flex;align-items:center;gap:var(--nv-control-gap)}
