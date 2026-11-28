@@ -393,3 +393,11 @@ pub(super) async fn create(
         Err(e) => error(dossiers::status(e), correlation),
     }
 }
+
+pub(super) async fn configuration(State(state):State<Arc<OrganizationState>>,headers:HeaderMap,Path(id):Path<Uuid>)->Response{
+ let correlation=random_id();
+ let proof=match dossiers::authenticate_version(&state,&headers,correlation,None).await{Ok(p)=>p,Err(s)=>return error(s,correlation)};
+ match repository::configuration(&state.runtime,&proof,id).await{
+ Ok(Some(value))=>{let mut response=value.into_response();response.headers_mut().insert(header::CONTENT_TYPE,HeaderValue::from_static("application/json"));response.headers_mut().insert(header::CACHE_CONTROL,HeaderValue::from_static("no-store"));response},
+ Ok(None)=>error(StatusCode::NOT_FOUND,correlation),Err(e)=>error(dossiers::status(e),correlation)}
+}

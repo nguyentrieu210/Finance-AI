@@ -67,3 +67,23 @@ END $$;
 ALTER FUNCTION finance.runtime_reservable_resources(uuid,uuid,uuid,uuid,integer) OWNER TO finance_reference_writer;
 REVOKE ALL ON FUNCTION finance.runtime_reservable_resources(uuid,uuid,uuid,uuid,integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION finance.runtime_reservable_resources(uuid,uuid,uuid,uuid,integer) TO finance_runtime;
+
+CREATE FUNCTION finance.runtime_policy_configuration(t uuid,c uuid,a uuid,i uuid)
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE result jsonb;
+BEGIN
+ IF (t,c,a) IS DISTINCT FROM (finance.scope_tenant(),finance.scope_company(),finance.scope_actor()) THEN RAISE EXCEPTION 'scope' USING ERRCODE='42501'; END IF;
+ SELECT jsonb_build_object('id',p.id,'company_id',p.company_id,'version',p.aggregate_version,'name',p.display_name,'state',p.state,
+ 'dossier_kind',p.dossier_kind,'effective_from',p.effective_from,'effective_to',p.effective_until,'author_id',p.author_id,
+ 'criticality_complete',p.criticality_complete,'finance_gate',p.finance_gate,
+ 'clauses',coalesce((SELECT jsonb_agg(jsonb_build_object('key',cl.clause_key,'id',cl.id,'excerpt',cl.excerpt,'page',cl.source_page) ORDER BY cl.clause_key) FROM finance.policy_clause cl WHERE (cl.tenant_id,cl.company_id,cl.policy_id)=(t,c,i)),'[]'::jsonb),
+ 'critical_fields',coalesce((SELECT jsonb_agg(jsonb_build_object('clause_key',cl.clause_key,'field_path',cf.field_path) ORDER BY cf.field_path) FROM finance.policy_critical_field cf JOIN finance.policy_clause cl ON (cl.tenant_id,cl.company_id,cl.policy_id,cl.id)=(cf.tenant_id,cf.company_id,cf.policy_id,cf.clause_id) WHERE (cf.tenant_id,cf.company_id,cf.policy_id)=(t,c,i)),'[]'::jsonb),
+ 'checklist',coalesce((SELECT jsonb_agg(jsonb_build_object('clause_key',cl.clause_key,'document_kind',ci.document_kind,'mandatory',ci.mandatory) ORDER BY ci.document_kind) FROM finance.checklist_item ci JOIN finance.policy_clause cl ON (cl.tenant_id,cl.company_id,cl.policy_id,cl.id)=(ci.tenant_id,ci.company_id,ci.policy_id,ci.clause_id) WHERE (ci.tenant_id,ci.company_id,ci.policy_id)=(t,c,i)),'[]'::jsonb))
+ INTO result FROM finance.policy_version p WHERE (p.tenant_id,p.company_id,p.id)=(t,c,i)
+ AND EXISTS(SELECT 1 FROM finance.membership m WHERE (m.tenant_id,m.company_id,m.actor_id)=(t,c,a) AND m.active AND m.valid_from<=statement_timestamp() AND (m.valid_until IS NULL OR m.valid_until>statement_timestamp())
+ AND (m.role='FINANCE_APPROVER' OR (m.role='POLICY_ADMIN' AND p.author_id=a) OR (m.role='REQUESTER' AND p.state='PUBLISHED')));
+ RETURN result;
+END $$;
+ALTER FUNCTION finance.runtime_policy_configuration(uuid,uuid,uuid,uuid) OWNER TO finance_policy_governance;
+REVOKE ALL ON FUNCTION finance.runtime_policy_configuration(uuid,uuid,uuid,uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION finance.runtime_policy_configuration(uuid,uuid,uuid,uuid) TO finance_runtime;

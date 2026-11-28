@@ -649,6 +649,7 @@ pub fn router(state: OrganizationState) -> Router {
         )
         .route("/v1/policies", get(policies::list).post(policies::create))
         .route("/v1/policies/{item_id}", get(policies::get))
+        .route("/v1/policies/{item_id}/configuration", get(policies::configuration))
         .route(
             "/v1/policies/{item_id}/submit",
             axum::routing::post(policies::submit),
@@ -674,6 +675,8 @@ pub fn router(state: OrganizationState) -> Router {
             get(references::all).post(references::create),
         )
         .route("/v1/references/{item_id}", get(references::get))
+        .route("/v1/references/{item_id}/material", get(references::material))
+        .route("/v1/reservable-resources", get(references::reservable))
         .route(
             "/v1/references/{item_id}/verify",
             axum::routing::post(references::verify),

@@ -338,3 +338,14 @@ pub async fn create(
     tx.commit().await?;
     Ok(row)
 }
+
+pub async fn configuration(pool:&PgPool,proof:&AuthenticatedCommand,id:Uuid)->Result<Option<String>,AppError>{
+ if id.is_nil(){return Err(AppError::InvalidInput)}
+ let(t,c,a)=binding(proof)?;
+ let mut tx=scoped_transaction(pool,proof.context()).await?;
+ lock_roles(&mut tx,proof.context()).await.map_err(grant)?;
+ recheck_authenticated(&mut tx,Some(proof)).await?;
+ let row=sqlx::query_scalar::<_,Option<String>>("SELECT finance.runtime_policy_configuration($1,$2,$3,$4)::text")
+ .bind(t).bind(c).bind(a).bind(id).fetch_one(&mut *tx).await?;
+ recheck_authenticated(&mut tx,Some(proof)).await?;tx.commit().await?;Ok(row)
+}

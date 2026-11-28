@@ -311,3 +311,27 @@ pub(super) async fn verify(
         Err(value) => error(dossiers::status(value), correlation),
     }
 }
+
+pub(super) async fn material(State(state):State<Arc<OrganizationState>>,headers:HeaderMap,Path(id):Path<Uuid>)->Response{
+ let correlation=random_id();
+ let proof=match dossiers::authenticate_version(&state,&headers,correlation,None).await{Ok(p)=>p,Err(s)=>return error(s,correlation)};
+ match finance_financial::references::import_material(&state.runtime,&proof,id).await{
+ Ok(Some(value))=>{let mut response=Json(value).into_response();response.headers_mut().insert(header::CACHE_CONTROL,HeaderValue::from_static("no-store"));response},
+ Ok(None)=>error(StatusCode::NOT_FOUND,correlation),Err(e)=>error(dossiers::status(e),correlation)}
+}
+pub(super) async fn reservable(State(state):State<Arc<OrganizationState>>,headers:HeaderMap,query:Result<Query<PageQuery>,QueryRejection>)->Response{
+ let correlation=random_id();
+ let proof=match dossiers::authenticate_version(&state,&headers,correlation,None).await{Ok(p)=>p,Err(s)=>return error(s,correlation)};
+ let Principal::User(actor)=proof.context().actor else{return error(StatusCode::FORBIDDEN,correlation)};
+ let Ok(Query(query))=query else{return error(StatusCode::BAD_REQUEST,correlation)};
+ let limit=query.limit.unwrap_or(50);
+ if !(1..=100).contains(&limit){return error(StatusCode::BAD_REQUEST,correlation)}
+ let Some(time)=now()else{return error(StatusCode::SERVICE_UNAVAILABLE,correlation)};
+ let key:[u8;32]=Sha256::digest([b"finance.reservable.cursor/v1".as_slice(),&state.cursor_key].concat()).into();
+ let after=match query.cursor{None=>Uuid::nil(),Some(value)=>match decode_cursor(&key,state.scope,actor,&value,time){Some(id)=>id,None=>return error(StatusCode::BAD_REQUEST,correlation)}};
+ match finance_financial::references::reservable(&state.runtime,&proof,after,limit).await{
+ Ok(items)=>{let next=if items.len()==limit as usize{items.last().map(|row|encode_cursor(&key,state.scope,actor,row.id,time+300))}else{None};
+ let mut response=Json(serde_json::json!({"items":items,"next_cursor":next})).into_response();
+ response.headers_mut().insert(header::CACHE_CONTROL,HeaderValue::from_static("no-store"));response},
+ Err(e)=>error(dossiers::status(e),correlation)}
+}
