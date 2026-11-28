@@ -7,6 +7,7 @@ publish.workspace = true
 
 [dependencies]
 finance-core = { path = "../../crates/core" }
+finance-rule-engine = { path = "../../crates/rule-engine" }
 finance-documents = { path = "../../crates/documents" }
 chrono.workspace = true
 finance-document-intelligence = { path = "../../crates/document-intelligence" }

@@ -119,6 +119,12 @@ BEGIN
   INSERT INTO finance.extracted_field VALUES(t,c,run_id,entry->>'path',entry->>'state',entry->>'value',page_no,ref_ids);
   field_count:=field_count+1;
  END LOOP;
+ -- Persist a new evidence epoch by advancing the aggregate version. This
+ -- invalidates all previous preflight/confirmation receipts.
+ UPDATE finance.dossier SET version=version+1,updated_at=GREATEST(updated_at,clock_timestamp())
+ WHERE (tenant_id,company_id,id)=(t,c,dossier) AND status IN ('DRAFT','PROCESSING','NEEDS_INPUT','REVIEWABLE')
+ AND version<9007199254740991;
+ IF NOT FOUND THEN RAISE EXCEPTION 'OCR dossier no longer editable' USING ERRCODE='23514'; END IF;
  IF field_count<>cardinality(expected_paths) OR jobrow.lease_until<=clock_timestamp() THEN RAISE EXCEPTION 'incomplete result or expired lease' USING ERRCODE='23514'; END IF;
  UPDATE finance.job_attempt SET state='SUCCEEDED',finished_at=clock_timestamp() WHERE tenant_id=t AND company_id=c AND job_id=j AND fence=f AND worker_id=w AND state='ACTIVE';
  IF NOT FOUND THEN RAISE EXCEPTION 'stale OCR attempt' USING ERRCODE='23514'; END IF;
@@ -134,36 +140,7 @@ ALTER FUNCTION finance.complete_local_ocr(uuid,uuid,uuid,bigint,uuid,uuid,uuid,b
 GRANT EXECUTE ON FUNCTION finance.complete_local_ocr(uuid,uuid,uuid,bigint,uuid,uuid,uuid,bigint,bytea,bytea,bytea,jsonb,jsonb,jsonb,integer,text,text) TO finance_job_worker;
 
 
-CREATE OR REPLACE FUNCTION finance.field_access_allowed(t uuid,c uuid,d uuid,a uuid)
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
- SELECT t=finance.scope_tenant() AND c=finance.scope_company() AND a=finance.scope_actor()
- AND EXISTS(
-  SELECT 1 FROM finance.dossier ds
-  JOIN finance.dossier_revision dr
-    ON (dr.tenant_id,dr.company_id,dr.dossier_id,dr.number)=(ds.tenant_id,ds.company_id,ds.id,ds.revision)
-  WHERE ds.tenant_id=t AND ds.company_id=c AND ds.id=d
-  AND (
-   (ds.owner_id=a AND EXISTS(
-    SELECT 1 FROM finance.membership m WHERE m.tenant_id=t AND m.company_id=c AND m.actor_id=a
-     AND m.role='REQUESTER' AND m.active AND m.valid_from<=statement_timestamp()
-     AND (m.valid_until IS NULL OR m.valid_until>statement_timestamp())
-   ))
-   OR
-   (EXISTS(
-    SELECT 1 FROM finance.review_assignment ra
-    WHERE ra.tenant_id=t AND ra.company_id=c AND ra.dossier_id=d AND ra.revision_id=dr.id AND ra.accountant_id=a
-   ) AND EXISTS(
-    SELECT 1 FROM finance.membership m WHERE m.tenant_id=t AND m.company_id=c AND m.actor_id=a
-     AND m.role='ACCOUNTANT' AND m.active AND m.valid_from<=statement_timestamp()
-     AND (m.valid_until IS NULL OR m.valid_until>statement_timestamp())
-   ))
-  )
- )
-$$;
-ALTER FUNCTION finance.field_access_allowed(uuid,uuid,uuid,uuid) OWNER TO finance_field_review_writer;
-REVOKE ALL ON FUNCTION finance.field_access_allowed(uuid,uuid,uuid,uuid) FROM PUBLIC;
-
-CREATE FUNCTION finance.runtime_fields(t uuid,c uuid,d uuid,a uuid,after_id uuid,only_id uuid,n integer)
+CREATE OR REPLACE FUNCTION finance.runtime_fields(t uuid,c uuid,d uuid,a uuid,after_id uuid,only_id uuid,n integer)
 RETURNS TABLE(
  id uuid,path text,raw_value text,normalized_value text,value_type text,state text,
  evidence_ids uuid[],extractor_version text
@@ -221,7 +198,7 @@ BEGIN
    WHEN row.disposition='REJECTED' THEN NULL
    WHEN row.source_state='CANDIDATE' THEN row.source_value
    ELSE NULL END AS normalized_value,
-  CASE WHEN row.field_path LIKE '%.date' THEN 'date' WHEN row.field_path ~ '\\.(net|tax|total|requested)$' THEN 'money' ELSE 'text' END AS value_type,
+  CASE WHEN row.field_path LIKE '%.date' THEN 'date' WHEN split_part(row.field_path,'.',2) IN ('net','tax','total','requested') THEN 'money' ELSE 'text' END AS value_type,
   CASE row.disposition WHEN 'CONFIRMED_CANDIDATE' THEN 'VERIFIED'
    WHEN 'CORRECTED' THEN 'CORRECTED' WHEN 'REJECTED' THEN 'UNKNOWN'
    ELSE CASE WHEN row.source_state='CANDIDATE' THEN 'CANDIDATE' ELSE 'UNKNOWN' END END AS state,
@@ -244,7 +221,7 @@ BEGIN
  THEN RAISE EXCEPTION 'field metadata forbidden' USING ERRCODE='42501'; END IF;
  RETURN QUERY
  SELECT f.field_path,
-  CASE WHEN f.field_path LIKE '%.date' THEN 'date' WHEN f.field_path ~ '\\.(net|tax|total|requested)$' THEN 'money' ELSE 'text' END,
+  CASE WHEN f.field_path LIKE '%.date' THEN 'date' WHEN split_part(f.field_path,'.',2) IN ('net','tax','total','requested') THEN 'money' ELSE 'text' END,
   f.normalized_value
  FROM finance.field_identity fi
  JOIN finance.extracted_field f
@@ -282,7 +259,7 @@ BEGIN
    WHERE x2.tenant_id=f.tenant_id AND x2.company_id=f.company_id AND x2.id=f.run_id
     AND e.page=f.source_page AND e.block_index=ANY(f.block_indexes)),
   q.normalized_value,
-  CASE WHEN f.field_path LIKE '%.date' THEN 'date' WHEN f.field_path ~ '\\.(net|tax|total|requested)$' THEN 'money' ELSE 'text' END,
+  CASE WHEN f.field_path LIKE '%.date' THEN 'date' WHEN split_part(f.field_path,'.',2) IN ('net','tax','total','requested') THEN 'money' ELSE 'text' END,
   CASE q.disposition WHEN 'CONFIRMED_CANDIDATE' THEN 'VERIFIED'
    WHEN 'CORRECTED' THEN 'CORRECTED' ELSE 'UNKNOWN' END,
   q.evidence_ids,x.schema_version,q.dossier_version

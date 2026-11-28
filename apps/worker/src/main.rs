@@ -372,6 +372,14 @@ async fn settle_failure(pool: &PgPool, lease: Lease, failure: RunFailure) {
     }
 }
 
+fn preflight_error(error:sqlx::Error)->RunFailure {
+    match error.as_database_error().and_then(|db|db.code()).as_deref(){
+        Some("40001")=>RunFailure::Stale,
+        Some("42501"|"23514"|"23505"|"P0002")=>RunFailure::Permanent,
+        _=>RunFailure::Transient,
+    }
+}
+
 async fn process_preflight(pool: &PgPool, lease: Lease) -> Result<(), RunFailure> {
     let scope = lease.scope();
     let mut tx = pool.begin().await.map_err(|_| RunFailure::Transient)?;
@@ -384,21 +392,14 @@ async fn process_preflight(pool: &PgPool, lease: Lease) -> Result<(), RunFailure
     .execute(&mut *tx)
     .await
     .map_err(|_| RunFailure::Transient)?;
-    sqlx::query("SELECT finance.complete_preflight_job($1,$2,$3,$4,$5)")
-        .bind(t)
-        .bind(c)
-        .bind(lease.job_id)
-        .bind(lease.fence)
-        .bind(lease.worker_id())
-        .execute(&mut *tx)
-        .await
-        .map_err(
-            |e| match e.as_database_error().and_then(|db| db.code()).as_deref() {
-                Some("40001") => RunFailure::Stale,
-                Some("42501" | "23514" | "23505" | "P0002") => RunFailure::Permanent,
-                _ => RunFailure::Transient,
-            },
-        )?;
+    let material:serde_json::Value=sqlx::query_scalar("SELECT finance.runtime_preflight_rule_material($1,$2,$3,$4,$5)")
+        .bind(t).bind(c).bind(lease.job_id).bind(lease.fence).bind(lease.worker_id())
+        .fetch_one(&mut *tx).await.map_err(preflight_error)?;
+    let rows=finance_rule_engine::preflight::evaluate(&material).map_err(|_|RunFailure::Permanent)?;
+    let results=serde_json::to_value(rows).map_err(|_|RunFailure::Permanent)?;
+    sqlx::query("SELECT finance.complete_preflight_with_rules($1,$2,$3,$4,$5,$6,$7)")
+        .bind(t).bind(c).bind(lease.job_id).bind(lease.fence).bind(lease.worker_id())
+        .bind(material).bind(results).execute(&mut *tx).await.map_err(preflight_error)?;
     tx.commit().await.map_err(|_| RunFailure::Transient)?;
     Ok(())
 }

@@ -824,6 +824,7 @@ dependencies = [
  "finance-documents",
  "finance-extraction",
  "finance-ocr",
+ "finance-rule-engine",
  "finance-shared",
  "finance-templates",
  "serde",

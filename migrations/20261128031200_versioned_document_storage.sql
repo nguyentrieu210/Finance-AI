@@ -114,10 +114,15 @@ REVOKE ALL ON FUNCTION finance.runtime_s3_download(uuid,uuid,uuid,uuid,uuid,uuid
 GRANT EXECUTE ON FUNCTION finance.runtime_s3_download(uuid,uuid,uuid,uuid,uuid,uuid,uuid) TO finance_runtime;
 
 -- Worker: both the scan disposition and the inbox/job receipt commit together.
+GRANT UPDATE(scan_state,scan_engine,scan_engine_digest,scanned_at) ON finance.document_blob TO finance_workflow_writer;
+CREATE POLICY s3_workflow_scan_update ON finance.document_blob FOR UPDATE TO finance_workflow_writer
+ USING(finance.worker_scope_allowed(tenant_id,company_id) AND scan_state='QUARANTINED')
+ WITH CHECK(finance.worker_scope_allowed(tenant_id,company_id) AND scan_state IN ('CLEAN','REJECTED'));
 CREATE FUNCTION finance.complete_s3_scan(t uuid,c uuid,j uuid,f bigint,w uuid,doc uuid,g bigint,v text,h text,verdict text,engine text)
-RETURNS void LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog AS $$
+RETURNS void LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $
+DECLARE dossier uuid; revision uuid;
 BEGIN
- IF current_user<>'finance_job_worker' OR NOT finance.worker_scope_allowed(t,c)
+ IF NOT finance.worker_scope_allowed(t,c)
  OR verdict IS NULL OR verdict NOT IN ('CLEAN','REJECTED')
  OR h IS NULL OR h !~ '^[a-f0-9]{64}$' OR engine IS NULL OR engine !~ '^[a-f0-9]{64}$'
  THEN RAISE EXCEPTION 'scan authority or result' USING ERRCODE='42501'; END IF;
@@ -126,10 +131,21 @@ BEGIN
  AND q.state='LEASED' AND q.lease_until>clock_timestamp() AND o.resource_id=doc AND o.event_type='DOCUMENT_FINALIZE_REQUESTED'
  FOR UPDATE OF q;
  IF NOT FOUND THEN RAISE EXCEPTION 'stale scan lease' USING ERRCODE='40001'; END IF;
+ SELECT r.dossier_id,r.revision_id INTO dossier,revision FROM finance.document_ref r
+ WHERE (r.tenant_id,r.company_id,r.id)=(t,c,doc);
+ IF NOT FOUND THEN RAISE EXCEPTION 'scan source not found' USING ERRCODE='23514'; END IF;
+ PERFORM 1 FROM finance.dossier ds JOIN finance.dossier_revision dr
+ ON (dr.tenant_id,dr.company_id,dr.dossier_id,dr.number)=(ds.tenant_id,ds.company_id,ds.id,ds.revision)
+ WHERE (ds.tenant_id,ds.company_id,ds.id,dr.id)=(t,c,dossier,revision)
+ AND ds.status IN ('DRAFT','PROCESSING','NEEDS_INPUT','REVIEWABLE') FOR UPDATE OF ds;
+ IF NOT FOUND THEN RAISE EXCEPTION 'stale document revision' USING ERRCODE='23514'; END IF;
  UPDATE finance.document_blob b SET scan_state=verdict,scan_engine='CLAMAV',scan_engine_digest=decode(engine,'hex'),scanned_at=clock_timestamp()
  WHERE (b.tenant_id,b.company_id,b.id,b.generation,b.object_version)=(t,c,doc,g,v)
  AND b.sha256_digest=decode(h,'hex') AND b.storage_backend='S3_VERSIONED' AND b.scan_state='QUARANTINED';
  IF NOT FOUND THEN RAISE EXCEPTION 'source no longer quarantined' USING ERRCODE='23514'; END IF;
+ UPDATE finance.dossier SET version=version+1,updated_at=GREATEST(updated_at,clock_timestamp())
+ WHERE (tenant_id,company_id,id)=(t,c,dossier) AND version<9007199254740991;
+ IF NOT FOUND THEN RAISE EXCEPTION 'dossier version exhausted' USING ERRCODE='23514'; END IF;
  UPDATE finance.job_attempt SET state='SUCCEEDED',finished_at=clock_timestamp()
  WHERE (tenant_id,company_id,job_id,fence,worker_id)=(t,c,j,f,w) AND state='ACTIVE';
  IF NOT FOUND THEN RAISE EXCEPTION 'stale scan attempt' USING ERRCODE='40001'; END IF;
@@ -138,5 +154,6 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'stale scan lease' USING ERRCODE='40001'; END IF;
  INSERT INTO finance.inbox(tenant_id,company_id,event_id,fence) VALUES(t,c,j,f);
 END $$;
+ALTER FUNCTION finance.complete_s3_scan(uuid,uuid,uuid,bigint,uuid,uuid,bigint,text,text,text,text) OWNER TO finance_workflow_writer;
 REVOKE ALL ON FUNCTION finance.complete_s3_scan(uuid,uuid,uuid,bigint,uuid,uuid,bigint,text,text,text,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION finance.complete_s3_scan(uuid,uuid,uuid,bigint,uuid,uuid,bigint,text,text,text,text) TO finance_job_worker;

@@ -37,7 +37,7 @@ fn binding(proof: &AuthenticatedCommand) -> Result<(Uuid, Uuid, Uuid), Error> {
     Ok((tenant.into(), company.into(), actor.into()))
 }
 
-fn registry() -> BTreeMap<String, Type> {
+pub(crate) fn registry() -> BTreeMap<String, Type> {
     let vnd = Currency::parse("VND").expect("VND is a valid ISO currency code");
     [
         ("invoice.total", Type::Money(vnd)),

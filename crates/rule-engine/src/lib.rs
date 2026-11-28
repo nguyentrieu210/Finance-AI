@@ -7,6 +7,7 @@ pub mod repository;
 
 pub mod simulator;
 pub mod runtime;
+pub mod preflight;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Outcome {
