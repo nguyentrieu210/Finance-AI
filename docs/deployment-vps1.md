@@ -13,7 +13,7 @@ Deploy only from a clean local main that matches origin/main:
 ## What it checks and runs
 
 - Confirms GitHub main, the VPS checkout, and the working tree agree.
-- Checks the Finance API/frontend systemd units, Nginx configuration, Finance PostgreSQL, Keycloak realm metadata, API readiness, and available disk.
+- Checks the Finance API/frontend systemd units, Nginx configuration, Finance PostgreSQL, Keycloak realm metadata, API readiness, and available disk. Preflight requires a 2 GiB build reserve plus the live database size and backup reserve.
 - Reuses `/opt/namviet-finance-build` as the Cargo target cache and `/root/.cargo` for crate downloads. Cargo runs in a short-lived container from the pinned `rust:1.85.1-slim-bookworm` image, so no Rust toolchain is installed on the VPS host. It does not run `cargo clean` or reinstall npm dependencies.
 - Runs Rust format/unit checks, table registry validation, isolated migration/restore tests, frontend API contract checks, frontend tests, and the production build.
 - Creates a root-only custom-format PostgreSQL backup and verifies its archive before applying SQLx migrations.

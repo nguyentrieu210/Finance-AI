@@ -83,15 +83,23 @@ check_disk() {
   local available
   available="$(df -B1 -P / | awk 'NR==2 {print $4}')"
   [[ "$available" =~ ^[0-9]+$ ]] || die "could not read available filesystem space"
-  (( available >= 134217728 )) || die "less than 128 MiB is available; refusing to build or migrate"
-  log "filesystem has at least 128 MiB available"
+  local db_size required
+  db_size="$(docker exec "$DB_CONTAINER" sh -lc 'psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select pg_database_size(current_database())"')"
+  [[ "$db_size" =~ ^[0-9]+$ ]] || die "could not read Finance database size for backup-space planning"
+  required=$((db_size + 268435456))
+  if (( required < 2147483648 )); then required=2147483648; fi
+  (( available >= required )) || die "available space is below the safe build and database-backup reserve"
+  log "filesystem has the 2 GiB build reserve and database backup reserve"
 }
 
 check_migration_space() {
   local available
   available="$(df -B1 -P / | awk 'NR==2 {print $4}')"
   [[ "$available" =~ ^[0-9]+$ ]] || die "could not read post-build free space"
-  (( available >= 16777216 )) || die "less than 16 MiB remains after build; refusing database migration"
+  local db_size
+  db_size="$(docker exec "$DB_CONTAINER" sh -lc 'psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select pg_database_size(current_database())"')"
+  [[ "$db_size" =~ ^[0-9]+$ ]] || die "could not read Finance database size after build"
+  (( available >= db_size + 268435456 )) || die "less than database size plus 256 MiB backup reserve remains; refusing database migration"
 }
 
 preflight() {
@@ -203,7 +211,7 @@ FINANCE_MIGRATOR_BIN="$MIGRATOR" bash scripts/test_restore_drill.sh
 
 local_api_build_space="$(df -B1 -P / | awk 'NR==2 {print $4}')"
 [[ "$local_api_build_space" =~ ^[0-9]+$ ]] || die "could not read pre-API-build free space"
-(( local_api_build_space >= 163577856 )) || die "less than 156 MiB remains before API build; refusing to consume the filesystem reserve"
+(( local_api_build_space >= 1073741824 )) || die "less than 1 GiB remains before API build; refusing to consume the filesystem reserve"
 cargo build --locked -p finance-api --bin finance-api
 readonly NEW_API="$BUILD_ROOT/debug/finance-api"
 [[ -x "$NEW_API" && -x "$MIGRATOR" ]] || die "release binaries were not produced"
