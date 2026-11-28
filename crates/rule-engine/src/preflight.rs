@@ -11,6 +11,10 @@ use uuid::Uuid;
 struct Material {
     rules:Vec<Rule>,
     fields:Vec<Field>,
+    #[serde(default)]
+    financial:Vec<FinancialFact>,
+    #[serde(default)]
+    invoice_document_count:Option<usize>,
 }
 #[derive(Deserialize)]
 struct Rule {
@@ -27,6 +31,14 @@ struct Field {
     value:Option<String>,
     evidence:Vec<EvidenceId>,
     verified:bool,
+}
+#[derive(Deserialize)]
+struct FinancialFact {
+    path:String,
+    value:String,
+    currency:Option<Currency>,
+    verified:bool,
+    evidence:Vec<EvidenceId>,
 }
 #[derive(Serialize)]
 pub struct ResultRow {
@@ -85,6 +97,40 @@ pub fn evaluate(material:&serde_json::Value)->Result<Vec<ResultRow>, &'static st
             if evidence.len()<=64 {
                 facts.insert("invoice.verified".into(),Fact{value:Some(Value::Boolean(true)),verified:true,fresh:true,evidence:evidence.into_iter().collect()});
             }
+        }
+    }
+    // Never allow a document field to impersonate a cap or approved coverage.
+    let mut financial_seen=BTreeSet::new();
+    for row in &material.financial {
+        if !financial_seen.insert(&row.path)||row.evidence.len()>64 {return Err("invalid financial facts")}
+        if !row.verified||row.evidence.is_empty(){continue}
+        let approved_path=row.path=="reference.fresh"||row.path.starts_with("finance.")||
+            ["contract.","invoice.","advance.","budget."].iter().any(|prefix|row.path.starts_with(prefix)) &&
+            [".remaining",".cap",".consumed",".other_holds"].iter().any(|suffix|row.path.ends_with(suffix));
+        if !approved_path{ return Err("unapproved financial fact path") }
+        let value=match types.get(&row.path){
+            Some(Type::Money(currency)) if row.currency==Some(*currency)=>Amount::parse(&row.value).ok().map(|amount|Value::Money(Money{amount,currency:*currency})),
+            Some(Type::Boolean) if row.path=="reference.fresh"&&row.currency.is_none()&&row.value=="true"=>Some(Value::Boolean(true)),
+            _=>None,
+        };
+        facts.insert(row.path.clone(),Fact{value,verified:true,fresh:true,evidence:row.evidence.clone()});
+    }
+    // Collection is present only when every invoice amount is independently
+    // verified and its currency is confirmed on the same document.
+    if let Some(totals)=rows.get("invoice.total"){
+        let expected=Currency::parse("VND").map_err(|_|"currency registry")?;
+        let mut documents=BTreeSet::new();
+        let mut values=Vec::new();let mut evidence=BTreeSet::new();let mut complete=true;
+        for field in totals {
+            if !documents.insert(field.document)||!field.verified||field.evidence.is_empty(){complete=false;break}
+            let mut currencies=rows.get("invoice.currency").into_iter().flatten().filter(|f|f.document==field.document);
+            let Some(currency)=currencies.next()else{complete=false;break};
+            if currencies.next().is_some()||!currency.verified||currency.evidence.is_empty()||currency.value.as_deref()!=Some(expected.as_str()){complete=false;break}
+            let Some(amount)=field.value.as_deref().and_then(|v|Amount::parse(v).ok())else{complete=false;break};
+            values.push(Some(amount));evidence.extend(field.evidence.iter().copied());evidence.extend(currency.evidence.iter().copied());
+        }
+        if complete&&material.invoice_document_count==Some(values.len())&&!values.is_empty()&&evidence.len()<=64{
+            facts.insert("invoice.totals".into(),Fact{value:Some(Value::MoneyList(expected,Arc::from(values))),verified:true,fresh:true,evidence:evidence.into_iter().collect()});
         }
     }
     let mut seen=BTreeSet::new();

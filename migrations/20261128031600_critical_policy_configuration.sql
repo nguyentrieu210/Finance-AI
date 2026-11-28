@@ -43,8 +43,8 @@ BEGIN
  THEN RAISE EXCEPTION 'invalid policy draft' USING ERRCODE='22023'; END IF;
  IF gate IS NOT NULL THEN
   IF jsonb_typeof(gate) IS DISTINCT FROM 'object' OR octet_length(gate::text)>4096
-  OR NOT (gate ?& ARRAY['clause_key','amount_path','currency_path','resource_kinds'])
-  OR (SELECT count(*) FROM jsonb_object_keys(gate))<>4
+  OR NOT (gate ?& ARRAY['clause_key','amount_path','currency_path','resource_kinds','resource_keys'])
+  OR (SELECT count(*) FROM jsonb_object_keys(gate))<>5
   OR NOT COALESCE(gate->>'clause_key'=ANY(clause_keys),false)
   OR NOT COALESCE(gate->>'amount_path'=ANY(critical_paths),false)
   OR NOT COALESCE(gate->>'currency_path'=ANY(critical_paths),false)
@@ -52,12 +52,18 @@ BEGIN
   OR gate->>'currency_path' IS DISTINCT FROM split_part(gate->>'amount_path','.',1)||'.currency'
   OR gate->>'amount_path'=gate->>'currency_path'
   OR jsonb_typeof(gate->'resource_kinds') IS DISTINCT FROM 'array'
+  OR jsonb_typeof(gate->'resource_keys') IS DISTINCT FROM 'object'
   THEN RAISE EXCEPTION 'invalid finance gate' USING ERRCODE='22023'; END IF;
   IF jsonb_array_length(gate->'resource_kinds') NOT BETWEEN 1 AND 4
   OR EXISTS(SELECT 1 FROM jsonb_array_elements_text(gate->'resource_kinds') k WHERE k IS NULL OR k NOT IN ('CONTRACT','INVOICE','ADVANCE','BUDGET'))
   OR jsonb_array_length(gate->'resource_kinds')<>(SELECT count(DISTINCT k) FROM jsonb_array_elements_text(gate->'resource_kinds') k)
   OR NOT EXISTS(SELECT 1 FROM unnest(critical_keys,critical_paths) x(k,p) WHERE x.k=gate->>'clause_key' AND x.p=gate->>'amount_path')
   OR NOT EXISTS(SELECT 1 FROM unnest(critical_keys,critical_paths) x(k,p) WHERE x.k=gate->>'clause_key' AND x.p=gate->>'currency_path')
+  OR (SELECT count(*) FROM jsonb_object_keys(gate->'resource_keys'))<>jsonb_array_length(gate->'resource_kinds')
+  OR EXISTS(SELECT 1 FROM jsonb_array_elements_text(gate->'resource_kinds') k WHERE NOT EXISTS(
+    SELECT 1 FROM unnest(critical_keys,critical_paths) x(ck,fp)
+    WHERE x.ck=gate->>'clause_key' AND x.fp=gate->'resource_keys'->>k
+    AND x.fp NOT IN (gate->>'amount_path',gate->>'currency_path')))
   THEN RAISE EXCEPTION 'finance gate must bind approved clause and critical fields' USING ERRCODE='22023'; END IF;
  END IF;
  IF NOT EXISTS(SELECT 1 FROM finance.membership m WHERE (m.tenant_id,m.company_id,m.actor_id)=(t,c,a)
