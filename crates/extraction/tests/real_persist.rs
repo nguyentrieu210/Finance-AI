@@ -122,7 +122,9 @@ async fn real_candidate_persistence() {
             Field::AmountBeforeTax => "invoice.net",
             Field::TaxAmount => "invoice.tax",
             Field::TotalAmount => "invoice.total",
-            _ => panic!("unexpected field"),
+            Field::ContractNumber => "invoice.contract_number",
+            Field::RequestedAmount => "invoice.requested",
+            Field::Currency => "invoice.currency",
         };
         let state = match field.state {
             State::Unknown => "UNKNOWN",
