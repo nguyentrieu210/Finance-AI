@@ -1,6 +1,7 @@
 from pathlib import Path
-import yaml, json, re
+import yaml, json
 from collections import Counter
+from openapi_parameters import HTTP_METHODS, validate_path_item_parameters
 R=Path(__file__).resolve().parents[1]
 def load(p): return yaml.safe_load((R/p).read_text())
 t=load('agents/task-graph.yaml'); q=load('tests/requirements.yaml'); a=load('tests/acceptance.yaml'); api=load('contracts/openapi.yaml')
@@ -15,7 +16,7 @@ assert all(x['test'] in ats for x in q)
 assert all(set(x['requirements'])<=req for x in t)
 assert req=={i for x in t for i in x['requirements']}
 assert all(x['requirement'] in req|{'SYSTEM'} for x in a)
-ops=[v for p in api['paths'].values() for k,v in p.items() if k in {'get','post','put','patch','delete'}]
+ops=[v for p in api['paths'].values() for k,v in p.items() if k in HTTP_METHODS]
 assert len({x['operationId'] for x in ops})==len(ops)
 def walk(v):
     if isinstance(v,dict):
@@ -26,10 +27,8 @@ def walk(v):
     elif isinstance(v,list):
         for x in v:walk(x)
 walk(api)
-for path,items in api['paths'].items():
-    for method,o in items.items():
-        assert set(re.findall(r'\{(\w+)\}',path))=={p['name'] for p in o['parameters'] if p['in']=='path'}
-        if method!='get':assert any(p['name']=='Idempotency-Key' and p['required'] for p in o['parameters'])
+for path,path_item in api['paths'].items():
+    validate_path_item_parameters(path, path_item)
 try:
     from jsonschema import Draft202012Validator
     Draft202012Validator.check_schema(json.loads((R/'contracts/rule-dsl.schema.json').read_text()))

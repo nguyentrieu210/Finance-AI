@@ -362,3 +362,79 @@ fn inactive_or_ambiguous_role_definitions_never_grant_permissions() {
     assignment.valid_until = Some(10);
     assert!(resolve_grants(company(10), actor(5), &[role], &[assignment]).is_empty());
 }
+
+#[test]
+fn resolved_department_assignments_enforce_membership_and_effective_time() {
+    let definitions = [
+        RoleDefinition {
+            company: company(10),
+            id: unit(100),
+            active: true,
+            capabilities: vec![Capability::ReadDepartment],
+        },
+        RoleDefinition {
+            company: company(10),
+            id: unit(101),
+            active: true,
+            capabilities: vec![Capability::ReadDepartment],
+        },
+    ];
+    let assignment = |role_id, department_id, active, valid_from, valid_until| RoleAssignment {
+        company: company(10),
+        actor: actor(4),
+        role_id: unit(role_id),
+        scope: GrantScope::Department(unit(department_id)),
+        active,
+        valid_from,
+        valid_until,
+    };
+    let assignments = [
+        assignment(100, 20, true, 10, Some(20)),
+        assignment(101, 21, true, 20, Some(30)),
+        // A third department is active in HR but its permission assignment was revoked.
+        assignment(101, 22, false, 10, None),
+    ];
+    let grants = resolve_grants(company(10), actor(4), &definitions, &assignments);
+
+    let decide = |department, now, active_departments: &[ResourceId]| {
+        let mut facts = dossier();
+        facts.department = Some(unit(department));
+        Evaluation {
+            context: &context(4),
+            membership_active: true,
+            active_departments,
+            grants: &grants,
+            now,
+            dossier: facts,
+        }
+        .decide(Operation::Read)
+    };
+
+    assert_eq!(decide(20, 10, &[unit(20), unit(21), unit(22)]), Ok(()));
+    assert_eq!(decide(20, 19, &[unit(20), unit(21), unit(22)]), Ok(()));
+    // A future-dated grant cannot be used before its inclusive start.
+    assert_eq!(
+        decide(21, 19, &[unit(20), unit(21)]),
+        Err(ScopedDenial::MissingGrant)
+    );
+    // The first assignment expires exactly when the second becomes effective.
+    assert_eq!(
+        decide(20, 20, &[unit(20), unit(21)]),
+        Err(ScopedDenial::MissingGrant)
+    );
+    assert_eq!(decide(21, 20, &[unit(20), unit(21)]), Ok(()));
+    assert_eq!(
+        decide(21, 30, &[unit(20), unit(21)]),
+        Err(ScopedDenial::MissingGrant)
+    );
+    // Membership in a department cannot substitute for a revoked role assignment.
+    assert_eq!(
+        decide(22, 15, &[unit(20), unit(21), unit(22)]),
+        Err(ScopedDenial::MissingGrant)
+    );
+    // A grant is ineffective if the actor's department membership is no longer active.
+    assert_eq!(
+        decide(21, 20, &[unit(20)]),
+        Err(ScopedDenial::MissingGrant)
+    );
+}
